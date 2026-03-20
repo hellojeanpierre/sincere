@@ -17,7 +17,9 @@ Bun-based AI agent project using `@mariozechner/pi-agent-core` and `@mariozechne
 
 4. **Append-only JSONL for durable state.** All events and state transitions are appended to JSONL files. Never mutate or delete log lines. SQLite (`bun:sqlite`) is used alongside for queryable ticket/task data — treat it as a read-optimised projection, not the source of truth.
 
-5. **Structured logging only.** Use `pino` everywhere. No `console.log`, `console.warn`, or `console.error`. Import the shared logger from `src/lib/logger.ts`.
+5. **Structured logging only.** Use `pino` everywhere. No `console.log`, `console.warn`, or `console.error`. Import the shared logger from `src/lib/logger.ts`. Exception: `process.stderr.write()` is allowed for streaming text deltas to the terminal.
+
+6. **Agent config via `initialState`.** Configure the Agent's system prompt, model, and tools through `initialState` in the constructor — not via post-construction setters. This keeps setup declarative and in one place.
 
 ## Project Layout
 

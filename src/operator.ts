@@ -5,12 +5,21 @@ import { getModel, streamSimple, Type } from "@mariozechner/pi-ai";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { logger } from "./lib/logger.ts";
 
+const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
+
+const apiKey = process.env.ANTHROPIC_API_KEY;
+if (!apiKey) {
+  logger.fatal("ANTHROPIC_API_KEY not set");
+  process.exit(1);
+}
+
 const systemPrompt = readFileSync(
   resolve(import.meta.dirname, "operator.md"),
   "utf-8",
 );
 
-const model = getModel("anthropic", "claude-sonnet-4-6");
+const modelId = (process.env.SINCERE_MODEL as typeof DEFAULT_MODEL) || DEFAULT_MODEL;
+const model = getModel("anthropic", modelId);
 
 const echoSchema = Type.Object({
   message: Type.String({ description: "The message to echo back" }),
@@ -31,12 +40,13 @@ const echoTool: AgentTool<typeof echoSchema> = {
 
 const agent = new Agent({
   streamFn: streamSimple,
-  getApiKey: () => process.env.ANTHROPIC_API_KEY,
+  getApiKey: () => apiKey,
+  initialState: {
+    systemPrompt,
+    model,
+    tools: [echoTool],
+  },
 });
-
-agent.setSystemPrompt(systemPrompt);
-agent.setModel(model);
-agent.setTools([echoTool]);
 
 agent.subscribe((event) => {
   switch (event.type) {
@@ -55,7 +65,15 @@ agent.subscribe((event) => {
     case "message_start":
       logger.info({ role: event.message.role }, "message started");
       break;
+    case "message_update":
+      if (event.assistantMessageEvent.type === "text_delta") {
+        process.stderr.write(event.assistantMessageEvent.delta);
+      }
+      break;
     case "message_end":
+      if (event.message.role === "assistant") {
+        process.stderr.write("\n");
+      }
       logger.info({ role: event.message.role }, "message ended");
       break;
     case "tool_execution_start":
@@ -72,14 +90,3 @@ agent.subscribe((event) => {
 
 logger.info("prompting agent…");
 await agent.prompt("What tools do you have?");
-
-// Print the final assistant text
-const messages = agent.state.messages;
-const last = messages[messages.length - 1];
-if (last && last.role === "assistant") {
-  for (const block of last.content) {
-    if (block.type === "text") {
-      logger.info({ text: block.text }, "assistant response");
-    }
-  }
-}
