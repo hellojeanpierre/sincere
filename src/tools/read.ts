@@ -1,4 +1,4 @@
-import { resolve, extname } from "path";
+import { resolve, extname, sep } from "path";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
 import { logger } from "../lib/logger.ts";
@@ -23,7 +23,7 @@ export const readTool: AgentTool<typeof readSchema> = {
     const projectRoot = process.cwd();
     const resolvedPath = resolve(projectRoot, params.path);
 
-    if (!resolvedPath.startsWith(projectRoot)) {
+    if (resolvedPath !== projectRoot && !resolvedPath.startsWith(projectRoot + sep)) {
       return {
         content: [{ type: "text", text: `Error: path escapes project root: ${params.path}` }],
         details: null,
@@ -42,19 +42,36 @@ export const readTool: AgentTool<typeof readSchema> = {
     const raw = await file.text();
     const sizeKB = Math.round((Buffer.byteLength(raw, "utf-8") / 1024) * 100) / 100;
     const format = extname(resolvedPath).replace(".", "") || "txt";
-    const lines = raw.split("\n");
-    const totalLines = lines.length;
 
     const offset = params.offset ?? 0;
     const limit = params.limit ?? 2000;
-    const slice = lines.slice(offset, offset + limit);
-    const returnedLines = slice.length;
+    const end = offset + limit;
 
-    let text = slice.join("\n");
+    const sliceLines: string[] = [];
+    let lineIndex = 0;
+    let pos = 0;
+
+    while (pos <= raw.length) {
+      const nextNewline = raw.indexOf("\n", pos);
+      const lineEnd = nextNewline === -1 ? raw.length : nextNewline;
+
+      if (lineIndex >= offset && lineIndex < end) {
+        sliceLines.push(raw.slice(pos, lineEnd));
+      }
+      lineIndex++;
+      pos = lineEnd + 1;
+      if (nextNewline === -1) break;
+    }
+
+    const totalLines = lineIndex;
+    const returnedLines = sliceLines.length;
+
+    let text = sliceLines.join("\n");
 
     if (offset + returnedLines < totalLines) {
+      const lastLine = offset + returnedLines - 1;
       const nextOffset = offset + returnedLines;
-      text += `\n\n[Showing lines ${offset}-${offset + returnedLines} of ${totalLines}. Call read again with offset=${nextOffset} to continue.]`;
+      text += `\n\n[Showing lines ${offset}-${lastLine} of ${totalLines}. Call read again with offset=${nextOffset} to continue.]`;
     }
 
     logger.info({ path: resolvedPath, sizeKB, totalLines, returnedLines }, "read file");
