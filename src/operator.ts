@@ -4,6 +4,7 @@ import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, streamSimple, Type } from "@mariozechner/pi-ai";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { logger } from "./lib/logger.ts";
+import { readTool } from "./tools/read.ts";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
 
@@ -44,7 +45,7 @@ const agent = new Agent({
   initialState: {
     systemPrompt,
     model,
-    tools: [echoTool],
+    tools: [echoTool, readTool],
   },
 });
 
@@ -89,4 +90,4 @@ agent.subscribe((event) => {
 });
 
 logger.info("prompting agent…");
-await agent.prompt("What tools do you have?");
+await agent.prompt("Read the file data/sample-tickets.jsonl and tell me how many tickets there are and what categories you see.");
