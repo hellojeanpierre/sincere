@@ -91,4 +91,4 @@ agent.subscribe((event) => {
 });
 
 logger.info("prompting agent…");
-await agent.prompt("Read the file data/sample-tickets.jsonl and tell me how many tickets there are and what categories you see.");
+await agent.prompt("");
