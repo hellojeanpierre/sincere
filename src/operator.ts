@@ -54,12 +54,16 @@ const agent = new Agent({
 const tracesDir = resolve("data/traces");
 mkdirSync(tracesDir, { recursive: true });
 
-const traceTimestamp = new Date().toISOString();
-const traceFile = resolve(tracesDir, `${traceTimestamp}.md`);
+let traceTimestamp = "";
+let traceFile = "";
 let traceStartTime = Date.now();
 
 function traceAppend(content: string) {
-  appendFileSync(traceFile, content + "\n\n");
+  try {
+    appendFileSync(traceFile, content + "\n\n");
+  } catch (err) {
+    logger.error({ err, traceFile }, "failed to write trace");
+  }
 }
 
 function formatEvent(event: Parameters<Parameters<typeof agent.subscribe>[0]>[0]): string | null {
@@ -73,8 +77,8 @@ function formatEvent(event: Parameters<Parameters<typeof agent.subscribe>[0]>[0]
     case "message_end":
       if (event.message.role === "assistant") {
         const textParts = event.message.content
-          .filter((b: any) => b.type === "text")
-          .map((b: any) => b.text);
+          .filter((b): b is { type: "text"; text: string } => b.type === "text")
+          .map((b) => b.text);
         if (textParts.length > 0) {
           return `## Assistant\n\n${textParts.join("\n")}`;
         }
@@ -90,8 +94,8 @@ function formatEvent(event: Parameters<Parameters<typeof agent.subscribe>[0]>[0]
     case "tool_execution_end": {
       const result = event.result;
       const text = result?.content
-        ?.filter((b: any) => b.type === "text")
-        .map((b: any) => b.text)
+        ?.filter((b: { type: string }): b is { type: "text"; text: string } => b.type === "text")
+        .map((b) => b.text)
         .join("\n") ?? "(no text content)";
       const prefix = event.isError ? "[ERROR] " : "";
       return `## Tool Result: ${event.toolName}\n\n${prefix}${text}`;
@@ -105,6 +109,8 @@ agent.subscribe((event) => {
   // Trace logging
   if (event.type === "agent_start") {
     traceStartTime = Date.now();
+    traceTimestamp = new Date().toISOString();
+    traceFile = resolve(tracesDir, `${traceTimestamp.replaceAll(":", "-")}.md`);
     traceAppend(`# Investigation Trace — ${traceTimestamp}`);
   }
   const formatted = formatEvent(event);
