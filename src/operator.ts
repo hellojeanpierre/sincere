@@ -5,6 +5,7 @@ import { getModel, streamSimple, Type } from "@mariozechner/pi-ai";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { logger } from "./lib/logger.ts";
 import { readTool } from "./tools/read.ts";
+import { execTool } from "./tools/exec.ts";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
 
@@ -45,7 +46,7 @@ const agent = new Agent({
   initialState: {
     systemPrompt,
     model,
-    tools: [echoTool, readTool],
+    tools: [echoTool, readTool, execTool],
   },
 });
 
