@@ -163,4 +163,4 @@ agent.subscribe((event) => {
 });
 
 logger.info("prompting agent…");
-await agent.prompt("");
+await agent.prompt("Analyze data/pintest-v1/manifest.json");
