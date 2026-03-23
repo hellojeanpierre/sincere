@@ -1,4 +1,4 @@
-import { readFileSync, mkdirSync, appendFileSync, symlinkSync, unlinkSync, existsSync } from "fs";
+import { mkdirSync, appendFileSync, symlinkSync, unlinkSync, existsSync } from "fs";
 import { resolve } from "path";
 import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, streamSimple, Type } from "@mariozechner/pi-ai";
@@ -6,6 +6,7 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { logger } from "./lib/logger.ts";
 import { readTool } from "./tools/read.ts";
 import { execTool } from "./tools/exec.ts";
+import { loadSystemPrompt } from "./lib/load-prompt.ts";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
 
@@ -15,10 +16,7 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const systemPrompt = readFileSync(
-  resolve(import.meta.dirname, "operator.md"),
-  "utf-8",
-);
+const systemPrompt = loadSystemPrompt(import.meta.dirname);
 
 const modelId = (process.env.SINCERE_MODEL as typeof DEFAULT_MODEL) || DEFAULT_MODEL;
 const model = getModel("anthropic", modelId);
