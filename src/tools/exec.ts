@@ -26,9 +26,28 @@ const ALLOWED_BINARIES = new Set([
   "python3",
 ]);
 
+// Operators checked via startsWith in the main loop. Longest match first
+// so e.g. && is tested before &. Pipe is handled separately (splits segments).
+// Redirects are handled separately (digit-prefix regex doesn't fit this pattern).
+const DISALLOWED_OPS = [
+  { match: "&&", name: "&&" },
+  { match: "||", name: "||" },
+  { match: "$(", name: "$()" },
+  { match: "`", name: "backticks" },
+  { match: ";", name: ";" },
+  { match: "&", name: "&" },
+] as const;
+
+const DISALLOWED_OP_NAMES = new Set(DISALLOWED_OPS.map((op) => op.name));
+
 interface Segment {
   raw: string;
   binary: string;
+}
+
+interface TokenizeResult {
+  segments: Segment[];
+  operators: string[];
 }
 
 /**
@@ -37,11 +56,13 @@ interface Segment {
  * inside quoted arguments. Extracts the binary name (argv[0]) per segment
  * inline — skipping VAR=value prefixes and stripping surrounding quotes.
  *
- * Returns pipe-delimited segments with their binary names, or an error string
- * if a disallowed operator is found in unquoted context.
+ * Returns pipe-delimited segments with their binary names, plus a list of
+ * all operators found in unquoted context. Does not reject anything itself —
+ * validation is the caller's job.
  */
-function tokenizeShell(command: string): { segments: Segment[]; error: string | null } {
+function tokenizeShell(command: string): TokenizeResult | string {
   const segments: Segment[] = [];
+  const operators: string[] = [];
   let current = "";
   // Per-segment binary extraction state: collects whitespace-delimited tokens
   // with quotes stripped, enough to find argv[0] after skipping VAR=value prefixes.
@@ -133,27 +154,24 @@ function tokenizeShell(command: string): { segments: Segment[]; error: string | 
       continue;
     }
 
-    // Backtick — always disallowed
-    if (ch === "`") {
-      return { segments: [], error: "Error: command contains disallowed shell operator (backticks)" };
+    // Table-driven operator detection (longest match first)
+    let matched = false;
+    for (const op of DISALLOWED_OPS) {
+      if (command.startsWith(op.match, i)) {
+        operators.push(op.name);
+        i += op.match.length;
+        matched = true;
+        break;
+      }
     }
+    if (matched) continue;
 
-    // $( — command substitution
-    if (ch === "$" && i + 1 < command.length && command[i + 1] === "(") {
-      return { segments: [], error: "Error: command contains disallowed shell operator ($())" };
-    }
-
-    // Semicolon
-    if (ch === ";") {
-      return { segments: [], error: "Error: command contains disallowed shell operator (;)" };
-    }
-
-    // && or ||
-    if (ch === "&" && i + 1 < command.length && command[i + 1] === "&") {
-      return { segments: [], error: "Error: command contains disallowed shell operator (&&)" };
-    }
-    if (ch === "|" && i + 1 < command.length && command[i + 1] === "|") {
-      return { segments: [], error: "Error: command contains disallowed shell operator (||)" };
+    // Pipe — split into new segment
+    if (ch === "|") {
+      operators.push("|");
+      pushSegment();
+      i++;
+      continue;
     }
 
     // I/O redirects: >, >>, <, <<, fd redirects like 2>, 2>>, 2>&1, >&, <&
@@ -161,16 +179,15 @@ function tokenizeShell(command: string): { segments: Segment[]; error: string | 
       const rest = command.slice(i);
       const fdMatch = rest.match(/^\d+([><])/);
       if (fdMatch) {
-        return { segments: [], error: "Error: command contains disallowed redirect operator" };
+        operators.push("redirect");
+        i += fdMatch[0].length;
+        continue;
       }
     }
     if (ch === ">" || ch === "<") {
-      return { segments: [], error: "Error: command contains disallowed redirect operator" };
-    }
-
-    // & — background operator (also catches the first char of && but && is caught above)
-    if (ch === "&") {
-      return { segments: [], error: "Error: command contains disallowed shell operator (&)" };
+      operators.push("redirect");
+      i++;
+      continue;
     }
 
     // Whitespace — token boundary for binary extraction
@@ -184,29 +201,33 @@ function tokenizeShell(command: string): { segments: Segment[]; error: string | 
       continue;
     }
 
-    // Pipe — split into new segment
-    if (ch === "|") {
-      pushSegment();
-      i++;
-      continue;
-    }
-
     token += ch;
     current += ch;
     i++;
   }
 
   if (quote !== Quote.None) {
-    return { segments: [], error: "Error: command contains unterminated quote" };
+    return "Error: command contains unterminated quote";
   }
 
   pushSegment();
-  return { segments, error: null };
+  return { segments, operators };
 }
 
 function validateCommand(command: string): string | null {
-  const { segments, error } = tokenizeShell(command);
-  if (error) return error;
+  const result = tokenizeShell(command);
+  if (typeof result === "string") return result;
+
+  const { segments, operators } = result;
+
+  for (const op of operators) {
+    if (DISALLOWED_OP_NAMES.has(op)) {
+      return `Error: command contains disallowed shell operator (${op})`;
+    }
+    if (op === "redirect") {
+      return "Error: command contains disallowed redirect operator";
+    }
+  }
 
   for (const { binary } of segments) {
     if (!binary) continue;
