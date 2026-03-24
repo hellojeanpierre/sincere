@@ -1,5 +1,9 @@
 # Learnings
 
+## 2026-03-24 — pi-agent-core philosophy: Trust model reasoning over framework-injected ReAct scaffolding
+
+pi-agent-core's loop is just: call LLM → execute tools → append results → call LLM again. No synthetic "Thought/Action/Observation" templates. Reasoning after tool results comes from the model natively (interleaved thinking, chain-of-thought). LangChain's ReAct pattern of templating reasoning steps made sense pre-frontier but now adds token overhead and constrains the model. Implication: Sincere's principle-driven Operator prompt is the right call — structural enforcement of reasoning steps is the mistake to avoid.
+
 ## 2026-03-24: "Reason before acting" principles apply constant cost for variable benefit; the failure they target may not be solvable at the prompt layer
 
 When an agentic model skips tool-result evaluation, it is not missing an instruction to evaluate — next-token prediction flows past the pause point because the result looks routine. A prompt principle adds constant friction (latency, tokens) on every turn but only helps on the minority where momentum would have caused an error. The diagnostic question is not "what should the principle say" but "can prompt-level text solve this at all." Higher-leverage interventions operate at other layers: tool APIs returning structured completeness metadata, output schemas that mechanically separate interpretation from action selection, or model selection matched to the task's evaluation demands.
