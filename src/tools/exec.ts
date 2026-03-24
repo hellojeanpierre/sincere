@@ -26,24 +26,193 @@ const ALLOWED_BINARIES = new Set([
   "python3",
 ]);
 
-const SHELL_CHAIN_PATTERN = /;|&&|\|\||`|\$\(/;
-const REDIRECT_PATTERN = />{1,2}/;
+/**
+ * Quote-aware shell tokenizer. Walks the command string character-by-character,
+ * tracking quote context to distinguish real shell operators from characters
+ * inside quoted arguments.
+ *
+ * Returns pipe-delimited segments for allowlist checking, or an error string
+ * if a disallowed operator is found in unquoted context.
+ */
+function tokenizeShell(command: string): { segments: string[]; error: string | null } {
+  const segments: string[] = [];
+  let current = "";
+  let i = 0;
+
+  const enum Quote {
+    None,
+    Single,
+    Double,
+  }
+  let quote: Quote = Quote.None;
+
+  while (i < command.length) {
+    const ch = command[i];
+
+    // Inside single quotes: everything is literal until closing '
+    if (quote === Quote.Single) {
+      if (ch === "'") {
+        quote = Quote.None;
+      }
+      current += ch;
+      i++;
+      continue;
+    }
+
+    // Inside double quotes: literal except for backslash escapes
+    if (quote === Quote.Double) {
+      if (ch === "\\") {
+        current += ch;
+        i++;
+        if (i < command.length) {
+          current += command[i];
+          i++;
+        }
+        continue;
+      }
+      if (ch === '"') {
+        quote = Quote.None;
+      }
+      current += ch;
+      i++;
+      continue;
+    }
+
+    // Unquoted context — operators are meaningful here
+
+    // Backslash escape
+    if (ch === "\\") {
+      current += ch;
+      i++;
+      if (i < command.length) {
+        current += command[i];
+        i++;
+      }
+      continue;
+    }
+
+    // Enter quotes
+    if (ch === "'") {
+      quote = Quote.Single;
+      current += ch;
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      quote = Quote.Double;
+      current += ch;
+      i++;
+      continue;
+    }
+
+    // Backtick — always disallowed
+    if (ch === "`") {
+      return { segments: [], error: "Error: command contains disallowed shell operator (backticks)" };
+    }
+
+    // $( — command substitution
+    if (ch === "$" && i + 1 < command.length && command[i + 1] === "(") {
+      return { segments: [], error: "Error: command contains disallowed shell operator ($())" };
+    }
+
+    // Semicolon
+    if (ch === ";") {
+      return { segments: [], error: "Error: command contains disallowed shell operator (;)" };
+    }
+
+    // && or ||
+    if (ch === "&" && i + 1 < command.length && command[i + 1] === "&") {
+      return { segments: [], error: "Error: command contains disallowed shell operator (&&)" };
+    }
+    if (ch === "|" && i + 1 < command.length && command[i + 1] === "|") {
+      return { segments: [], error: "Error: command contains disallowed shell operator (||)" };
+    }
+
+    // I/O redirects: >, >>, <, <<, fd redirects like 2>, 2>>, 2>&1, >&, <&
+    // Check for fd-prefix redirects (e.g. 2> or 2>>)
+    if (/\d/.test(ch)) {
+      const rest = command.slice(i);
+      const fdMatch = rest.match(/^\d+([><])/);
+      if (fdMatch) {
+        return { segments: [], error: "Error: command contains disallowed redirect operator" };
+      }
+    }
+    if (ch === ">" || ch === "<") {
+      return { segments: [], error: "Error: command contains disallowed redirect operator" };
+    }
+
+    // Pipe — split into new segment
+    if (ch === "|") {
+      segments.push(current);
+      current = "";
+      i++;
+      continue;
+    }
+
+    current += ch;
+    i++;
+  }
+
+  segments.push(current);
+  return { segments, error: null };
+}
+
+/**
+ * Extract the binary name from a pipeline segment, handling:
+ * - Leading whitespace
+ * - VAR=value env prefixes (skipped)
+ * - Quoted binary names (quotes stripped)
+ */
+function extractBinary(segment: string): string {
+  const trimmed = segment.trim();
+  if (!trimmed) return "";
+
+  // Quote-aware split into tokens (only need enough to find argv[0])
+  const tokens: string[] = [];
+  let tok = "";
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      } else {
+        tok += ch;
+      }
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (tok) {
+        tokens.push(tok);
+        tok = "";
+      }
+      continue;
+    }
+    tok += ch;
+  }
+  if (tok) tokens.push(tok);
+
+  // Skip VAR=value prefixes
+  let idx = 0;
+  while (idx < tokens.length && /^\w+=/.test(tokens[idx])) {
+    idx++;
+  }
+
+  if (idx >= tokens.length) return "";
+  return basename(tokens[idx]);
+}
 
 function validateCommand(command: string): string | null {
-  if (SHELL_CHAIN_PATTERN.test(command)) {
-    return "Error: command contains disallowed shell operator (;, &&, ||, $( ), or backticks)";
-  }
+  const { segments, error } = tokenizeShell(command);
+  if (error) return error;
 
-  if (REDIRECT_PATTERN.test(command)) {
-    return "Error: command contains disallowed redirect operator (> or >>)";
-  }
-
-  const segments = command.split("|");
   for (const segment of segments) {
-    const trimmed = segment.trim();
-    if (!trimmed) continue;
-    const firstToken = trimmed.split(/\s+/)[0];
-    const bin = basename(firstToken);
+    const bin = extractBinary(segment);
+    if (!bin) continue;
     if (!ALLOWED_BINARIES.has(bin)) {
       return `Error: binary not allowed: ${bin}. Allowed: ${[...ALLOWED_BINARIES].join(", ")}`;
     }

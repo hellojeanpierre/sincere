@@ -106,6 +106,83 @@ describe("exec tool", () => {
     expect(result.content[0].text).toContain("name");
   });
 
+  // --- Quote-aware parser tests ---
+
+  test("jq with pipe inside single quotes is allowed", async () => {
+    const result = await execTool.execute("test", {
+      command: "jq '.foo | keys[]' package.json",
+    });
+    expect(result.details).not.toBeNull();
+  });
+
+  test("jq with > inside single quotes is allowed", async () => {
+    const result = await execTool.execute("test", {
+      command: "jq 'select(.version > \"1\")' package.json",
+    });
+    expect(result.details).not.toBeNull();
+  });
+
+  test("jq with @tsv is allowed", async () => {
+    const result = await execTool.execute("test", {
+      command: "jq -r '.[] | @tsv' package.json",
+    });
+    expect(result.details).not.toBeNull();
+  });
+
+  test("jq piped to head with real pipe works", async () => {
+    const result = await execTool.execute("test", {
+      command: "jq '.name' package.json | head -5",
+    });
+    expect(result.details).not.toBeNull();
+    expect(result.details!.exitCode).toBe(0);
+  });
+
+  test("real redirect in unquoted context is blocked", async () => {
+    const result = await execTool.execute("test", {
+      command: "jq '.foo' package.json > out.txt",
+    });
+    expect(result.content[0].text).toContain("redirect operator");
+    expect(result.details).toBeNull();
+  });
+
+  test("real semicolon in unquoted context is blocked", async () => {
+    const result = await execTool.execute("test", {
+      command: "jq '.foo' package.json ; rm bar",
+    });
+    expect(result.content[0].text).toContain("disallowed shell operator");
+    expect(result.details).toBeNull();
+  });
+
+  test("VAR=value prefix before binary is allowed", async () => {
+    const result = await execTool.execute("test", {
+      command: "FOO=bar jq '.name' package.json",
+    });
+    expect(result.details).not.toBeNull();
+  });
+
+  test("quoted binary name is allowed", async () => {
+    const result = await execTool.execute("test", {
+      command: `"jq" '.name' package.json`,
+    });
+    expect(result.details).not.toBeNull();
+  });
+
+  test("input redirect is blocked", async () => {
+    const result = await execTool.execute("test", {
+      command: "jq '.foo' < input.txt",
+    });
+    expect(result.content[0].text).toContain("redirect operator");
+    expect(result.details).toBeNull();
+  });
+
+  test("fd redirect 2>&1 is blocked", async () => {
+    const result = await execTool.execute("test", {
+      command: "jq '.foo' file.json 2>&1",
+    });
+    expect(result.content[0].text).toContain("redirect operator");
+    expect(result.details).toBeNull();
+  });
+
   test("details object has correct shape", async () => {
     const result = await execTool.execute("test", {
       command: "cat package.json | wc -l",
