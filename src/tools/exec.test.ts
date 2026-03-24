@@ -183,6 +183,38 @@ describe("exec tool", () => {
     expect(result.details).toBeNull();
   });
 
+  test("unterminated single quote is blocked", async () => {
+    const result = await execTool.execute("test", {
+      command: "jq '.foo | keys[]",
+    });
+    expect(result.content[0].text).toContain("unterminated quote");
+    expect(result.details).toBeNull();
+  });
+
+  test("unterminated double quote is blocked", async () => {
+    const result = await execTool.execute("test", {
+      command: 'jq ".foo | keys[]',
+    });
+    expect(result.content[0].text).toContain("unterminated quote");
+    expect(result.details).toBeNull();
+  });
+
+  test("lone & (background operator) is blocked", async () => {
+    const result = await execTool.execute("test", {
+      command: "jq '.foo' package.json &",
+    });
+    expect(result.content[0].text).toContain("disallowed shell operator");
+    expect(result.details).toBeNull();
+  });
+
+  test("& between commands is blocked", async () => {
+    const result = await execTool.execute("test", {
+      command: "jq '.foo' package.json & rm -rf /",
+    });
+    expect(result.content[0].text).toContain("disallowed shell operator");
+    expect(result.details).toBeNull();
+  });
+
   test("details object has correct shape", async () => {
     const result = await execTool.execute("test", {
       command: "cat package.json | wc -l",

@@ -141,6 +141,11 @@ function tokenizeShell(command: string): { segments: string[]; error: string | n
       return { segments: [], error: "Error: command contains disallowed redirect operator" };
     }
 
+    // & — background operator (also catches the first char of && but && is caught above)
+    if (ch === "&") {
+      return { segments: [], error: "Error: command contains disallowed shell operator (&)" };
+    }
+
     // Pipe — split into new segment
     if (ch === "|") {
       segments.push(current);
@@ -151,6 +156,10 @@ function tokenizeShell(command: string): { segments: string[]; error: string | n
 
     current += ch;
     i++;
+  }
+
+  if (quote !== Quote.None) {
+    return { segments: [], error: "Error: command contains unterminated quote" };
   }
 
   segments.push(current);
