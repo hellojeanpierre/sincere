@@ -2,7 +2,8 @@ import { mkdirSync, appendFileSync, symlinkSync, unlinkSync, existsSync } from "
 import { resolve } from "path";
 import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, streamSimple, Type } from "@mariozechner/pi-ai";
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentMessage } from "@mariozechner/pi-agent-core";
+import type { TextContent } from "@mariozechner/pi-ai";
 import { logger } from "./lib/logger.ts";
 import { readTool } from "./tools/read.ts";
 import { execTool } from "./tools/exec.ts";
@@ -27,6 +28,39 @@ const echoTool: AgentTool<typeof echoSchema> = {
   },
 };
 
+// Known simplification: age is measured in user turns, so stale pruning only
+// activates in multi-turn conversations. Single-prompt runs never prune.
+// Known design choice: trace logger sees full results (via tool_execution_end
+// events) while the LLM sees compressed stubs. This divergence is intentional —
+// traces are the audit log, context projection is for token efficiency.
+export const transformContext = async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
+  const ages = new Array<number>(messages.length);
+  let userCount = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user") userCount++;
+    ages[i] = userCount;
+  }
+
+  return messages.map((msg, i) => {
+    if (msg.role !== "toolResult" || msg.isError) return msg;
+
+    if (ages[i] > 8) {
+      return { ...msg, content: [{ type: "text" as const, text: `[stale result: ${msg.toolName}, ${ages[i]} turns ago]` }] };
+    }
+
+    const texts = msg.content.filter((b): b is TextContent => b.type === "text");
+    const totalLen = texts.reduce((sum, b) => sum + b.text.length, 0);
+    if (totalLen <= 3000) return msg;
+
+    const joined = texts.map(b => b.text).join("\n");
+    const preview = joined.length <= 500
+      ? joined
+      : joined.slice(0, 300) + "\n…\n" + joined.slice(-200);
+    const nonText = msg.content.filter(b => b.type !== "text");
+    return { ...msg, content: [{ type: "text" as const, text: `[${msg.toolName}: ${totalLen} chars]\n${preview}` }, ...nonText] };
+  });
+};
+
 export function createAgent(): Agent {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -40,6 +74,7 @@ export function createAgent(): Agent {
   return new Agent({
     streamFn: streamSimple,
     getApiKey: () => apiKey,
+    transformContext,
     initialState: {
       systemPrompt,
       model,
