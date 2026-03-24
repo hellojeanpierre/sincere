@@ -50,7 +50,10 @@ export function createAgent(): Agent {
 
 // --- Run only when executed directly (not imported by tests) ---
 if (import.meta.main) {
-  runOperator();
+  runOperator().catch((err) => {
+    logger.fatal(err);
+    process.exit(1);
+  });
 }
 
 async function runOperator() {

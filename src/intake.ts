@@ -1,4 +1,5 @@
 import type { Agent } from "@mariozechner/pi-agent-core";
+import type { AssistantMessage } from "@mariozechner/pi-ai";
 
 /**
  * Feed a single Zendesk event to the agent and return its text response.
@@ -12,17 +13,17 @@ export async function intake(
   let error: string | undefined;
 
   const unsub = agent.subscribe((e) => {
-    if (
-      e.type === "message_end" &&
-      (e.message as any).role === "assistant"
-    ) {
-      const msg = e.message as any;
-      if (msg.stopReason === "error" && msg.errorMessage) {
-        error = msg.errorMessage;
-      }
-      for (const block of msg.content ?? []) {
-        if (block.type === "text") {
-          parts.push(block.text);
+    if (e.type === "message_end") {
+      const msg = e.message;
+      if ("role" in msg && msg.role === "assistant") {
+        const assistant = msg as AssistantMessage;
+        if (assistant.stopReason === "error" && assistant.errorMessage) {
+          error = assistant.errorMessage;
+        }
+        for (const block of assistant.content) {
+          if (block.type === "text") {
+            parts.push(block.text);
+          }
         }
       }
     }
@@ -36,7 +37,7 @@ export async function intake(
     unsub();
   }
 
-  if (error && parts.length === 0) {
+  if (error) {
     throw new Error(`Agent error: ${error}`);
   }
 
