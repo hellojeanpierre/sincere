@@ -1,5 +1,13 @@
 # Learnings
 
+## 2025-03-24: LLM agents cannot self-correct semantic framing errors without external feedback from computation or reference data
+ 
+Three research findings converge: anchoring bias in autoregressive generation (early outputs shape all downstream reasoning), the Einstellung effect (familiar surface features trigger rigid pattern matching over flexible reasoning, Nature 2025), and the inability of LLMs to self-correct reasoning without external feedback (Huang et al. 2024). Skills should create conditions for data to contradict the agent's framing, not instruct it to "think harder."
+
+## 2025-03-24: Silent semantic assumptions encoded as code are the highest-leverage single point of failure in agentic data analysis
+ 
+Our agent wrote `is_resolved(t): return t['status'] in ('resolved', 'closed')` with zero reasoning commentary, hiding 36/72 tickets and missing the two largest findings. Cowork avoided this because a surprising computation result (diagnostic messages = 0.00 across all outcomes) triggered record-level reads that revised the framing. The fix in the skill is a transition signal, not a procedural gate.
+
 ## 2026-03-24 — Skills are pattern-matching attractors that cause goal drift proportional to their procedural specificity and length
 
 Arike et al. (2025) showed goal drift correlates with pattern-matching susceptibility as context grows. Inherited Goal Drift (2026) found that prefilled reasoning patterns propagate forward and that missing scope constraints cause ambiguity-driven drift. Applied to skills: procedural instructions ("write a script, narrate output") create stronger attractors than goal statements ("aggregate to find patterns, then read records to find causes"). Drift-resistant skills encode goals, transition signals (when to shift modes), and exit conditions (when to stop applying) rather than step-by-step procedures.
