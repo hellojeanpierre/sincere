@@ -26,17 +26,27 @@ const ALLOWED_BINARIES = new Set([
   "python3",
 ]);
 
+interface Segment {
+  raw: string;
+  binary: string;
+}
+
 /**
  * Quote-aware shell tokenizer. Walks the command string character-by-character,
  * tracking quote context to distinguish real shell operators from characters
- * inside quoted arguments.
+ * inside quoted arguments. Extracts the binary name (argv[0]) per segment
+ * inline — skipping VAR=value prefixes and stripping surrounding quotes.
  *
- * Returns pipe-delimited segments for allowlist checking, or an error string
+ * Returns pipe-delimited segments with their binary names, or an error string
  * if a disallowed operator is found in unquoted context.
  */
-function tokenizeShell(command: string): { segments: string[]; error: string | null } {
-  const segments: string[] = [];
+function tokenizeShell(command: string): { segments: Segment[]; error: string | null } {
+  const segments: Segment[] = [];
   let current = "";
+  // Per-segment binary extraction state: collects whitespace-delimited tokens
+  // with quotes stripped, enough to find argv[0] after skipping VAR=value prefixes.
+  let token = "";
+  let tokens: string[] = [];
   let i = 0;
 
   const enum Quote {
@@ -46,6 +56,18 @@ function tokenizeShell(command: string): { segments: string[]; error: string | n
   }
   let quote: Quote = Quote.None;
 
+  function pushSegment() {
+    if (token) tokens.push(token);
+    // Skip VAR=value prefixes
+    let idx = 0;
+    while (idx < tokens.length && /^\w+=/.test(tokens[idx])) idx++;
+    const bin = idx < tokens.length ? basename(tokens[idx]) : "";
+    segments.push({ raw: current, binary: bin });
+    current = "";
+    token = "";
+    tokens = [];
+  }
+
   while (i < command.length) {
     const ch = command[i];
 
@@ -53,6 +75,8 @@ function tokenizeShell(command: string): { segments: string[]; error: string | n
     if (quote === Quote.Single) {
       if (ch === "'") {
         quote = Quote.None;
+      } else {
+        token += ch;
       }
       current += ch;
       i++;
@@ -65,6 +89,7 @@ function tokenizeShell(command: string): { segments: string[]; error: string | n
         current += ch;
         i++;
         if (i < command.length) {
+          token += command[i];
           current += command[i];
           i++;
         }
@@ -72,6 +97,8 @@ function tokenizeShell(command: string): { segments: string[]; error: string | n
       }
       if (ch === '"') {
         quote = Quote.None;
+      } else {
+        token += ch;
       }
       current += ch;
       i++;
@@ -85,6 +112,7 @@ function tokenizeShell(command: string): { segments: string[]; error: string | n
       current += ch;
       i++;
       if (i < command.length) {
+        token += command[i];
         current += command[i];
         i++;
       }
@@ -129,7 +157,6 @@ function tokenizeShell(command: string): { segments: string[]; error: string | n
     }
 
     // I/O redirects: >, >>, <, <<, fd redirects like 2>, 2>>, 2>&1, >&, <&
-    // Check for fd-prefix redirects (e.g. 2> or 2>>)
     if (/\d/.test(ch)) {
       const rest = command.slice(i);
       const fdMatch = rest.match(/^\d+([><])/);
@@ -146,14 +173,25 @@ function tokenizeShell(command: string): { segments: string[]; error: string | n
       return { segments: [], error: "Error: command contains disallowed shell operator (&)" };
     }
 
-    // Pipe — split into new segment
-    if (ch === "|") {
-      segments.push(current);
-      current = "";
+    // Whitespace — token boundary for binary extraction
+    if (/\s/.test(ch)) {
+      if (token) {
+        tokens.push(token);
+        token = "";
+      }
+      current += ch;
       i++;
       continue;
     }
 
+    // Pipe — split into new segment
+    if (ch === "|") {
+      pushSegment();
+      i++;
+      continue;
+    }
+
+    token += ch;
     current += ch;
     i++;
   }
@@ -162,68 +200,18 @@ function tokenizeShell(command: string): { segments: string[]; error: string | n
     return { segments: [], error: "Error: command contains unterminated quote" };
   }
 
-  segments.push(current);
+  pushSegment();
   return { segments, error: null };
-}
-
-/**
- * Extract the binary name from a pipeline segment, handling:
- * - Leading whitespace
- * - VAR=value env prefixes (skipped)
- * - Quoted binary names (quotes stripped)
- */
-function extractBinary(segment: string): string {
-  const trimmed = segment.trim();
-  if (!trimmed) return "";
-
-  // Quote-aware split into tokens (only need enough to find argv[0])
-  const tokens: string[] = [];
-  let tok = "";
-  let quote: "'" | '"' | null = null;
-  for (let i = 0; i < trimmed.length; i++) {
-    const ch = trimmed[i];
-    if (quote) {
-      if (ch === quote) {
-        quote = null;
-      } else {
-        tok += ch;
-      }
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      continue;
-    }
-    if (/\s/.test(ch)) {
-      if (tok) {
-        tokens.push(tok);
-        tok = "";
-      }
-      continue;
-    }
-    tok += ch;
-  }
-  if (tok) tokens.push(tok);
-
-  // Skip VAR=value prefixes
-  let idx = 0;
-  while (idx < tokens.length && /^\w+=/.test(tokens[idx])) {
-    idx++;
-  }
-
-  if (idx >= tokens.length) return "";
-  return basename(tokens[idx]);
 }
 
 function validateCommand(command: string): string | null {
   const { segments, error } = tokenizeShell(command);
   if (error) return error;
 
-  for (const segment of segments) {
-    const bin = extractBinary(segment);
-    if (!bin) continue;
-    if (!ALLOWED_BINARIES.has(bin)) {
-      return `Error: binary not allowed: ${bin}. Allowed: ${[...ALLOWED_BINARIES].join(", ")}`;
+  for (const { binary } of segments) {
+    if (!binary) continue;
+    if (!ALLOWED_BINARIES.has(binary)) {
+      return `Error: binary not allowed: ${binary}. Allowed: ${[...ALLOWED_BINARIES].join(", ")}`;
     }
   }
 
