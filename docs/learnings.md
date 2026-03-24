@@ -2,7 +2,7 @@
 
 ## 2026-03-24 — Agents without explicit reasoning between tool calls hit a hard performance ceiling (~28-45% success) regardless of model capability 
 
-ReAct (ICLR 2023) showed +26pp on ALFWorld just from interleaving thought steps between actions; Reflexion (NeurIPS 2023) pushed that to 97% with inter-episode verbal self-critique. CRITIC (ICLR 2024) proved external tool feedback is required for reliable self-correction (internal-only critiques: -0.03 to +2.33 F1 vs. tool-grounded: +5.1-8.2 F1). The 2025-2026 frontier (ReTool, ARTIST, MAR) moves reflection from prompting to RL-trained capability, with multi-agent decomposition of critique consistently beating single-agent self-reflection due to confirmation bias. Full research summary
+ReAct (ICLR 2023) showed +26pp on ALFWorld just from interleaving thought steps between actions; Reflexion (NeurIPS 2023) pushed that to 97% with inter-episode verbal self-critique. CRITIC (ICLR 2024) proved external tool feedback is required for reliable self-correction (internal-only critiques: -0.03 to +2.33 F1 vs. tool-grounded: +5.1-8.2 F1). The 2025-2026 frontier (ReTool, ARTIST, MAR) moves reflection from prompting to RL-trained capability, with multi-agent decomposition of critique consistently beating single-agent self-reflection due to confirmation bias. [Full research summary](https://claude.ai/public/artifacts/c4befae0-b7f7-48c1-9118-5d61b7740eae)
 
 ## 2025-03-24: LLM agents cannot self-correct semantic framing errors without external feedback from computation or reference data
  
