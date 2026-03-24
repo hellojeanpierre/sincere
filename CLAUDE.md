@@ -23,6 +23,8 @@ Bun-based AI agent project using `@mariozechner/pi-agent-core` and `@mariozechne
 
 7. **Agent config via `initialState`.** Configure the Agent's system prompt, model, and tools through `initialState` in the constructor. This keeps setup declarative and in one place.
 
+8. **Skills, operator.md, and tool description text are pattern-matching attractors.** Anything the Operator reads shapes reasoning. Encode goals and transition signals, not numbered procedures. Always include exit conditions. Shorter text drifts goals less.
+
 ## Tool Surface
 
 - **read** — returns file content as text. Unconditionally safe. Used for data files, knowledge graph triples, skill context, configuration.
