@@ -44,6 +44,7 @@ export function createAgent(): Agent {
       systemPrompt,
       model,
       tools: [echoTool, readTool, execTool],
+      thinkingLevel: "high",
     },
   });
 }
