@@ -87,11 +87,16 @@ function formatEvent(event: Parameters<Parameters<typeof agent.subscribe>[0]>[0]
     }
     case "message_end":
       if (event.message.role === "assistant") {
-        const textParts = event.message.content
-          .filter((b): b is { type: "text"; text: string } => b.type === "text")
-          .map((b) => b.text);
-        if (textParts.length > 0) {
-          return `## Assistant\n\n${textParts.join("\n")}`;
+        const parts: string[] = [];
+        for (const b of event.message.content) {
+          if (b.type === "thinking" && b.thinking) {
+            parts.push(`<details><summary>Thinking</summary>\n\n${b.thinking}\n\n</details>`);
+          } else if (b.type === "text") {
+            parts.push(b.text);
+          }
+        }
+        if (parts.length > 0) {
+          return `## Assistant\n\n${parts.join("\n\n")}`;
         }
       }
       return null;
