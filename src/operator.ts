@@ -10,17 +10,6 @@ import { loadSystemPrompt } from "./lib/load-prompt.ts";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
 
-const apiKey = process.env.ANTHROPIC_API_KEY;
-if (!apiKey) {
-  logger.fatal("ANTHROPIC_API_KEY not set");
-  process.exit(1);
-}
-
-const systemPrompt = loadSystemPrompt(import.meta.dirname);
-
-const modelId = (process.env.SINCERE_MODEL as typeof DEFAULT_MODEL) || DEFAULT_MODEL;
-const model = getModel("anthropic", modelId);
-
 const echoSchema = Type.Object({
   message: Type.String({ description: "The message to echo back" }),
 });
@@ -38,15 +27,38 @@ const echoTool: AgentTool<typeof echoSchema> = {
   },
 };
 
-const agent = new Agent({
-  streamFn: streamSimple,
-  getApiKey: () => apiKey,
-  initialState: {
-    systemPrompt,
-    model,
-    tools: [echoTool, readTool, execTool],
-  },
-});
+export function createAgent(): Agent {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY not set");
+  }
+
+  const systemPrompt = loadSystemPrompt(resolve(import.meta.dirname));
+  const modelId = (process.env.SINCERE_MODEL as typeof DEFAULT_MODEL) || DEFAULT_MODEL;
+  const model = getModel("anthropic", modelId);
+
+  return new Agent({
+    streamFn: streamSimple,
+    getApiKey: () => apiKey,
+    initialState: {
+      systemPrompt,
+      model,
+      tools: [echoTool, readTool, execTool],
+    },
+  });
+}
+
+// --- Run only when executed directly (not imported by tests) ---
+if (import.meta.main) {
+  runOperator().catch((err) => {
+    logger.fatal(err);
+    process.exit(1);
+  });
+}
+
+async function runOperator() {
+
+const agent = createAgent();
 
 // --- Trace logging to markdown ---
 const tracesDir = resolve("data/traces");
@@ -164,3 +176,5 @@ agent.subscribe((event) => {
 
 logger.info("prompting agent…");
 await agent.prompt("Analyze data/pintest-v1/manifest.json");
+
+} // end runOperator
