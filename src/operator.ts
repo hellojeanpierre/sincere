@@ -28,7 +28,12 @@ const echoTool: AgentTool<typeof echoSchema> = {
   },
 };
 
-const transformContext = async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
+// Known simplification: age is measured in user turns, so stale pruning only
+// activates in multi-turn conversations. Single-prompt runs never prune.
+// Known design choice: trace logger sees full results (via tool_execution_end
+// events) while the LLM sees compressed stubs. This divergence is intentional —
+// traces are the audit log, context projection is for token efficiency.
+export const transformContext = async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
   const ages = new Array<number>(messages.length);
   let userCount = 0;
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -47,8 +52,12 @@ const transformContext = async (messages: AgentMessage[]): Promise<AgentMessage[
     const totalLen = texts.reduce((sum, b) => sum + b.text.length, 0);
     if (totalLen <= 3000) return msg;
 
-    const preview = texts.map(b => b.text).join("\n").slice(0, 500);
-    return { ...msg, content: [{ type: "text" as const, text: `[${msg.toolName}: ${totalLen} chars]\n${preview}…` }] };
+    const joined = texts.map(b => b.text).join("\n");
+    const preview = joined.length <= 500
+      ? joined
+      : joined.slice(0, 300) + "\n…\n" + joined.slice(-200);
+    const nonText = msg.content.filter(b => b.type !== "text");
+    return { ...msg, content: [{ type: "text" as const, text: `[${msg.toolName}: ${totalLen} chars]\n${preview}` }, ...nonText] };
   });
 };
 
