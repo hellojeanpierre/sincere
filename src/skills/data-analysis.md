@@ -1,19 +1,30 @@
 # Data Analysis
 
-When a task requires quantitative analysis of a dataset:
+When a task requires understanding what happened and why from structured or semi-structured data.
 
-1. **Write a single Python script** that loads the data, computes all needed metrics, and prints structured results. Run it via `exec`.
-2. Using `read` to inspect data shape or sample rows before writing a script is fine. What to avoid is substituting sequential tool calls for computation — e.g., grepping counts one filter at a time instead of computing them in a script.
-3. Script output must be unambiguous without additional interpretation — a reader should be able to narrate directly from it without re-deriving anything.
-4. Narrate findings from the script output. Do not re-derive numbers outside the script.
+## Core principle
 
-## When to apply
+Aggregate to find patterns, then read individual records to find causes. Numbers tell you where to look. Documents, transcripts, and reference materials tell you why. Stopping at aggregates is the most common failure.
 
-- The task mentions statistics, aggregations, distributions, correlations, or comparisons across rows.
-- The dataset is a CSV, TSV, JSON-lines, or similar tabular file.
+## Before scripting
+
+Verify total record count and field inventory programmatically — do not rely on preview tools to determine data shape. Previews may truncate. A partial view will silently scope every downstream hypothesis to whatever the preview contained.
+
+## Computation
+
+Write a Python script that loads the full dataset, computes aggregates, and prints labeled results. Treat script output as a starting point for deeper investigation, not a final answer.
+
+## When to shift from computation to reading
+
+- Aggregates reveal outliers or anomalies worth explaining.
+- The dataset contains nested text fields (transcripts, notes, logs) that hold causal evidence.
+- The task asks *why* something happened, not just *how often*.
+- Reference documents (SOPs, KB articles) exist that define the rules being evaluated.
+
+When these conditions are met, targeted sequential reads of specific records are the right tool — not bigger batch scripts.
 
 ## Failure modes
 
-- Splitting analysis across many tool calls accumulates rounding drift and context bloat.
-- Printing raw dataframes without labels produces unnarrateable output.
-- Forgetting to handle missing values silently skews every metric.
+- Forming hypotheses from a truncated preview without verifying full record count.
+- Stopping at aggregates when root causes require reading individual records or reference documents.
+- Treating a document store with nested text as a flat table — never examining content inside fields.
