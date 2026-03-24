@@ -1,5 +1,9 @@
 # Learnings
 
+## 2026-03-24 — Incremental persistence beats end-of-task summarization for long-horizon agents
+
+Anthropic's context engineering guide (Sep 2025) identifies three techniques for long-horizon coherence: compaction (summarize + reinitiate), structured note-taking (persist conclusions outside the window), and sub-agent architectures (isolate deep work, return condensed summaries). The note-taking pattern is the most relevant to us: before a tool result ages out of context, the agent should have already written its conclusions somewhere persistent. The default failure mode is batching insight extraction to the end of an investigation, by which point early tool results have lost nuance or been compacted away. The fix is a write-through pattern — observe, conclude, persist — applied incrementally after each tool call, not as a final synthesis step.
+
 ## 2026-03-24 — pi-agent-core philosophy: Trust model reasoning over framework-injected ReAct scaffolding
 
 pi-agent-core's loop is just: call LLM → execute tools → append results → call LLM again. No synthetic "Thought/Action/Observation" templates. Reasoning after tool results comes from the model natively (interleaved thinking, chain-of-thought). LangChain's ReAct pattern of templating reasoning steps made sense pre-frontier but now adds token overhead and constrains the model. Implication: Sincere's principle-driven Operator prompt is the right call — structural enforcement of reasoning steps is the mistake to avoid.
