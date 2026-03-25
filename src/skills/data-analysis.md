@@ -14,13 +14,14 @@ Verify total record count and field inventory programmatically — do not rely o
 
 Write a Python script that loads the full dataset, computes aggregates, and prints labeled results. When investigating a cohort, write a script that processes the full cohort at once rather than reading records one at a time. Batch analysis surfaces cross-cutting patterns that sequential reads obscure.
 
-Treat script output as a starting point for deeper investigation, not a final answer. An outlier in one dimension becomes a finding only after checking whether other dimensions in the data explain it. When a cohort represents a failure, compare it structurally against the corresponding success cases. The difference between the two is where the cause lives. A surprising or uniform result is a signal that the framing may be wrong, not just the data. 
+Treat script output as a starting point for deeper investigation, not a final answer. When a hypothesis forms during investigation, the next query should test that specific hypothesis — not describe the pattern further. Check whether other dimensions in the data explain the outlier. Compare failure cohorts structurally against corresponding success cases; the difference is where the cause lives. A surprising or uniform result is a signal that the framing may be wrong, not just the data.
 
 ## Failure modes
 
 - Forming hypotheses from a truncated preview without verifying full record count.
 - Stopping at aggregates when root causes require reading individual records or reference documents.
 - Treating a document store with nested text as a flat table — never examining content inside fields.
+- Truncating record content in your own scripts then reasoning from the truncated version.
 - Encoding an analytical assumption as a code filter that silently excludes the records that would challenge it.
 - Collapsing distinct patterns into a single finding, losing the causal specificity that makes each one actionable.
 - Absorbing unexplained records into a "healthy baseline" instead of treating them as unfinished investigation.
