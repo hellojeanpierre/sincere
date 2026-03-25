@@ -43,7 +43,8 @@ type Result = {
 };
 
 function expectedVerdict(ticket: any): Verdict {
-  return ticket._ground_truth.failure_mode === "clean" ? "close" : "hold";
+  const fm = ticket._ground_truth.failure_mode;
+  return fm === "clean" || fm == null ? "close" : "hold";
 }
 
 function casePrompt(ticket: any): string {
@@ -65,7 +66,13 @@ async function evaluate(ticket: any): Promise<{ verdict: Verdict; rationale: str
     .join("");
 
   try {
-    const clean = text.replace(/```json\n?|```/g, "").trim();
+    // Strip any code fence (```json, ```python, etc.)
+    let clean = text.replace(/```\w*\n?|```/g, "").trim();
+    // If still not valid JSON, try extracting a JSON object
+    if (!clean.startsWith("{")) {
+      const match = clean.match(/\{[^}]*"verdict"\s*:[^}]*\}/);
+      if (match) clean = match[0];
+    }
     const parsed = JSON.parse(clean);
     return { verdict: parsed.verdict, rationale: parsed.rationale };
   } catch {
@@ -128,7 +135,7 @@ async function main() {
   // --- Recall by failure mode ---
   const modes = new Map<string, { total: number; caught: number }>();
   for (const r of results) {
-    if (r.failure_mode === "clean") continue;
+    if (!r.failure_mode || r.failure_mode === "clean") continue;
     const m = modes.get(r.failure_mode) || { total: 0, caught: 0 };
     m.total++;
     if (r.got[0] === "hold") m.caught++;

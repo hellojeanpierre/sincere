@@ -4,31 +4,35 @@ When a case reaches a decision point — closure, escalation, reroute, handoff �
 
 ## Core principle
 
-A transition is safe when the action taken so far matches what the customer's situation actually required. It is risky when there is a nameable gap between what was needed and what was delivered. Default to letting the transition proceed. Hold only when you can point to the specific gap — vague unease is not a hold signal.
+A transition is safe when the action taken matches what the customer's situation actually required. It is risky when there is a nameable gap between what was needed and what was delivered. Default to letting the transition proceed — most transitions are clean. Hold only when you can point to the specific gap. Vague unease is not a hold signal.
 
 ## What arrives
 
-The case arrives as structured data: a message thread between customer and agent, metadata (timestamps, category, priority, queue), and the proposed transition. The message thread is the primary evidence. Metadata is context, not proof.
+The case arrives as structured data: a conversation between customer and agent, metadata (timestamps, category, priority, routing), and the proposed transition. The conversation is the primary evidence. Metadata is supporting context — it cannot prove a resolution is correct, but it can reveal when something is wrong (e.g., the assigned category contradicts what the customer actually said).
 
-## Where to look
+## Hold signals
 
-Start from the customer's last message and work backward. An unacknowledged question, expressed frustration, or new detail introduced late in the thread are the strongest hold signals.
+These are the patterns that indicate a gap worth holding for. Weight recent messages more heavily — they reflect the current state of the issue and are where unresolved problems surface.
 
-Then compare the resolution against the complaint: not whether the agent did *something*, but whether they did the *right thing* for this specific situation. A generic template applied to a nuanced problem is a gap. A correct but partial fix that ignores a secondary issue the customer raised is a gap.
+**The resolution doesn't match the complaint.** Not whether the agent did *something*, but whether they did the *right thing* for this specific situation. A generic template applied to a nuanced problem is a gap. A correct but partial fix that ignores a secondary issue the customer raised is a gap.
 
-Check the process, not just the outcome. A resolution can appear correct but be built on a flawed path:
-- The agent followed an SOP that doesn't apply to this case or is itself outdated.
-- The agent skipped a required handoff — escalation, specialist queue, supervisor review — that the case warranted.
-- The case was recategorized or rerouted in a way that dropped the original issue.
+**The metadata contradicts the conversation.** When the customer's own words — subject, description, specific phrases — describe a different issue than the assigned category or routing, the case was mislabeled. A response built on the wrong classification cannot resolve the right problem, even if the response sounds reasonable on its own.
+
+**The process was flawed, even if the outcome looks right.**
+- The agent followed a procedure that doesn't apply to this case.
+- The agent skipped a required handoff that the case warranted.
 - The agent lacks the domain context to have resolved this correctly, and no specialist was consulted.
 - Conflicting policies were in play and the agent picked one without acknowledging the tension.
 
-Resolution speed relative to issue complexity is a secondary signal. A fast resolution on an identity verification case warrants scrutiny. A fast resolution on a known-answer FAQ does not.
+**Resolution speed is suspicious for the complexity.** A fast close on a simple, known-answer question is fine. A fast close on a case requiring investigation or verification warrants scrutiny.
 
-## Failure modes
+## What clean looks like
+
+A clean transition has: the customer's stated issue addressed directly, no unanswered questions or new details left hanging, metadata consistent with the conversation, and a resolution path appropriate for the issue type. When these hold, let it pass.
+
+## Failure modes to avoid in your own assessment
 
 - Treating agent activity as resolution — a response was sent, but the issue wasn't addressed.
-- Anchoring on the category label instead of the transcript content.
 - Flagging clean transitions because the topic sounds complex — complexity alone is not risk.
-- Missing metric gaming: rushed closures, unnecessary recategorization, avoided escalations that serve the agent's stats rather than the customer.
+- Missing metric gaming: rushed closures, avoided escalations, unnecessary reroutes that serve the agent's stats rather than the customer.
 - Accepting a resolution that followed correct procedure when the procedure itself was wrong for this case.
