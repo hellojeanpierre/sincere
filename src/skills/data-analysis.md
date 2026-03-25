@@ -4,7 +4,7 @@ When a task requires understanding what happened and why from structured or semi
 
 ## Core principle
 
-Aggregate to find patterns, then read the full content of individual records to find causes. Numbers tell you where to look. Summary fields tell you which records to read. The raw content - documents, transcripts, and reference materials — tells you why. 
+Aggregate to find patterns, then read the full content of individual records to find causes. Numbers tell you where to look. Summary fields tell you which records to read. The raw content - documents, transcripts, and reference materials — tells you why. A pattern becomes a finding only after attempts to disprove it with the available data have failed.
 
 ## Before scripting
 
@@ -12,7 +12,9 @@ Verify total record count and field inventory programmatically — do not rely o
 
 ## Computation
 
-Write a Python script that loads the full dataset, computes aggregates, and prints labeled results. Treat script output as a starting point for deeper investigation, not a final answer. An outlier in one dimension becomes a finding only after checking whether other dimensions in the data explain it. A surprising or uniform result is a signal that the framing may be wrong, not just the data. When investigating a cohort, write a script that processes the full cohort at once rather than reading records one at a time. Batch analysis surfaces cross-cutting patterns that sequential reads obscure.
+Write a Python script that loads the full dataset, computes aggregates, and prints labeled results. When investigating a cohort, write a script that processes the full cohort at once rather than reading records one at a time. Batch analysis surfaces cross-cutting patterns that sequential reads obscure.
+
+Treat script output as a starting point for deeper investigation, not a final answer. An outlier in one dimension becomes a finding only after checking whether other dimensions in the data explain it. When a cohort represents a failure, compare it structurally against the corresponding success cases. The difference between the two is where the cause lives. A surprising or uniform result is a signal that the framing may be wrong, not just the data. 
 
 ## Failure modes
 
