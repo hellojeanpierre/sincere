@@ -1,5 +1,5 @@
 import { mkdirSync, appendFileSync, symlinkSync, unlinkSync, existsSync, readFileSync, globSync } from "fs";
-import { resolve } from "path";
+import { resolve, basename } from "path";
 import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, streamSimple, Type } from "@mariozechner/pi-ai";
 import type { AgentTool, AgentMessage } from "@mariozechner/pi-agent-core";
@@ -68,9 +68,34 @@ export function createAgent(): Agent {
 
   const srcDir = resolve(import.meta.dirname);
   const operatorPrompt = readFileSync(resolve(srcDir, "operator.md"), "utf-8");
+
   const skillFiles = globSync(resolve(srcDir, "skills", "*.md"));
-  const skills = skillFiles.map((f) => readFileSync(f, "utf-8")).join("\n\n");
-  const systemPrompt = skills ? `${operatorPrompt}\n\n${skills}` : operatorPrompt;
+  const skills: { name: string; description: string; file: string }[] = [];
+  for (const f of skillFiles) {
+    const raw = readFileSync(f, "utf-8");
+    if (!raw.startsWith("---") || raw.indexOf("\n---", 3) === -1) {
+      logger.warn({ file: basename(f) }, "skill file missing frontmatter, skipped");
+      continue;
+    }
+    const end = raw.indexOf("\n---", 3);
+    const attrs: Record<string, string> = {};
+    for (const line of raw.slice(4, end).split("\n")) {
+      const sep = line.indexOf(":");
+      if (sep === -1) continue;
+      const key = line.slice(0, sep).trim();
+      const val = line.slice(sep + 1).trim();
+      if (key && val) attrs[key] = val;
+    }
+    if (attrs.name && attrs.description) {
+      skills.push({ name: attrs.name, description: attrs.description, file: `skills/${basename(f)}` });
+    }
+  }
+
+  const skillIndex = skills.length > 0
+    ? `\n\n## Available skills\n\nRead a skill file before acting on tasks it covers.\n\n${skills.map((s) => `- **${s.name}** (${s.file}): ${s.description}`).join("\n")}`
+    : "";
+  const systemPrompt = operatorPrompt + skillIndex;
+
   const modelId = (process.env.SINCERE_MODEL as typeof DEFAULT_MODEL) || DEFAULT_MODEL;
   const model = getModel("anthropic", modelId);
 
