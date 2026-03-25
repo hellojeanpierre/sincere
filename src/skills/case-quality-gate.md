@@ -1,6 +1,9 @@
-# Case Quality Gate
+---
+name: case-quality-gate
+description: Assess whether a case transition (closure, escalation, reroute, handoff) is safe or should be held for review. Use at any decision point where a support case changes state. Trigger on QA checks, case audits, and transition validation tasks.
+---
 
-When a case reaches a decision point — closure, escalation, reroute, handoff — assess whether the proposed transition is safe or whether it should be held for review.
+# Case Quality Gate
 
 ## Core principle
 

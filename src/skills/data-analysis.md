@@ -1,6 +1,9 @@
-# Data Analysis
+---
+name: data-analysis
+description: Analyze structured or semi-structured data to find what happened and why. Use when a task involves investigating patterns, computing aggregates, decomposing cohorts, or explaining outcomes in datasets. Trigger on any eval result analysis, metric investigation, or data-driven root-cause work.
+---
 
-When a task requires understanding what happened and why from structured or semi-structured data.
+# Data Analysis
 
 ## Core principle
 
