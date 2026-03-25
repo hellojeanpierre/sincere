@@ -27,14 +27,21 @@ const ALLOWED_BINARIES = new Set([
 ]);
 
 const SHELL_CHAIN_PATTERN = /;|&&|\|\||`|\$\(/;
-const REDIRECT_PATTERN = />{1,2}/;
+const REDIRECT_PATTERN = /(?<![-=])>{1,2}/;
+
+// Strip content inside matched quote pairs so operators inside strings
+// don't trigger false rejections. Escaped quotes may cause mismatched
+// pairs → less stripping → false positives, not bypasses (safe direction).
+function stripQuotedContent(command: string): string {
+  return command.replace(/"[^"]*"/g, "").replace(/'[^']*'/g, "");
+}
 
 function validateCommand(command: string): string | null {
   if (SHELL_CHAIN_PATTERN.test(command)) {
     return "Error: command contains disallowed shell operator (;, &&, ||, $( ), or backticks)";
   }
 
-  if (REDIRECT_PATTERN.test(command)) {
+  if (REDIRECT_PATTERN.test(stripQuotedContent(command))) {
     return "Error: command contains disallowed redirect operator (> or >>)";
   }
 

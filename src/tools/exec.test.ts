@@ -40,6 +40,37 @@ describe("exec tool", () => {
     expect(result.details).toBeNull();
   });
 
+  test("comparison inside double quotes is allowed", async () => {
+    const result = await execTool.execute("test", {
+      command: 'python3 -c "x > 5"',
+    });
+    expect(result.content[0].text).not.toContain("redirect operator");
+    expect(result.details).not.toBeNull();
+  });
+
+  test("arrow inside nested quotes is allowed", async () => {
+    const result = await execTool.execute("test", {
+      command: `python3 -c "print('dict -> keys')"`,
+    });
+    expect(result.content[0].text).not.toContain("redirect operator");
+    expect(result.details).not.toBeNull();
+  });
+
+  test("heredoc syntax is allowed", async () => {
+    const result = await execTool.execute("test", {
+      command: "cat << 'EOF'",
+    });
+    expect(result.content[0].text).not.toContain("redirect operator");
+  });
+
+  test("redirect after quoted content is still blocked", async () => {
+    const result = await execTool.execute("test", {
+      command: 'grep "foo" > out.txt',
+    });
+    expect(result.content[0].text).toContain("redirect operator");
+    expect(result.details).toBeNull();
+  });
+
   test("disallowed binary in pipeline is blocked", async () => {
     const result = await execTool.execute("test", {
       command: "cat foo | rm bar",
