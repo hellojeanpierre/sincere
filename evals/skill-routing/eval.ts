@@ -55,24 +55,24 @@ const cases: Case[] = [
   },
   // case-quality-gate: clear
   {
-    prompt: "Review this ticket closure and determine if the resolution is safe to proceed",
+    prompt: "The agent is closing this case. The customer reported a billing overcharge on their last invoice. The agent sent a password-reset walkthrough 4 minutes ago.",
     expectedSkill: "case-quality-gate",
   },
   {
-    prompt: "Assess whether this case escalation is appropriate given the conversation",
+    prompt: "This case is being marked resolved. The customer asked for a refund on a canceled order. The agent applied a loyalty discount instead and closed without confirming.",
     expectedSkill: "case-quality-gate",
   },
   {
-    prompt: "Check if this solved ticket should be held — the agent's response seems templated",
+    prompt: "The agent is escalating this ticket to tier 2. The customer's issue is a simple DNS configuration that tier 1 handles routinely. The case has been open for 90 seconds.",
     expectedSkill: "case-quality-gate",
   },
   // case-quality-gate: near-boundary
   {
-    prompt: "Look at this case and tell me if the agent actually resolved the customer's issue",
+    prompt: "This case just transitioned to solved. The customer described a problem connecting to WiFi after a firmware update. The agent walked them through a factory reset and the customer confirmed it's working.",
     expectedSkill: "case-quality-gate",
   },
   {
-    prompt: "Evaluate whether this ticket's metadata matches what the customer described",
+    prompt: "The agent is closing this ticket. The metadata says 'billing inquiry' but the customer's messages are about a missing delivery. The agent responded with a billing FAQ link.",
     expectedSkill: "case-quality-gate",
   },
 ];
