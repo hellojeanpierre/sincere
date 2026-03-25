@@ -21,4 +21,7 @@ Write a Python script that loads the full dataset, computes aggregates, and prin
 - Treating a document store with nested text as a flat table — never examining content inside fields.
 - Encoding an analytical assumption as a code filter that silently excludes the records that would challenge it.
 - Collapsing distinct patterns into a single finding, losing the causal specificity that makes each one actionable.
+- Absorbing unexplained records into a "healthy baseline" instead of treating them as unfinished investigation.
+
+
 
