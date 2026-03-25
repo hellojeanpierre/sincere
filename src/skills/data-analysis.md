@@ -4,34 +4,27 @@ When a task requires understanding what happened and why from structured or semi
 
 ## Core principle
 
-Aggregate to find patterns, then read the full content of individual records to find causes. Numbers tell you where to look. Summary fields tell you which records to read. The raw content — documents, transcripts, and reference materials — tells you why. A pattern becomes a finding only after attempts to disprove it with the available data have failed.
+Aggregate to find patterns, then read the full content of individual records to find causes. Numbers tell you where to look. The raw content tells you why. A pattern becomes a finding only after attempts to disprove it with the available data have failed.
 
 ## Before scripting
 
-Verify total record count and field inventory programmatically — do not rely on preview tools to determine data shape. Previews may truncate. A partial view will silently scope every downstream hypothesis to whatever the preview contained.
+Verify total record count and field inventory programmatically. Previews may truncate, and a partial view will silently scope every downstream hypothesis to whatever the preview contained.
 
-## Computation
+## Investigation framework
 
-Write a Python script that loads the full dataset, computes aggregates, and prints labeled results. When investigating a cohort, write a script that processes the full cohort at once rather than reading records one at a time.
+Write Python scripts that load the full dataset and compute aggregates. Process cohorts as batches, not one record at a time.
 
-When a hypothesis forms during investigation, the next query should test that specific hypothesis — not describe the pattern further. Compare failure cohorts structurally against corresponding success cases at the finest grain the data supports — not just the broad category. A difference between actors that dissolves at finer granularity was a composition artifact, not a cause.
+**Completeness.** Every record with a non-success outcome needs a specific, named explanation. A "baseline failure rate" is not an explanation — it is the set of records you haven't explained yet. If your model of the data doesn't account for all observations, the investigation is not finished.
 
-When a result contradicts the expected direction, the next tool call investigates the mechanism. If a signal expected to hurt outcomes actually helps, ask what intervention that signal triggers. Dropping a surprising result discards exactly the evidence that would challenge a shallow framing.
+**Falsification.** When a hypothesis forms, the next query tries to break it — not describe the pattern further. Compare failure cohorts against success cases at the finest grain the data supports. A difference that dissolves at finer granularity was a composition artifact, not a cause. A surprising result is the highest-value evidence — investigate its mechanism rather than dropping it.
 
-Once you assign records to cohorts or patterns, those labels become first-class dimensions. Slice every other system visible in the data — oversight, scoring, workflow — by the pattern labels you created. Investigate whether each has distinct failure modes rather than treating it as a single pass/fail.
+**Decomposition.** When you assign records to a cohort, test whether the cohort is internally uniform. If different subgroups within it have different causes — some avoidable, some structural — split them. A finding that mixes distinct causes produces an impact number that is technically correct and practically useless.
 
-A clean partition is a starting point, not an endpoint. After defining a cohort, test whether every member shares the same root cause by checking whether peers handling the same conditions (same intent, same complexity tier) produce different outcomes. If peers succeed where the cohort fails, the failure is avoidable and the actors are the cause. If peers also fail, the failure is structural and the conditions are the cause. A cohort that mixes both contains excess failures and a baseline — split them and attribute impact separately.
-
-For each record examined, state what the actors' observable states were, what action was taken, and why that action produced the outcome — a causal sentence, not a transcript summary.
-
-When a variable correlates with the outcome, test whether the correlation survives controlling for the patterns you already identified. If removing your primary-finding records collapses the gap, state that explicitly as a dismissed hypothesis. The absence of independent explanatory power protects the reader from pursuing interventions that would not move the metric.
+**Independence.** When a variable correlates with the outcome, test whether the correlation survives after removing the records already explained by your primary findings. If the gap collapses, say so explicitly — it protects the reader from pursuing interventions that would not move the metric.
 
 ## Failure modes
 
-- Treating a document store with nested text as a flat table — never examining content inside fields.
-- Truncating record content in your own scripts then reasoning from the truncated version.
 - Encoding an analytical assumption as a code filter that silently excludes the records that would challenge it.
-- Collapsing distinct patterns into a single finding, losing the causal specificity that makes each one actionable.
-- Treating a cohort as internally uniform without testing whether peers handle the same conditions successfully — conflating avoidable and structural failures under one impact number.
+- Collapsing distinct patterns into a single finding, losing the specificity that makes each actionable.
 - Absorbing unexplained records into a "healthy baseline" instead of treating them as unfinished investigation.
-- Computing a cross-tabulation without stating what it means for the hypothesis under test.
+- Treating nested or semi-structured fields as flat — never reading the content inside.
