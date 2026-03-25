@@ -104,7 +104,8 @@ function extractReadPaths(response: Anthropic.Message): string[] {
 
 function pathMatchesSkill(readPaths: string[], skill: string): boolean {
   const target = SKILL_FILES[skill];
-  return readPaths.some((p) => p === target || p.endsWith(`/${target}`) || target.endsWith(p));
+  const filename = target.split("/").pop()!;
+  return readPaths.some((p) => p === target || p.endsWith(`/${filename}`));
 }
 
 function skillsRead(readPaths: string[]): string[] {
