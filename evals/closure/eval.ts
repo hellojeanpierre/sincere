@@ -6,7 +6,7 @@ import { resolve } from "path";
 // --- Config ---
 const DATASET_PATH = process.argv[2] || "./data/tickets.jsonl";
 const SRC_DIR = process.argv[3] || "./src";
-const MODEL = process.env.MODEL || "claude-sonnet-4-20250514";
+const MODEL = process.env.MODEL || "claude-haiku-4-5-20251001";
 const RUNS_PER_CASE = Number(process.env.RUNS) || 1;
 
 // Eval-only output constraint — not part of the skill
