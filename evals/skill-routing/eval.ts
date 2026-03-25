@@ -1,23 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { readFileSync, existsSync, globSync } from "fs";
 import { resolve } from "path";
+import { loadSystemPrompt } from "../../src/operator.ts";
 
 // --- Config ---
 const SRC_DIR = process.argv[2] || "./src";
 const MODEL = process.env.MODEL || "claude-haiku-4-5-20251001";
 
-// --- Load system prompt the way the agent does ---
-function loadSystemPrompt(srcDir: string): string {
-  const operatorPath = resolve(srcDir, "operator.md");
-  const operatorPrompt = existsSync(operatorPath)
-    ? readFileSync(operatorPath, "utf-8")
-    : "";
-  const skillFiles = globSync(resolve(srcDir, "skills", "*.md"));
-  const skills = skillFiles.map((f) => readFileSync(f, "utf-8")).join("\n\n");
-  return skills ? `${operatorPrompt}\n\n${skills}` : operatorPrompt;
-}
-
-const systemPrompt = loadSystemPrompt(SRC_DIR);
+const systemPrompt = loadSystemPrompt(resolve(SRC_DIR));
 const client = new Anthropic();
 
 // --- Tool definition matching src/tools/read.ts schema ---
@@ -90,8 +79,8 @@ const cases: Case[] = [
 
 // --- Skill file paths (used to match tool_use read targets) ---
 const SKILL_FILES: Record<string, string> = {
-  "data-analysis": "src/skills/data-analysis.md",
-  "case-quality-gate": "src/skills/case-quality-gate.md",
+  "data-analysis": "skills/data-analysis.md",
+  "case-quality-gate": "skills/case-quality-gate.md",
 };
 
 const SKILL_NAMES = Object.keys(SKILL_FILES);
