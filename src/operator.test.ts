@@ -1,5 +1,5 @@
-import { describe, test, expect } from "bun:test";
-import { transformContext } from "./operator.ts";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { transformContext, createAgent } from "./operator.ts";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 function userMsg(text: string): AgentMessage {
@@ -186,5 +186,26 @@ describe("transformContext", () => {
         }
       }
     });
+  });
+});
+
+describe("createAgent system prompt", () => {
+  let savedKey: string | undefined;
+
+  beforeAll(() => {
+    savedKey = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = savedKey || "test-key";
+  });
+
+  afterAll(() => {
+    if (savedKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = savedKey;
+  });
+
+  test("produces a non-empty prompt containing the operator section", () => {
+    const agent = createAgent();
+    const prompt = agent.state.systemPrompt;
+    expect(prompt.length).toBeGreaterThan(0);
+    expect(prompt).toContain("# Operator Prompt");
   });
 });

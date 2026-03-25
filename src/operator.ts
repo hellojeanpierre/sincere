@@ -1,4 +1,4 @@
-import { mkdirSync, appendFileSync, symlinkSync, unlinkSync, existsSync } from "fs";
+import { mkdirSync, appendFileSync, symlinkSync, unlinkSync, existsSync, readFileSync, globSync } from "fs";
 import { resolve } from "path";
 import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, streamSimple, Type } from "@mariozechner/pi-ai";
@@ -7,7 +7,6 @@ import type { TextContent } from "@mariozechner/pi-ai";
 import { logger } from "./lib/logger.ts";
 import { readTool } from "./tools/read.ts";
 import { execTool } from "./tools/exec.ts";
-import { loadSystemPrompt } from "./lib/load-prompt.ts";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
 
@@ -67,7 +66,11 @@ export function createAgent(): Agent {
     throw new Error("ANTHROPIC_API_KEY not set");
   }
 
-  const systemPrompt = loadSystemPrompt(resolve(import.meta.dirname));
+  const srcDir = resolve(import.meta.dirname);
+  const operatorPrompt = readFileSync(resolve(srcDir, "operator.md"), "utf-8");
+  const skillFiles = globSync(resolve(srcDir, "skills", "*.md"));
+  const skills = skillFiles.map((f) => readFileSync(f, "utf-8")).join("\n\n");
+  const systemPrompt = skills ? `${operatorPrompt}\n\n${skills}` : operatorPrompt;
   const modelId = (process.env.SINCERE_MODEL as typeof DEFAULT_MODEL) || DEFAULT_MODEL;
   const model = getModel("anthropic", modelId);
 
