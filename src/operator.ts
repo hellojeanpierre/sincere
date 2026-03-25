@@ -92,7 +92,7 @@ export function createAgent(): Agent {
   }
 
   const skillIndex = skills.length > 0
-    ? `\n\n## Available skills\n\nRead a skill file before acting on tasks it covers.\n\n${skills.map((s) => `- **${s.name}** (${s.file}): ${s.description}`).join("\n")}`
+    ? `\n\n## Available skills\n\nIf a task matches a skill below, read the skill file before starting. The descriptions are for routing, not for working from.\n\n${skills.map((s) => `- **${s.name}** (${s.file}): ${s.description}`).join("\n")}`
     : "";
   const systemPrompt = operatorPrompt + skillIndex;
 
