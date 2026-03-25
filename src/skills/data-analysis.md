@@ -1,3 +1,8 @@
+---
+name: data-analysis
+description: "When a task requires understanding what happened and why from structured or semi-structured data."
+---
+
 # Data Analysis
 
 When a task requires understanding what happened and why from structured or semi-structured data.
