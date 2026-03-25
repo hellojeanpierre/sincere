@@ -12,7 +12,7 @@ Verify total record count and field inventory programmatically — do not rely o
 
 ## Computation
 
-Write a Python script that loads the full dataset, computes aggregates, and prints labeled results. Treat script output as a starting point for deeper investigation, not a final answer. An outlier in one dimension becomes a finding only after checking whether other dimensions in the data explain it. A surprising or uniform result is a signal that the framing may be wrong, not just the data.
+Write a Python script that loads the full dataset, computes aggregates, and prints labeled results. Treat script output as a starting point for deeper investigation, not a final answer. An outlier in one dimension becomes a finding only after checking whether other dimensions in the data explain it. A surprising or uniform result is a signal that the framing may be wrong, not just the data. When investigating a cohort, write a script that processes the full cohort at once rather than reading records one at a time. Batch analysis surfaces cross-cutting patterns that sequential reads obscure.
 
 ## Failure modes
 
