@@ -1,5 +1,9 @@
 # Learnings
 
+## 2026-03-25 | Skill descriptions that name the task type trigger reads; descriptions that include judgment criteria get skipped
+
+Sonnet scored 5/5 on data-analysis (description: task type only, "understanding what happened and why from structured data") and 1/5 on case-quality-gate (description: task type + evaluation criteria, "assess whether transition is safe or should be held for review"). The model treats descriptions containing actionable criteria as sufficient context and skips reading the skill file. Descriptions that identify the task domain without revealing the methodology create an information gap that drives the model to load the file. Implication: skill descriptions should answer "what kind of work is this?" not "what should I do?"
+
 ## 2026-03-24 — Incremental persistence beats end-of-task summarization for long-horizon agents
 
 Anthropic's context engineering guide (Sep 2025) identifies three techniques for long-horizon coherence: compaction (summarize + reinitiate), structured note-taking (persist conclusions outside the window), and sub-agent architectures (isolate deep work, return condensed summaries). The note-taking pattern is the most relevant to us: before a tool result ages out of context, the agent should have already written its conclusions somewhere persistent. The default failure mode is batching insight extraction to the end of an investigation, by which point early tool results have lost nuance or been compacted away. The fix is a write-through pattern — observe, conclude, persist — applied incrementally after each tool call, not as a final synthesis step.
