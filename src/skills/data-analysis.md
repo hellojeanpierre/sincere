@@ -20,17 +20,18 @@ When a result contradicts the expected direction, the next tool call investigate
 
 Once you assign records to cohorts or patterns, those labels become first-class dimensions. Slice every other system visible in the data — oversight, scoring, workflow — by the pattern labels you created. Investigate whether each has distinct failure modes rather than treating it as a single pass/fail.
 
+A clean partition is a starting point, not an endpoint. After defining a cohort, test whether every member shares the same root cause by checking whether peers handling the same conditions (same intent, same complexity tier) produce different outcomes. If peers succeed where the cohort fails, the failure is avoidable and the actors are the cause. If peers also fail, the failure is structural and the conditions are the cause. A cohort that mixes both contains excess failures and a baseline — split them and attribute impact separately.
+
 For each record examined, state what the actors' observable states were, what action was taken, and why that action produced the outcome — a causal sentence, not a transcript summary.
 
 When a variable correlates with the outcome, test whether the correlation survives controlling for the patterns you already identified. If removing your primary-finding records collapses the gap, state that explicitly as a dismissed hypothesis. The absence of independent explanatory power protects the reader from pursuing interventions that would not move the metric.
 
 ## Failure modes
 
-- Forming hypotheses from a truncated preview without verifying full record count.
-- Stopping at aggregates when root causes require reading individual records or reference documents.
 - Treating a document store with nested text as a flat table — never examining content inside fields.
 - Truncating record content in your own scripts then reasoning from the truncated version.
 - Encoding an analytical assumption as a code filter that silently excludes the records that would challenge it.
 - Collapsing distinct patterns into a single finding, losing the causal specificity that makes each one actionable.
+- Treating a cohort as internally uniform without testing whether peers handle the same conditions successfully — conflating avoidable and structural failures under one impact number.
 - Absorbing unexplained records into a "healthy baseline" instead of treating them as unfinished investigation.
 - Computing a cross-tabulation without stating what it means for the hypothesis under test.
