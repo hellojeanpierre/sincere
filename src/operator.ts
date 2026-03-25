@@ -60,13 +60,7 @@ export const transformContext = async (messages: AgentMessage[]): Promise<AgentM
   });
 };
 
-export function createAgent(): Agent {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY not set");
-  }
-
-  const srcDir = resolve(import.meta.dirname);
+export function loadSystemPrompt(srcDir: string): string {
   const operatorPrompt = readFileSync(resolve(srcDir, "operator.md"), "utf-8");
 
   const skillFiles = globSync(resolve(srcDir, "skills", "*.md"));
@@ -94,7 +88,17 @@ export function createAgent(): Agent {
   const skillIndex = skills.length > 0
     ? `\n\n## Available skills\n\nIf a task matches a skill below, read the skill file before starting. The descriptions are for routing, not for working from.\n\n${skills.map((s) => `- **${s.name}** (${s.file}): ${s.description}`).join("\n")}`
     : "";
-  const systemPrompt = operatorPrompt + skillIndex;
+  return operatorPrompt + skillIndex;
+}
+
+export function createAgent(): Agent {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY not set");
+  }
+
+  const srcDir = resolve(import.meta.dirname);
+  const systemPrompt = loadSystemPrompt(srcDir);
 
   const modelId = (process.env.SINCERE_MODEL as typeof DEFAULT_MODEL) || DEFAULT_MODEL;
   const model = getModel("anthropic", modelId);
