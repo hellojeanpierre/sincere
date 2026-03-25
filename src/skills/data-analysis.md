@@ -4,7 +4,7 @@ When a task requires understanding what happened and why from structured or semi
 
 ## Core principle
 
-Aggregate to find patterns, then read individual records to find causes. Numbers tell you where to look. Documents, transcripts, and reference materials tell you why. Stopping at aggregates is the most common failure.
+Aggregate to find patterns, then read the full content of individual records to find causes. Numbers tell you where to look. Summary fields tell you which records to read. The raw content - documents, transcripts, and reference materials — tells you why. 
 
 ## Before scripting
 
@@ -12,7 +12,7 @@ Verify total record count and field inventory programmatically — do not rely o
 
 ## Computation
 
-Write a Python script that loads the full dataset, computes aggregates, and prints labeled results. Treat script output as a starting point for deeper investigation, not a final answer. A surprising or uniform result is a signal that the framing may be wrong, not just the data.
+Write a Python script that loads the full dataset, computes aggregates, and prints labeled results. Treat script output as a starting point for deeper investigation, not a final answer. An outlier in one dimension becomes a finding only after checking whether other dimensions in the data explain it. A surprising or uniform result is a signal that the framing may be wrong, not just the data.
 
 ## Failure modes
 
