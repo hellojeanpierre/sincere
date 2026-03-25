@@ -1,3 +1,8 @@
+---
+name: case-quality-gate
+description: "When a case reaches a decision point — closure, escalation, reroute, handoff — assess whether the proposed transition is safe or whether it should be held for review."
+---
+
 # Case Quality Gate
 
 When a case reaches a decision point — closure, escalation, reroute, handoff — assess whether the proposed transition is safe or whether it should be held for review.
