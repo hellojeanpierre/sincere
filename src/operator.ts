@@ -60,30 +60,36 @@ export const transformContext = async (messages: AgentMessage[]): Promise<AgentM
   });
 };
 
+function parseSkillFrontmatter(f: string): { name: string; description: string; file: string } | null {
+  const raw = readFileSync(f, "utf-8");
+  if (!raw.startsWith("---") || raw.indexOf("\n---", 3) === -1) {
+    logger.warn({ file: basename(f) }, "skill file missing frontmatter, skipped");
+    return null;
+  }
+  const end = raw.indexOf("\n---", 3);
+  const attrs: Record<string, string> = {};
+  for (const line of raw.slice(4, end).split("\n")) {
+    const sep = line.indexOf(":");
+    if (sep === -1) continue;
+    const key = line.slice(0, sep).trim();
+    const val = line.slice(sep + 1).trim();
+    if (key && val) attrs[key] = val;
+  }
+  if (!attrs.name || !attrs.description) return null;
+  return { name: attrs.name, description: attrs.description, file: `skills/${basename(f)}` };
+}
+
 export function loadSystemPrompt(srcDir: string): string {
   const operatorPrompt = readFileSync(resolve(srcDir, "operator.md"), "utf-8");
 
-  const skillFiles = globSync(resolve(srcDir, "skills", "*.md"));
-  const skills: { name: string; description: string; file: string }[] = [];
-  for (const f of skillFiles) {
-    const raw = readFileSync(f, "utf-8");
-    if (!raw.startsWith("---") || raw.indexOf("\n---", 3) === -1) {
-      logger.warn({ file: basename(f) }, "skill file missing frontmatter, skipped");
-      continue;
-    }
-    const end = raw.indexOf("\n---", 3);
-    const attrs: Record<string, string> = {};
-    for (const line of raw.slice(4, end).split("\n")) {
-      const sep = line.indexOf(":");
-      if (sep === -1) continue;
-      const key = line.slice(0, sep).trim();
-      const val = line.slice(sep + 1).trim();
-      if (key && val) attrs[key] = val;
-    }
-    if (attrs.name && attrs.description) {
-      skills.push({ name: attrs.name, description: attrs.description, file: `skills/${basename(f)}` });
-    }
-  }
+  const skillEnv = process.env.SKILL;
+  const skillFiles = skillEnv
+    ? [resolve(srcDir, "skills", `${skillEnv}.md`)]
+    : globSync(resolve(srcDir, "skills", "*.md"));
+  const skills = skillFiles.map(parseSkillFrontmatter).filter((s): s is NonNullable<typeof s> => s !== null);
+
+  if (skillEnv && skills.length === 0) throw new Error(`SKILL=${skillEnv}: failed to load skills/${skillEnv}.md`);
+  if (skillEnv) logger.info({ skill: skills[0].name }, "single skill loaded");
 
   const skillIndex = skills.length > 0
     ? `\n\n## Available skills\n\nIf a task matches a skill below, read the skill file before starting. The descriptions are for routing, not for working from.\n\n${skills.map((s) => `- **${s.name}** (${s.file}): ${s.description}`).join("\n")}`
