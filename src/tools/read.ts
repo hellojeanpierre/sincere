@@ -100,6 +100,11 @@ export const readTool: AgentTool<typeof readSchema> = {
 
     logger.info({ path: resolvedPath, sizeKB, totalLines, returnedLines, returnedBytes }, "read file");
 
+    if (params.path.startsWith("skills/") || params.path.includes("/skills/")) {
+      const skillName = params.path.replace(/^.*skills\//, "").replace(/\.md$/, "");
+      logger.info({ skill: skillName }, "skill selected");
+    }
+
     return {
       content: [{ type: "text", text }],
       details: { path: resolvedPath, sizeKB, format, totalLines, returnedLines, returnedBytes },
