@@ -108,7 +108,8 @@ async function main() {
 
     const mark = finalVerdict === expected ? "✓" : "✗";
     const tag = consistent ? "" : " [flip]";
-    process.stdout.write(`  ${mark} ${id}: expected=${expected} got=${finalVerdict}${tag} — ${rationales[0]}\n`);
+    const detail = finalVerdict !== expected ? ` — ${rationales[0]}` : "";
+    process.stdout.write(`  ${mark} ${id}: expected=${expected} got=${finalVerdict}${tag}${detail}\n`);
   }
 
   const precision = tp / (tp + fp) || 0;
