@@ -1,5 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { transformContext, createAgent } from "./operator.ts";
+import { existsSync } from "fs";
+import { resolve } from "path";
+import { transformContext, createAgent, loadSystemPrompt } from "./operator.ts";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 function userMsg(text: string): AgentMessage {
@@ -207,5 +209,21 @@ describe("createAgent system prompt", () => {
     const prompt = agent.state.systemPrompt;
     expect(prompt.length).toBeGreaterThan(0);
     expect(prompt).toContain("# Operator Prompt");
+  });
+
+  test("skill paths in system prompt resolve to existing files from project root", () => {
+    const srcDir = resolve(import.meta.dirname);
+    const prompt = loadSystemPrompt(srcDir);
+    const skillPathPattern = /\*\*\w[\w-]*\*\* \(([^)]+)\):/g;
+    const paths: string[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = skillPathPattern.exec(prompt)) !== null) {
+      paths.push(match[1]);
+    }
+    expect(paths.length).toBeGreaterThan(0);
+    for (const p of paths) {
+      const resolved = resolve(process.cwd(), p);
+      expect(existsSync(resolved)).toBe(true);
+    }
   });
 });

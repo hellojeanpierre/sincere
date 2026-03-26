@@ -1,5 +1,5 @@
 import { mkdirSync, appendFileSync, symlinkSync, unlinkSync, existsSync, readFileSync, globSync } from "fs";
-import { resolve, basename } from "path";
+import { resolve, basename, relative } from "path";
 import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, streamSimple, Type } from "@mariozechner/pi-ai";
 import type { AgentTool, AgentMessage } from "@mariozechner/pi-agent-core";
@@ -81,7 +81,7 @@ export function loadSystemPrompt(srcDir: string): string {
       if (key && val) attrs[key] = val;
     }
     if (attrs.name && attrs.description) {
-      skills.push({ name: attrs.name, description: attrs.description, file: `skills/${basename(f)}` });
+      skills.push({ name: attrs.name, description: attrs.description, file: relative(process.cwd(), f) });
     }
   }
 
