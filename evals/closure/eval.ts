@@ -1,6 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { readFileSync, existsSync } from "fs";
-import { globSync } from "fs";
+import { readFileSync } from "fs";
 import { resolve } from "path";
 
 // --- Config ---
@@ -15,15 +14,9 @@ const EVAL_SUFFIX = `
 Assess this case. Respond with exactly this JSON and nothing else:
 {"verdict": "close" | "hold", "rationale": "<one sentence naming the specific gap, or 'clean' if none>"}`;
 
-// --- Load system prompt the way the agent does ---
+// --- Load only the skill under test ---
 function loadSystemPrompt(srcDir: string): string {
-  const operatorPath = resolve(srcDir, "operator.md");
-  const operatorPrompt = existsSync(operatorPath)
-    ? readFileSync(operatorPath, "utf-8")
-    : "";
-  const skillFiles = globSync(resolve(srcDir, "skills", "*.md"));
-  const skills = skillFiles.map((f) => readFileSync(f, "utf-8")).join("\n\n");
-  return skills ? `${operatorPrompt}\n\n${skills}` : operatorPrompt;
+  return readFileSync(resolve(srcDir, "skills", "case-quality-gate.md"), "utf-8");
 }
 
 const systemPrompt = loadSystemPrompt(SRC_DIR);
