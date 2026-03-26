@@ -61,7 +61,8 @@ export const transformContext = async (messages: AgentMessage[]): Promise<AgentM
 };
 
 function parseSkillFrontmatter(f: string): { name: string; description: string; file: string } | null {
-  const raw = readFileSync(f, "utf-8");
+  let raw: string;
+  try { raw = readFileSync(f, "utf-8"); } catch { return null; }
   if (!raw.startsWith("---") || raw.indexOf("\n---", 3) === -1) {
     logger.warn({ file: basename(f) }, "skill file missing frontmatter, skipped");
     return null;
