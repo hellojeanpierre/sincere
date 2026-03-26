@@ -12,7 +12,7 @@ const RUNS_PER_CASE = Number(process.env.RUNS) || 1;
 const EVAL_SUFFIX = `
 
 Assess this case. Respond with exactly this JSON and nothing else:
-{"verdict": "close" | "hold", "rationale": "<one sentence naming the specific gap, or 'clean' if none>"}`;
+{"verdict": "pass" | "hold", "rationale": "<one sentence naming the specific gap, or 'clean' if none>"}`;
 
 // --- Load only the skill under test ---
 function loadSystemPrompt(srcDir: string): string {
@@ -25,7 +25,7 @@ const tickets = lines.map((l) => JSON.parse(l));
 const client = new Anthropic();
 
 // --- Types ---
-type Verdict = "close" | "hold";
+type Verdict = "pass" | "hold";
 type Result = {
   id: string;
   expected: Verdict;
@@ -37,7 +37,7 @@ type Result = {
 
 function expectedVerdict(ticket: any): Verdict {
   const fm = ticket._ground_truth.failure_mode;
-  return fm === "clean" || fm == null ? "close" : "hold";
+  return fm === "clean" || fm == null ? "pass" : "hold";
 }
 
 function casePrompt(ticket: any): string {
@@ -70,7 +70,7 @@ async function evaluate(ticket: any): Promise<{ verdict: Verdict; rationale: str
     return { verdict: parsed.verdict, rationale: parsed.rationale };
   } catch {
     console.error(`  ⚠ parse failed: ${text.slice(0, 120)}`);
-    return { verdict: "close", rationale: "PARSE_ERROR" };
+    return { verdict: "pass", rationale: "PARSE_ERROR" };
   }
 }
 
@@ -96,12 +96,12 @@ async function main() {
     }
 
     const holdCount = verdicts.filter((v) => v === "hold").length;
-    const finalVerdict: Verdict = holdCount > RUNS_PER_CASE / 2 ? "hold" : "close";
+    const finalVerdict: Verdict = holdCount > RUNS_PER_CASE / 2 ? "hold" : "pass";
     const consistent = new Set(verdicts).size === 1;
 
     if (finalVerdict === "hold" && expected === "hold") tp++;
-    else if (finalVerdict === "hold" && expected === "close") fp++;
-    else if (finalVerdict === "close" && expected === "close") tn++;
+    else if (finalVerdict === "hold" && expected === "pass") fp++;
+    else if (finalVerdict === "pass" && expected === "pass") tn++;
     else fn++;
 
     results.push({ id, expected, got: verdicts, rationales, consistent, failure_mode: failureMode });
@@ -116,7 +116,7 @@ async function main() {
   const f1 = (2 * precision * recall) / (precision + recall) || 0;
 
   console.log(`
-         hold  close
+         hold  pass
   hold    ${String(tp).padStart(3)}    ${String(fn).padStart(3)}
   close   ${String(fp).padStart(3)}    ${String(tn).padStart(3)}
 
