@@ -16,7 +16,7 @@ Assess this case. Respond with exactly this JSON and nothing else:
 
 // --- Load only the skill under test ---
 function loadSystemPrompt(srcDir: string): string {
-  return readFileSync(resolve(srcDir, "skills", "case-quality-gate.md"), "utf-8");
+  return readFileSync(resolve(srcDir, "skills", "case-transition-watch.md"), "utf-8");
 }
 
 const systemPrompt = loadSystemPrompt(SRC_DIR);
