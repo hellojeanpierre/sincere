@@ -19,15 +19,21 @@ Write Python scripts that load the full dataset and compute aggregates. Process 
 
 **Completeness.** Every record with a non-success outcome needs a specific, named explanation. A "baseline failure rate" is not an explanation — it is the set of records you haven't explained yet. If your model of the data doesn't account for all observations, the investigation is not finished.
 
-**Falsification.** When a hypothesis forms, the next query tries to break it — not describe the pattern further. Compare failure cohorts against success cases at the finest grain the data supports. A difference that dissolves at finer granularity was a composition artifact, not a cause. A surprising result is the highest-value evidence — investigate its mechanism rather than dropping it.
+**Falsification.** When a hypothesis forms, the next query tries to break it — not describe the pattern further. Compare failure cohorts against success cases at the finest grain the data supports. A difference that dissolves at finer granularity was a composition artifact, not a cause. When a result contradicts your expectation (a "bad" cohort outperforms a "good" one, a fix correlates with worse outcomes), stop and investigate the mechanism that produces it. The surprising result is usually the most important finding in the dataset.
 
-**Decomposition.** When you assign records to a cohort, test whether the cohort is internally uniform. If different subgroups within it have different causes — some avoidable, some structural — split them. A finding that mixes distinct causes produces an impact number that is technically correct and practically useless.
+**Decomposition.** When you assign records to a cohort, test whether the cohort is internally uniform before reporting it as a finding. Compute the outcome rate for each subgroup within the cohort. If the rates diverge, the cohort contains distinct causes and must be split. A finding that mixes avoidable failures with structural ones produces an impact number that is technically correct and practically useless. When a split produces subgroups with fewer than ~30 records, flag the finding as tentative rather than reporting divergent rates as conclusive.
 
 **Independence.** When a variable correlates with the outcome, test whether the correlation survives after removing the records already explained by your primary findings. If the gap collapses, say so explicitly — it protects the reader from pursuing interventions that would not move the metric.
+
+**Proximal reading.** When records contain sequential data, read the entries closest to the terminal state first. The root cause of a failure usually lives in the last substantive events before the outcome, not in the opening.
+
+**Label validity.** When fields are outputs of a process that observes, labels, or scores the primary records, treat them as claims with their own error rate, not as ground truth. Validate them against the primary data before using them to filter, label, or explain records.
+
+**Rejected hypotheses.** Include hypotheses that were tested and eliminated alongside the ones that survived — what was checked, what the result was, and why it was ruled out. This prevents the reader from re-investigating dead ends.
 
 ## Failure modes
 
 - Encoding an analytical assumption as a code filter that silently excludes the records that would challenge it.
 - Collapsing distinct patterns into a single finding, losing the specificity that makes each actionable.
 - Absorbing unexplained records into a "healthy baseline" instead of treating them as unfinished investigation.
-- Treating nested or semi-structured fields as flat — never reading the content inside.
+- Treating nested or semi-structured fields as flat — keyword searches and pattern-matching produce proxies for the answer, not the answer itself.
