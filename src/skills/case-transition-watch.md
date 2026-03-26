@@ -29,7 +29,8 @@ Pass, or hold with a named reason. Nothing else. What happens after a hold is no
 
 - Treating agent activity as evidence of resolution. A response was sent, but that does not mean the issue was addressed.
 - Holding because the topic sounds complex. Complexity alone is not a gap.
-- Holding because the customer disagrees with a correct decision. A rejected appeal, a policy enforcement, an eligibility determination — upholding a company decision is a resolution, not a gap.
+- Holding because a decision cannot be independently verified. Whether the action was to uphold or overturn, the correctness of that decision is not this evaluation's concern. The question is whether the action addressed the stated issue.
 - Inventing root causes that were not provided. Apply what arrives, nothing more.
 - Reasoning backward from outcome signals. Satisfaction scores, case reopening, or customer sentiment after the action was taken are not evidence that the action was wrong.
 - Treating the customer's description of facts as ground truth. The customer's words define the problem being reported. The agent may have verified facts the customer did not articulate.
+
