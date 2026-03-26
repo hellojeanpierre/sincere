@@ -15,7 +15,7 @@ Check whether known root causes arrived with the case. Each root cause is a spec
 
 ## Evaluation framework
 
-**Relevance.** Does the resolution address the issue the customer described? Read the customer's own words — subject, description, recent messages — and compare to the action taken. A match means the right problem was worked. A mismatch means a different problem was worked.
+Relevance. Does the resolution address the issue the customer described? Read the customer's own words — subject, description, recent messages — to identify what problem they are reporting. Then compare to the action taken. The customer's words define the problem. They do not define the underlying facts — the agent may have investigated and found details the customer did not articulate. A match means the right problem was worked. A mismatch means a different problem was worked.
 
 **Root cause match.** For each provided root cause, ask: is this what's happening in this case? A root cause arrives as a self-contained claim. The case either exhibits the pattern or it does not.
 
