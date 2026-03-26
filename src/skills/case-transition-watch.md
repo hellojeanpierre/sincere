@@ -1,6 +1,6 @@
 ---
 name: case-transition-watch
-description: When a task requires determining whether the action taken on a case matches what the situation required.
+description: When a task requires determining whether the action taken on a single case matches what the situation required.
 ---
 
 # Case Transition Watch
