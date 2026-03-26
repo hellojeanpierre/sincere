@@ -19,13 +19,17 @@ Check whether known root causes arrived with the case. Each root cause is a spec
 
 **Root cause match.** For each provided root cause, ask: is this what's happening in this case? A root cause arrives as a self-contained claim. The case either exhibits the pattern or it does not.
 
+**Scope.** This evaluation measures whether the action addressed the issue. It does not measure process quality, documentation thoroughness, or communication style. These matter only when a provided root cause names them, or when their absence means the issue was not actually addressed.
+
 ## Verdict
 
 Pass, or hold with a named reason. Nothing else. What happens after a hold is not this skill's concern.
 
-## Failure modes in your own assessment
+## Failure modes
 
 - Treating agent activity as evidence of resolution. A response was sent, but that does not mean the issue was addressed.
 - Holding because the topic sounds complex. Complexity alone is not a gap.
 - Holding because the customer disagrees with a correct decision. A rejected appeal, a policy enforcement, an eligibility determination — upholding a company decision is a resolution, not a gap.
 - Inventing root causes that were not provided. Apply what arrives, nothing more.
+- Reasoning backward from outcome signals. Satisfaction scores, case reopening, or customer sentiment after the action was taken are not evidence that the action was wrong.
+- Treating the customer's description of facts as ground truth. The customer's words define the problem being reported. The agent may have verified facts the customer did not articulate.
