@@ -11,7 +11,7 @@ Aggregate to find patterns, then read the full content of individual records to 
 
 ## Before scripting
 
-Verify total record count and field inventory programmatically. Previews may truncate, and a partial view will silently scope every downstream hypothesis to whatever the preview contained.
+Verify total record count and field inventory programmatically. Fields that record observations about other fields — scores, flags, sampling indicators, review outcomes — are the easiest to overlook and often the most diagnostic.
 
 ## Investigation framework
 
@@ -19,7 +19,7 @@ Write Python scripts that load the full dataset and compute aggregates. Process 
 
 **Completeness.** Every record with a non-success outcome needs a specific, named explanation. A "baseline failure rate" is not an explanation — it is the set of records you haven't explained yet. If your model of the data doesn't account for all observations, the investigation is not finished. Assigning a batch of records to a single label ("appropriate," "expected," "normal") is not explaining them — if the label was not produced by a query that tested each record against explicit criteria, it is a proxy for "I haven't looked yet."
 
-**Falsification.** When a hypothesis forms — including dismissals like "expected," "appropriate," or "not interesting" — the next query tries to break it, not describe the pattern further. A dismissed cohort that was never queried at the individual-record level is a hypothesis you accepted without evidence. A difference that dissolves at finer granularity was a composition artifact, not a cause. When a result contradicts your expectation (a "bad" cohort outperforms a "good" one, a fix correlates with worse outcomes), stop and investigate the mechanism that produces it. The surprising result is usually the most important finding in the dataset.
+**Falsification.** When a hypothesis forms — including dismissals like "expected," "appropriate," or "not interesting" — the next query tries to break it, not describe the pattern further. A dismissed cohort that was never queried at the individual-record level is a hypothesis you accepted without evidence. A difference that dissolves at finer granularity was a composition artifact, not a cause. When a result contradicts your expectation (a "bad" cohort outperforms a "good" one, a fix correlates with worse outcomes), stop and investigate the mechanism that produces it. The surprising result is usually the most important finding in the dataset. A comparison against the population mean or against stated policy is weaker than a comparison against records that share the same input conditions — the first tells you what is common, the second tells you what this input actually produces.
 
 **Decomposition.** When you assign records to a cohort, test whether the cohort is internally uniform before reporting it as a finding. Compute the outcome rate for each subgroup within the cohort. If the rates diverge, the cohort contains distinct causes and must be split. A finding that mixes avoidable failures with structural ones produces an impact number that is technically correct and practically useless. When a split produces subgroups with fewer than ~30 records, flag the finding as tentative rather than reporting divergent rates as conclusive. Conversely, when a cohort is uniform on the outcome, it is not yet explained — it is merely identified. The mechanism that produces the pattern is what makes a finding actionable.
 
@@ -38,4 +38,3 @@ Write Python scripts that load the full dataset and compute aggregates. Process 
 - Absorbing unexplained records into a "healthy baseline" instead of treating them as unfinished investigation.
 - Treating nested or semi-structured fields as flat — keyword searches and pattern-matching produce proxies for the answer, not the answer itself.
 - Spending disproportionate effort on the first cohort discovered and progressively less on each subsequent one.
-take a
