@@ -1,5 +1,9 @@
 # Learnings
 
+## 2026-03-26 — Analytical guidance in skills shifts agent strategy from mechanism-finding to dimension-slicing, degrading performance with each iteration
+
+Three runs on the same dataset: Run 1 (7 principles, ~800 words) found 3 mechanism-level findings by reading transcripts early. Run 2 (added rigor, ~1,000 words) found the same 3 plus investigated a dismissed cohort. Run 3 (added matched-input comparison, field-inventory, adjacent-evidence, ~1,200 words) missed the largest finding, promoted a correlation the reference rejected, and never read a transcript from the missed cohort. Each iteration made the agent more statistically sophisticated and less investigatively thorough. The added principles are correct methodology — but their volume created an attractor toward dimension-slicing that competed with the core instruction ("Numbers tell you where to look. The raw content tells you why"). Implication: when the core instruction already encodes the right strategy, elaboration dilutes it. Subtract before adding.
+
 ## 2026-03-26 — Linearized triples outperform natural language prose for LLM knowledge matching
 
 A 2025 Knowledge-Based Systems study found LLMs allocate attention more efficiently to raw (subject, predicate, object) triples than to the same facts converted into fluent sentences. Combined with DRAG (ACL 2025) showing graph-structured evidence needs 18.1% fewer tokens than raw text while hitting 94.1% on ARC-Challenge with an 8B model, the implication is clear: root causes stored as structured claims with typed relationships will let Haiku match cases more accurately and cheaply than prose descriptions or embedded paragraphs. Don't prettify knowledge for the model. [Full research summary](https://claude.ai/public/artifacts/020bfefd-bd0a-4b10-b6a1-e9a2c804a0d2)
