@@ -1,8 +1,8 @@
 import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { Handler } from "./lane.ts";
+import { intake } from "./intake.ts";
 import { logger } from "./lib/logger.ts";
 
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001" as const;
@@ -38,39 +38,11 @@ export function createObserver() {
       agent.replaceMessages(saved);
     }
 
-    const parts: string[] = [];
-    let error: string | undefined;
-
-    const unsub = agent.subscribe((e) => {
-      if (e.type === "message_end") {
-        const msg = e.message;
-        if ("role" in msg && msg.role === "assistant") {
-          const assistant = msg as AssistantMessage;
-          if (assistant.stopReason === "error" && assistant.errorMessage) {
-            error = assistant.errorMessage;
-          }
-          for (const block of assistant.content) {
-            if (block.type === "text") {
-              parts.push(block.text);
-            }
-          }
-        }
-      }
-    });
-
-    try {
-      await agent.prompt(body);
-    } finally {
-      unsub();
-    }
+    const event = JSON.parse(body) as Record<string, unknown>;
+    const response = await intake(agent, event);
 
     store.set(workItemId, [...agent.state.messages]);
 
-    if (error) {
-      throw new Error(`Observer agent error: ${error}`);
-    }
-
-    const response = parts.join("\n");
     logger.info({ workItemId, responseLength: response.length }, "observer response");
   };
 
