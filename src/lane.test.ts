@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { enqueue } from "./lane.ts";
+import { createLane } from "./lane.ts";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -7,15 +7,15 @@ describe("lane", () => {
   test("same work item executes serially", async () => {
     const log: { start: number; end: number }[] = [];
 
-    const handler = async () => {
+    const lane = createLane(async () => {
       const start = performance.now();
       await delay(30);
       log.push({ start, end: performance.now() });
-    };
+    });
 
-    const p1 = enqueue("wk-1", "a", handler);
-    const p2 = enqueue("wk-1", "b", handler);
-    const p3 = enqueue("wk-1", "c", handler);
+    const p1 = lane.enqueue("wk-1", "a");
+    const p2 = lane.enqueue("wk-1", "b");
+    const p3 = lane.enqueue("wk-1", "c");
     await Promise.all([p1, p2, p3]);
 
     expect(log).toHaveLength(3);
@@ -27,15 +27,15 @@ describe("lane", () => {
     const starts: number[] = [];
     const ends: number[] = [];
 
-    const handler = async () => {
+    const lane = createLane(async () => {
       starts.push(performance.now());
       await delay(30);
       ends.push(performance.now());
-    };
+    });
 
-    const p1 = enqueue("wk-a", "x", handler);
-    const p2 = enqueue("wk-b", "y", handler);
-    const p3 = enqueue("wk-c", "z", handler);
+    const p1 = lane.enqueue("wk-a", "x");
+    const p2 = lane.enqueue("wk-b", "y");
+    const p3 = lane.enqueue("wk-c", "z");
     await Promise.all([p1, p2, p3]);
 
     expect(starts).toHaveLength(3);
@@ -49,14 +49,14 @@ describe("lane", () => {
     let callCount = 0;
     let secondProcessed = false;
 
-    const handler = async () => {
+    const lane = createLane(async () => {
       callCount++;
       if (callCount === 1) throw new Error("boom");
       secondProcessed = true;
-    };
+    });
 
-    const p1 = enqueue("wk-err", "first", handler);
-    const p2 = enqueue("wk-err", "second", handler);
+    const p1 = lane.enqueue("wk-err", "first");
+    const p2 = lane.enqueue("wk-err", "second");
     await Promise.all([p1, p2]);
 
     expect(callCount).toBe(2);

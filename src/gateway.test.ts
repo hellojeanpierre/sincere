@@ -1,12 +1,17 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { startGateway } from "./gateway.ts";
+import { createLane } from "./lane.ts";
 import type { Server } from "bun";
 
 let server: Server;
 let base: string;
+const received: { workItemId: string; body: string }[] = [];
 
 beforeAll(() => {
-  server = startGateway(0);
+  const lane = createLane(async (body, workItemId) => {
+    received.push({ workItemId, body });
+  });
+  server = startGateway(0, lane);
   base = `http://localhost:${server.port}`;
 });
 

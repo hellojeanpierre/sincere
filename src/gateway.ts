@@ -1,5 +1,5 @@
+import type { Lane } from "./lane.ts";
 import { logger } from "./lib/logger.ts";
-import { enqueue } from "./lane.ts";
 
 export function extractWorkItemId(body: string): string | null {
   try {
@@ -11,7 +11,7 @@ export function extractWorkItemId(body: string): string | null {
   }
 }
 
-export function startGateway(port: number) {
+export function startGateway(port: number, lane: Lane) {
   return Bun.serve({
     port,
     async fetch(req) {
@@ -24,7 +24,8 @@ export function startGateway(port: number) {
         logger.warn({ bytes: body.length }, "gateway: no work item ID found");
         return new Response(null, { status: 200 });
       }
-      enqueue(workItemId, body);
+      // Fire-and-forget: Zendesk webhooks expect a fast 200, processing continues in the lane.
+      lane.enqueue(workItemId, body);
       return new Response(null, { status: 200 });
     },
   });

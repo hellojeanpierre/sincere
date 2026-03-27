@@ -1,24 +1,25 @@
 import { logger } from "./lib/logger.ts";
 
 export type Handler = (body: string, workItemId: string) => Promise<void>;
+export type Lane = ReturnType<typeof createLane>;
 
-const defaultHandler: Handler = async (body, workItemId) => {
-  logger.info({ workItemId, bytes: body.length }, "lane received");
-};
+export function createLane(handler: Handler) {
+  const lanes = new Map<string, Promise<void>>();
 
-const lanes = new Map<string, Promise<void>>();
-
-export function enqueue(
-  workItemId: string,
-  body: string,
-  handler: Handler = defaultHandler,
-): Promise<void> {
-  const prev = lanes.get(workItemId) ?? Promise.resolve();
-  const next = prev.then(() =>
-    handler(body, workItemId).catch((err) => {
-      logger.error({ workItemId, err }, "lane handler error");
-    }),
-  );
-  lanes.set(workItemId, next);
-  return next;
+  return {
+    enqueue(workItemId: string, body: string): Promise<void> {
+      const prev = lanes.get(workItemId) ?? Promise.resolve();
+      const next = prev
+        .then(() =>
+          handler(body, workItemId).catch((err) => {
+            logger.error({ workItemId, err }, "lane handler error");
+          }),
+        )
+        .finally(() => {
+          if (lanes.get(workItemId) === next) lanes.delete(workItemId);
+        });
+      lanes.set(workItemId, next);
+      return next;
+    },
+  };
 }
