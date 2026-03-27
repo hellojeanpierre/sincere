@@ -40,6 +40,14 @@ describe("gateway", () => {
     expect(await res.text()).toBe("");
   });
 
+  test("POST with invalid JSON returns 200 and does not crash", async () => {
+    const res = await fetch(base, {
+      method: "POST",
+      body: "not json at all",
+    });
+    expect(res.status).toBe(200);
+  });
+
   test("GET returns 405", async () => {
     const res = await fetch(base);
     expect(res.status).toBe(405);
