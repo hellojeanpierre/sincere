@@ -25,6 +25,8 @@ Bun-based AI agent project using `@mariozechner/pi-agent-core` and `@mariozechne
 
 8. **Skills, operator.md, and tool description text are pattern-matching attractors.** Anything the Operator reads shapes reasoning. Encode goals and transition signals, not numbered procedures. Always include exit conditions. Shorter text drifts goals less.
 
+9. **Evals test agent behavior, unit tests test infra.** Never assert on model output in a unit test.
+
 ## Code Smells
 
 - **Single-caller wrapper functions.** If a function has one call site and the body is shorter than a readable inline block, it is indirection without value. Inline it. Do not create a file, an export, and a test suite for something that is five lines at the point of use.
