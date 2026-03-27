@@ -1,7 +1,8 @@
+import { resolve } from "path";
 import { createLane } from "../src/lane.ts";
 import { startGateway } from "../src/gateway.ts";
 import { logger } from "../src/lib/logger.ts";
-import { createObserver } from "../src/observer.ts";
+import { createAgent, createSessionHandler } from "../src/agent.ts";
 
 const FIXTURE = "data/pintest-v2/smoke-tickets/smoke_tickets.jsonl";
 const TICKET_LINES = [0, 4]; // tickets 4800013, 4800070
@@ -26,7 +27,14 @@ const allProcessed = new Promise<void>((r) => {
   resolveAll = r;
 });
 
-const { handler } = createObserver();
+const { handler } = createSessionHandler(() =>
+  createAgent({
+    promptPath: resolve(import.meta.dirname, "../src/observer.md"),
+    model: process.env.MODEL || "claude-haiku-4-5-20251001",
+    tools: [],
+    thinkingLevel: "off",
+  })
+);
 const lane = createLane(async (body, workItemId) => {
   try {
     await handler(body, workItemId);

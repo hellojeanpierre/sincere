@@ -1,5 +1,7 @@
 import { describe, test, expect } from "bun:test";
-import { createAgent } from "./operator.ts";
+import { resolve } from "path";
+import { createAgent } from "./agent.ts";
+import { execTool } from "./tools/exec.ts";
 import { intake } from "./intake.ts";
 
 const EVENTS_PATH = "data/pintest-v2/smoke-tickets/smoke_events.jsonl";
@@ -15,7 +17,12 @@ async function loadEvent(id: string): Promise<Record<string, unknown>> {
 }
 
 describe("intake", () => {
-  const agent = createAgent();
+  const agent = createAgent({
+    promptPath: resolve(import.meta.dirname, "operator.md"),
+    model: process.env.MODEL || "claude-sonnet-4-6",
+    tools: [execTool],
+    thinkingLevel: "high",
+  });
 
   test(
     "processes ticket.created event (evt-00000353)",
