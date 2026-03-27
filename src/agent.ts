@@ -123,15 +123,17 @@ export function createSessionHandler(createAgentFn: () => Agent) {
       agent.replaceMessages(saved);
     }
 
+    const event = JSON.parse(body) as Record<string, unknown>;
     try {
-      const event = JSON.parse(body) as Record<string, unknown>;
       const response = await intake(agent, event);
       logger.info(
         { workItemId, responsePreview: response.slice(0, 1000) },
         "handler response",
       );
-    } finally {
       store.set(workItemId, [...agent.state.messages]);
+    } catch (err) {
+      logger.error({ workItemId, err }, "handler failed, session not updated");
+      throw err;
     }
   };
 
