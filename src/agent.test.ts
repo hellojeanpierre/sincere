@@ -1,7 +1,8 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { existsSync } from "fs";
 import { resolve } from "path";
-import { transformContext, createAgent, loadSystemPrompt } from "./operator.ts";
+import { transformContext, createAgent, loadSystemPrompt } from "./agent.ts";
+import { execTool } from "./tools/exec.ts";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 function userMsg(text: string): AgentMessage {
@@ -205,15 +206,19 @@ describe("createAgent system prompt", () => {
   });
 
   test("produces a non-empty prompt containing the operator section", () => {
-    const agent = createAgent();
+    const agent = createAgent({
+      promptPath: resolve(import.meta.dirname, "operator.md"),
+      model: "claude-sonnet-4-6",
+      tools: [execTool],
+      thinkingLevel: "high",
+    });
     const prompt = agent.state.systemPrompt;
     expect(prompt.length).toBeGreaterThan(0);
     expect(prompt).toContain("# Operator Prompt");
   });
 
   test("skill paths in system prompt resolve to existing files from project root", () => {
-    const srcDir = resolve(import.meta.dirname);
-    const prompt = loadSystemPrompt(srcDir);
+    const prompt = loadSystemPrompt(resolve(import.meta.dirname, "operator.md"));
     const skillPathPattern = /\*\*\w[\w-]*\*\* \(([^)]+)\):/g;
     const paths: string[] = [];
     let match: RegExpExecArray | null;
