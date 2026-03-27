@@ -1,3 +1,4 @@
+import type { Lane } from "./lane.ts";
 import { logger } from "./lib/logger.ts";
 
 export function extractWorkItemId(body: string): string | null {
@@ -10,7 +11,7 @@ export function extractWorkItemId(body: string): string | null {
   }
 }
 
-export function startGateway(port: number, lane: { enqueue(workItemId: string, body: string): Promise<void> }) {
+export function startGateway(port: number, lane: Lane) {
   return Bun.serve({
     port,
     async fetch(req) {

@@ -1,6 +1,7 @@
 import { logger } from "./lib/logger.ts";
 
 export type Handler = (body: string, workItemId: string) => Promise<void>;
+export type Lane = ReturnType<typeof createLane>;
 
 export function createLane(handler: Handler) {
   const lanes = new Map<string, Promise<void>>();
