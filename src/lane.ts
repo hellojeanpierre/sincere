@@ -9,11 +9,15 @@ export function createLane(handler: Handler) {
   return {
     enqueue(workItemId: string, body: string): Promise<void> {
       const prev = lanes.get(workItemId) ?? Promise.resolve();
-      const next = prev.then(() =>
-        handler(body, workItemId).catch((err) => {
-          logger.error({ workItemId, err }, "lane handler error");
-        }),
-      );
+      const next = prev
+        .then(() =>
+          handler(body, workItemId).catch((err) => {
+            logger.error({ workItemId, err }, "lane handler error");
+          }),
+        )
+        .finally(() => {
+          if (lanes.get(workItemId) === next) lanes.delete(workItemId);
+        });
       lanes.set(workItemId, next);
       return next;
     },
