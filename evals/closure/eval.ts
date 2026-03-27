@@ -6,17 +6,17 @@ import { resolve } from "path";
 const DATASET_PATH = process.argv[2] || "./data/tickets.jsonl";
 const SRC_DIR = process.argv[3] || "./src";
 const MODEL = process.env.MODEL || "claude-haiku-4-5-20251001";
-const RUNS_PER_CASE = Number(process.env.RUNS) || 1;
+const RUNS_PER_ITEM = Number(process.env.RUNS) || 1;
 
 // Eval-only output constraint — not part of the skill
 const EVAL_SUFFIX = `
 
-Assess this case. Respond with exactly this JSON and nothing else:
+Assess this work item. Respond with exactly this JSON and nothing else:
 {"verdict": "pass" | "hold", "rationale": "<one sentence naming the specific gap, or 'clean' if none>"}`;
 
 // --- Load only the skill under test ---
 function loadSystemPrompt(srcDir: string): string {
-  return readFileSync(resolve(srcDir, "skills", "case-transition-watch.md"), "utf-8");
+  return readFileSync(resolve(srcDir, "skills", "transition-watch.md"), "utf-8");
 }
 
 const systemPrompt = loadSystemPrompt(SRC_DIR);
@@ -40,9 +40,9 @@ function expectedVerdict(ticket: any): Verdict {
   return fm === "clean" || fm == null ? "pass" : "hold";
 }
 
-function casePrompt(ticket: any): string {
-  const { _ground_truth, ...caseData } = ticket;
-  return JSON.stringify(caseData, null, 2) + EVAL_SUFFIX;
+function itemPrompt(ticket: any): string {
+  const { _ground_truth, ...itemData } = ticket;
+  return JSON.stringify(itemData, null, 2) + EVAL_SUFFIX;
 }
 
 async function evaluate(ticket: any): Promise<{ verdict: Verdict; rationale: string }> {
@@ -50,7 +50,7 @@ async function evaluate(ticket: any): Promise<{ verdict: Verdict; rationale: str
     model: MODEL,
     max_tokens: 256,
     system: systemPrompt,
-    messages: [{ role: "user", content: casePrompt(ticket) }],
+    messages: [{ role: "user", content: itemPrompt(ticket) }],
   });
 
   const text = response.content
@@ -77,7 +77,7 @@ async function evaluate(ticket: any): Promise<{ verdict: Verdict; rationale: str
 async function main() {
   console.log(`Model:   ${MODEL}`);
   console.log(`Prompt:  ${systemPrompt.length} chars`);
-  console.log(`Dataset: ${tickets.length} cases × ${RUNS_PER_CASE} runs\n`);
+  console.log(`Dataset: ${tickets.length} work items × ${RUNS_PER_ITEM} runs\n`);
 
   const results: Result[] = [];
   let tp = 0, fp = 0, tn = 0, fn = 0;
@@ -89,14 +89,14 @@ async function main() {
     const verdicts: Verdict[] = [];
     const rationales: string[] = [];
 
-    for (let r = 0; r < RUNS_PER_CASE; r++) {
+    for (let r = 0; r < RUNS_PER_ITEM; r++) {
       const { verdict, rationale } = await evaluate(ticket);
       verdicts.push(verdict);
       rationales.push(rationale);
     }
 
     const holdCount = verdicts.filter((v) => v === "hold").length;
-    const finalVerdict: Verdict = holdCount > RUNS_PER_CASE / 2 ? "hold" : "pass";
+    const finalVerdict: Verdict = holdCount > RUNS_PER_ITEM / 2 ? "hold" : "pass";
     const consistent = new Set(verdicts).size === 1;
 
     if (finalVerdict === "hold" && expected === "hold") tp++;
@@ -150,7 +150,7 @@ async function main() {
   }
 
   // --- Flips ---
-  if (RUNS_PER_CASE > 1) {
+  if (RUNS_PER_ITEM > 1) {
     const flaky = results.filter((r) => !r.consistent);
     if (flaky.length) {
       console.log(`\nFlips (${flaky.length}):`);

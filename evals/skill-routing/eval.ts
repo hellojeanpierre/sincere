@@ -27,10 +27,10 @@ const readToolDef: Anthropic.Tool = {
   },
 };
 
-// --- Test cases ---
-type Case = { prompt: string; expectedSkill: string };
+// --- Test scenarios ---
+type Scenario = { prompt: string; expectedSkill: string };
 
-const cases: Case[] = [
+const scenarios: Scenario[] = [
   // data-analysis: clear
   {
     prompt: "Analyze the resolution rate data in data/pintest-v2 to find root causes for underperformance",
@@ -46,41 +46,41 @@ const cases: Case[] = [
   },
   // data-analysis: near-boundary
   {
-    prompt: "Look at the case data to understand why certain ticket cohorts have worse outcomes",
+    prompt: "Look at the work item data to understand why certain ticket cohorts have worse outcomes",
     expectedSkill: "data-analysis",
   },
   {
     prompt: "Examine the structured data to figure out what's going wrong with resolution rates",
     expectedSkill: "data-analysis",
   },
-  // case-transition-watch: clear
+  // transition-watch: clear
   {
-    prompt: "The agent is closing this case. The customer reported a billing overcharge on their last invoice. The agent sent a password-reset walkthrough 4 minutes ago.",
-    expectedSkill: "case-transition-watch",
+    prompt: "The agent is closing this work item. The customer reported a billing overcharge on their last invoice. The agent sent a password-reset walkthrough 4 minutes ago.",
+    expectedSkill: "transition-watch",
   },
   {
-    prompt: "This case is being marked resolved. The customer asked for a refund on a canceled order. The agent applied a loyalty discount instead and closed without confirming.",
-    expectedSkill: "case-transition-watch",
+    prompt: "This work item is being marked resolved. The customer asked for a refund on a canceled order. The agent applied a loyalty discount instead and closed without confirming.",
+    expectedSkill: "transition-watch",
   },
   {
-    prompt: "The agent is escalating this ticket to tier 2. The customer's issue is a simple DNS configuration that tier 1 handles routinely. The case has been open for 90 seconds.",
-    expectedSkill: "case-transition-watch",
+    prompt: "The agent is escalating this ticket to tier 2. The customer's issue is a simple DNS configuration that tier 1 handles routinely. The work item has been open for 90 seconds.",
+    expectedSkill: "transition-watch",
   },
-  // case-transition-watch: near-boundary
+  // transition-watch: near-boundary
   {
-    prompt: "This case just transitioned to solved. The customer described a problem connecting to WiFi after a firmware update. The agent walked them through a factory reset and the customer confirmed it's working.",
-    expectedSkill: "case-transition-watch",
+    prompt: "This work item just transitioned to solved. The customer described a problem connecting to WiFi after a firmware update. The agent walked them through a factory reset and the customer confirmed it's working.",
+    expectedSkill: "transition-watch",
   },
   {
     prompt: "The agent is closing this ticket. The metadata says 'billing inquiry' but the customer's messages are about a missing delivery. The agent responded with a billing FAQ link.",
-    expectedSkill: "case-transition-watch",
+    expectedSkill: "transition-watch",
   },
 ];
 
 // --- Skill file paths (used to match tool_use read targets) ---
 const SKILL_FILES: Record<string, string> = {
   "data-analysis": "skills/data-analysis.md",
-  "case-transition-watch": "skills/case-transition-watch.md",
+  "transition-watch": "skills/transition-watch.md",
 };
 
 const SKILL_NAMES = Object.keys(SKILL_FILES);
@@ -102,7 +102,7 @@ function skillsRead(readPaths: string[]): string[] {
 }
 
 // --- Run ---
-type CaseResult = {
+type ScenarioResult = {
   prompt: string;
   expectedSkill: string;
   readPaths: string[];
@@ -113,26 +113,26 @@ type CaseResult = {
 async function main() {
   console.log(`Model:   ${MODEL}`);
   console.log(`Prompt:  ${systemPrompt.length} chars`);
-  console.log(`Cases:   ${cases.length}\n`);
+  console.log(`Scenarios: ${scenarios.length}\n`);
 
-  const results: CaseResult[] = [];
+  const results: ScenarioResult[] = [];
 
-  for (const c of cases) {
+  for (const s of scenarios) {
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 1024,
       system: systemPrompt,
       tools: [readToolDef],
-      messages: [{ role: "user", content: c.prompt }],
+      messages: [{ role: "user", content: s.prompt }],
     });
 
     const readPaths = extractReadPaths(response);
     const matched = skillsRead(readPaths);
-    const pass = matched.includes(c.expectedSkill);
+    const pass = matched.includes(s.expectedSkill);
 
     results.push({
-      prompt: c.prompt,
-      expectedSkill: c.expectedSkill,
+      prompt: s.prompt,
+      expectedSkill: s.expectedSkill,
       readPaths,
       skillsRead: matched,
       pass,
@@ -140,7 +140,7 @@ async function main() {
 
     const mark = pass ? "✓" : "✗";
     const readInfo = readPaths.length ? readPaths.join(", ") : "(no read)";
-    process.stdout.write(`  ${mark} [${c.expectedSkill}] ${c.prompt.slice(0, 60)}…  → ${readInfo}\n`);
+    process.stdout.write(`  ${mark} [${s.expectedSkill}] ${s.prompt.slice(0, 60)}…  → ${readInfo}\n`);
   }
 
   // --- Metrics ---
@@ -150,7 +150,7 @@ async function main() {
 
   const output = {
     model: MODEL,
-    cases: results,
+    scenarios: results,
     accuracy,
     mutualExclusionRate,
   };
