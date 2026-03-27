@@ -6,6 +6,7 @@ import { intake } from "./intake.ts";
 import { logger } from "./lib/logger.ts";
 
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001" as const;
+const MAX_SESSION_MESSAGES = 20;
 
 const SYSTEM_PROMPT = "You are observing events on a work item. Summarize what just happened.";
 
@@ -38,18 +39,24 @@ export function createObserver() {
       agent.replaceMessages(saved);
     }
 
-    const event = JSON.parse(body) as Record<string, unknown>;
-    const response = await intake(agent, event);
-
-    store.set(workItemId, [...agent.state.messages]);
-
-    logger.info({ workItemId, responseLength: response.length }, "observer response");
+    try {
+      const event = JSON.parse(body) as Record<string, unknown>;
+      const response = await intake(agent, event);
+      logger.info(
+        { workItemId, responsePreview: response.slice(0, 1000) },
+        "observer response",
+      );
+    } finally {
+      const messages = agent.state.messages.slice(-MAX_SESSION_MESSAGES);
+      store.set(workItemId, [...messages]);
+    }
   };
 
   return {
     handler,
     sessions(workItemId: string): AgentMessage[] | undefined {
-      return store.get(workItemId);
+      const saved = store.get(workItemId);
+      return saved ? [...saved] : undefined;
     },
   };
 }

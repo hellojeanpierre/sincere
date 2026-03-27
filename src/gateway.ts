@@ -24,6 +24,7 @@ export function startGateway(port: number, lane: Lane) {
         logger.warn({ bytes: body.length }, "gateway: no work item ID found");
         return new Response(null, { status: 200 });
       }
+      // Fire-and-forget: Zendesk webhooks expect a fast 200, processing continues in the lane.
       lane.enqueue(workItemId, body);
       return new Response(null, { status: 200 });
     },
