@@ -1,7 +1,9 @@
+import pino from "pino";
 import { createLane } from "../src/lane.ts";
 import { startGateway } from "../src/gateway.ts";
-import { logger } from "../src/lib/logger.ts";
 import { createObserver } from "../src/observer.ts";
+
+const logger = pino({ transport: { target: "pino-pretty" } });
 
 const FIXTURE = "data/pintest-v2/smoke-tickets/smoke_tickets.jsonl";
 const TICKET_LINES = [0, 4]; // tickets 4800013, 4800070

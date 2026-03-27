@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "smoke": "bun run scripts/smoke.ts | pino-pretty"
+    "smoke": "bun run scripts/smoke.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
