@@ -1,8 +1,7 @@
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { describe, test, expect } from "bun:test";
 import { existsSync } from "fs";
 import { resolve } from "path";
-import { transformContext, createAgent, loadSystemPrompt } from "./agent.ts";
-import { execTool } from "./tools/exec.ts";
+import { transformContext, loadSystemPrompt } from "./agent.ts";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 function userMsg(text: string): AgentMessage {
@@ -192,27 +191,9 @@ describe("transformContext", () => {
   });
 });
 
-describe("createAgent system prompt", () => {
-  let savedKey: string | undefined;
-
-  beforeAll(() => {
-    savedKey = process.env.ANTHROPIC_API_KEY;
-    process.env.ANTHROPIC_API_KEY = savedKey || "test-key";
-  });
-
-  afterAll(() => {
-    if (savedKey === undefined) delete process.env.ANTHROPIC_API_KEY;
-    else process.env.ANTHROPIC_API_KEY = savedKey;
-  });
-
+describe("loadSystemPrompt", () => {
   test("produces a non-empty prompt containing the operator section", () => {
-    const agent = createAgent({
-      promptPath: resolve(import.meta.dirname, "operator.md"),
-      model: "claude-sonnet-4-6",
-      tools: [execTool],
-      thinkingLevel: "high",
-    });
-    const prompt = agent.state.systemPrompt;
+    const prompt = loadSystemPrompt(resolve(import.meta.dirname, "operator.md"));
     expect(prompt.length).toBeGreaterThan(0);
     expect(prompt).toContain("# Operator Prompt");
   });

@@ -4,8 +4,6 @@ import { createAgent } from "../src/agent.ts";
 import { execTool } from "../src/tools/exec.ts";
 import { logger } from "../src/lib/logger.ts";
 
-const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
-
 if (import.meta.main) {
   runOperator().catch((err) => {
     logger.fatal(err);
@@ -17,7 +15,7 @@ async function runOperator() {
 
 const agent = createAgent({
   promptPath: resolve(import.meta.dirname, "../src/operator.md"),
-  model: (process.env.MODEL as typeof DEFAULT_MODEL) || DEFAULT_MODEL,
+  model: process.env.MODEL || "claude-sonnet-4-6",
   tools: [execTool],
   thinkingLevel: "high",
 });
