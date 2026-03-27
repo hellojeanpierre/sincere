@@ -21,6 +21,7 @@ export function createObserver() {
   const store = new Map<string, AgentMessage[]>();
 
   const handler: Handler = async (body, workItemId) => {
+    logger.info({ workItemId }, "observer handler start");
     const saved = store.get(workItemId) ?? [];
 
     const agent = new Agent({
