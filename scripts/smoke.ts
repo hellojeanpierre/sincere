@@ -35,15 +35,21 @@ const base = `http://localhost:${server.port}`;
 
 logger.info({ port: server.port }, "smoke: gateway started");
 
-for (const body of interleaved) {
-  const { id } = JSON.parse(body);
+for (let i = 0; i < interleaved.length; i++) {
+  const body = interleaved[i];
+  const { id, status, type, subject } = JSON.parse(body);
   const res = await fetch(base, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,
   });
-  logger.info({ ticketId: id, status: res.status }, "smoke: POST response");
+  logger.info(
+    { ticketId: id, httpStatus: res.status, type, status, subject, seq: `${i + 1}/${total}` },
+    "smoke: POST response",
+  );
 }
+
+logger.info("smoke: waiting for observer processing");
 
 // Wait for all async observer work spawned by the gateway's fire-and-forget enqueue.
 await allProcessed;
