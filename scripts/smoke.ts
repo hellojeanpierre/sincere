@@ -7,10 +7,16 @@ const FIXTURE = "data/pintest-v2/smoke-tickets/smoke_tickets.jsonl";
 const TICKET_LINES = [0, 4]; // tickets 4800013, 4800070
 
 const lines = (await Bun.file(FIXTURE).text()).split("\n").filter(Boolean);
-const picked = TICKET_LINES.map((i) => lines[i]);
+const picked = TICKET_LINES.map((i) => JSON.parse(lines[i]));
 
-// Interleave: A, B, A, B — exercises per-workitem serial queueing.
-const interleaved = [picked[0], picked[1], picked[0], picked[1]];
+// Build two distinct events per ticket: open → solved.
+const ticketA_open = JSON.stringify({ ...picked[0], status: "open" });
+const ticketA_solved = JSON.stringify({ ...picked[0], status: "solved" });
+const ticketB_open = JSON.stringify({ ...picked[1], status: "open" });
+const ticketB_solved = JSON.stringify({ ...picked[1], status: "solved" });
+
+// Interleave: A1, B1, A2, B2 — exercises per-workitem serial queueing.
+const interleaved = [ticketA_open, ticketB_open, ticketA_solved, ticketB_solved];
 const total = interleaved.length;
 
 // Wrap observer handler with a completion latch so we can await all fire-and-forget work.
@@ -35,14 +41,21 @@ const base = `http://localhost:${server.port}`;
 
 logger.info({ port: server.port }, "smoke: gateway started");
 
-for (const body of interleaved) {
-  const { id } = JSON.parse(body);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+for (let i = 0; i < interleaved.length; i++) {
+  if (i > 0) await sleep(2000);
+  const body = interleaved[i];
+  const parsed = JSON.parse(body);
   const res = await fetch(base, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,
   });
-  logger.info({ ticketId: id, status: res.status }, "smoke: POST response");
+  logger.info(
+    { ticketId: parsed.id, ticketStatus: parsed.status, http: res.status },
+    "smoke: POST response",
+  );
 }
 
 // Wait for all async observer work spawned by the gateway's fire-and-forget enqueue.
