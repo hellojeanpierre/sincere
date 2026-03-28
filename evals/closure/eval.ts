@@ -22,6 +22,9 @@ function loadSystemPrompt(srcDir: string): string {
 const systemPrompt = loadSystemPrompt(SRC_DIR);
 const lines = readFileSync(DATASET_PATH, "utf-8").trim().split("\n");
 const tickets = lines.map((l) => JSON.parse(l));
+const groundTruth: Record<string, any> = JSON.parse(
+  readFileSync(resolve(DATASET_PATH, "..", "smoke_ground_truth.json"), "utf-8"),
+);
 const client = new Anthropic();
 
 // --- Types ---
@@ -36,13 +39,12 @@ type Result = {
 };
 
 function expectedVerdict(ticket: any): Verdict {
-  const fm = ticket._ground_truth.failure_mode;
+  const fm = groundTruth[String(ticket.id)]?.failure_mode;
   return fm === "clean" || fm == null ? "pass" : "hold";
 }
 
 function itemPrompt(ticket: any): string {
-  const { _ground_truth, ...itemData } = ticket;
-  return JSON.stringify(itemData, null, 2) + EVAL_SUFFIX;
+  return JSON.stringify(ticket, null, 2) + EVAL_SUFFIX;
 }
 
 async function evaluate(ticket: any): Promise<{ verdict: Verdict; rationale: string }> {
@@ -85,7 +87,7 @@ async function main() {
   for (const ticket of tickets) {
     const id = ticket.id || ticket.ticket_id || "?";
     const expected = expectedVerdict(ticket);
-    const failureMode = ticket._ground_truth.failure_mode;
+    const failureMode = groundTruth[String(ticket.id)]?.failure_mode;
     const verdicts: Verdict[] = [];
     const rationales: string[] = [];
 
