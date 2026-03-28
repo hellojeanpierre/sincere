@@ -1,0 +1,312 @@
+{
+  "4800003": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "ads_billing",
+    "actual_subcategory": "ad_rejected",
+    "agent_tenure_bucket": "mid"
+  },
+  "4800008": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "algorithm_reach",
+    "actual_subcategory": "feed_quality",
+    "agent_tenure_bucket": "new"
+  },
+  "4800013": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "ads_billing",
+    "actual_subcategory": "targeting_issues",
+    "agent_tenure_bucket": "mid"
+  },
+  "4800017": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "account_access",
+    "actual_subcategory": "account_locked",
+    "agent_tenure_bucket": "mid"
+  },
+  "4800019": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "content_moderation",
+    "actual_subcategory": "appeal_denied",
+    "agent_tenure_bucket": "new"
+  },
+  "4800020": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "content_moderation",
+    "actual_subcategory": "spam_flag",
+    "agent_tenure_bucket": "new"
+  },
+  "4800023": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "privacy_legal",
+    "actual_subcategory": "data_request",
+    "agent_tenure_bucket": "experienced"
+  },
+  "4800026": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "algorithm_reach",
+    "actual_subcategory": "deindexed_content",
+    "agent_tenure_bucket": "mid"
+  },
+  "4800027": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "ads_billing",
+    "actual_subcategory": "ad_account_suspended",
+    "agent_tenure_bucket": "experienced"
+  },
+  "4800031": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "privacy_legal",
+    "actual_subcategory": "gdpr_request",
+    "agent_tenure_bucket": "mid"
+  },
+  "4800036": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "content_moderation",
+    "actual_subcategory": "pin_removed",
+    "agent_tenure_bucket": "experienced"
+  },
+  "4800040": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "content_moderation",
+    "actual_subcategory": "appeal_denied",
+    "agent_tenure_bucket": "mid"
+  },
+  "4800045": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "ads_billing",
+    "actual_subcategory": "ad_review_delay",
+    "agent_tenure_bucket": "mid"
+  },
+  "4800050": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "content_moderation",
+    "actual_subcategory": "board_removed",
+    "agent_tenure_bucket": "mid"
+  },
+  "4800054": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "ads_billing",
+    "actual_subcategory": "ad_rejected",
+    "agent_tenure_bucket": "experienced"
+  },
+  "4800058": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "account_access",
+    "actual_subcategory": "account_recovery",
+    "agent_tenure_bucket": "mid"
+  },
+  "4800060": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "content_moderation",
+    "actual_subcategory": "false_positive_flag",
+    "agent_tenure_bucket": "new"
+  },
+  "4800062": {
+    "failure_mode": "premature_closure",
+    "failure_type": "resolution_mismatch",
+    "failure_description": "Case was reopened after close — initial resolution did not stick",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "account_access",
+    "actual_subcategory": "account_recovery",
+    "agent_tenure_bucket": "new"
+  },
+  "4800063": {
+    "failure_mode": "premature_closure",
+    "failure_type": "resolution_mismatch",
+    "failure_description": "Agent attributed suspension to bot behavior and lifted it, but ignored the verification catch-22 the customer described; closed with 1 reply and no follow-up on incomplete verification",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "account_access",
+    "actual_subcategory": "account_suspended",
+    "agent_tenure_bucket": "mid"
+  },
+  "4800066": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "content_moderation",
+    "actual_subcategory": "appeal_denied",
+    "agent_tenure_bucket": "experienced"
+  },
+  "4800070": {
+    "failure_mode": "premature_closure",
+    "failure_type": "single",
+    "failure_description": "Agent closes ticket with template response, short handle time, no investigation",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "account_access",
+    "actual_subcategory": "account_locked",
+    "agent_tenure_bucket": "new"
+  },
+  "4800072": {
+    "failure_mode": "premature_closure",
+    "failure_type": "single",
+    "failure_description": "Agent closes ticket with template response, short handle time, no investigation",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "technical_bug",
+    "actual_subcategory": "sync_issues",
+    "agent_tenure_bucket": "experienced"
+  },
+  "4800075": {
+    "failure_mode": "miscategorized",
+    "failure_type": "single",
+    "failure_description": "Agent selects wrong issue category/subcategory — right team, wrong classification",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "ads_billing",
+    "actual_subcategory": "conversion_tracking",
+    "agent_tenure_bucket": "experienced",
+    "labeled_category": "shopping_merchant",
+    "labeled_subcategory": "catalog_feed_error"
+  },
+  "4800080": {
+    "failure_mode": "miscategorized",
+    "failure_type": "single",
+    "failure_description": "Agent selects wrong issue category/subcategory — right team, wrong classification",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "content_moderation",
+    "actual_subcategory": "appeal_denied",
+    "agent_tenure_bucket": "mid",
+    "labeled_category": "account_access",
+    "labeled_subcategory": "account_suspended"
+  },
+  "4800084": {
+    "failure_mode": "misrouted",
+    "failure_type": "single",
+    "failure_description": "Ticket sent to wrong team entirely",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "account_access",
+    "actual_subcategory": "account_locked",
+    "agent_tenure_bucket": "experienced",
+    "wrong_group": 360001000007
+  },
+  "4800086": {
+    "failure_mode": "misrouted",
+    "failure_type": "single",
+    "failure_description": "Ticket sent to wrong team entirely",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "account_access",
+    "actual_subcategory": "account_recovery",
+    "agent_tenure_bucket": "mid",
+    "wrong_group": 360001000002
+  },
+  "4800090": {
+    "failure_mode": "copy_paste_sop",
+    "failure_type": "single",
+    "failure_description": "Correct SOP selected but applied to wrong situation",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "spam_scam",
+    "actual_subcategory": "phishing_link",
+    "agent_tenure_bucket": "experienced",
+    "sop_applied": "wrong_sop"
+  },
+  "4800094": {
+    "failure_mode": "copy_paste_sop",
+    "failure_type": "single",
+    "failure_description": "Correct SOP selected but applied to wrong situation",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "ads_billing",
+    "actual_subcategory": "unauthorized_charge",
+    "agent_tenure_bucket": "mid",
+    "sop_applied": "wrong_sop"
+  },
+  "4800097": {
+    "failure_mode": "escalation_avoidance",
+    "failure_type": "single",
+    "failure_description": "Agent attempts fix outside scope to avoid escalation metric hit",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "spam_scam",
+    "actual_subcategory": "spam_report",
+    "agent_tenure_bucket": "new",
+    "should_have_escalated": true
+  },
+  "4800099": {
+    "failure_mode": "escalation_avoidance",
+    "failure_type": "single",
+    "failure_description": "Agent attempts fix outside scope to avoid escalation metric hit",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "content_moderation",
+    "actual_subcategory": "board_removed",
+    "agent_tenure_bucket": "new",
+    "should_have_escalated": true
+  }
+}

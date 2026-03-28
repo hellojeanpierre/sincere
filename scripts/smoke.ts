@@ -8,6 +8,11 @@ const FIXTURE = "data/pintest-v2/smoke-tickets/smoke_tickets.jsonl";
 const TICKET_LINES = [0, 4]; // tickets 4800013, 4800070
 
 const lines = (await Bun.file(FIXTURE).text()).split("\n").filter(Boolean);
+for (const line of lines) {
+  if (line.includes('"_ground_truth"')) {
+    throw new Error("smoke: fixture contains _ground_truth — agent must not see eval labels");
+  }
+}
 const picked = TICKET_LINES.map((i) => JSON.parse(lines[i]));
 
 // Build two distinct events per ticket: open → solved.
