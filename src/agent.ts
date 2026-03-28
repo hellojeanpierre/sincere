@@ -66,16 +66,19 @@ export function loadSystemPrompt(promptPath: string): string {
   let prompt = readFileSync(promptPath, "utf-8");
   const srcDir = dirname(promptPath);
 
-  // Resolve config template variables and inject root cause library
+  // Resolve config template variables. Only prompts that use {{vars}} get
+  // root cause injection — this keeps the operator prompt clean.
   const configPath = resolve(srcDir, "config.json");
   if (existsSync(configPath)) {
     const config: Record<string, unknown> = JSON.parse(readFileSync(configPath, "utf-8"));
+    let resolved = false;
     for (const [key, value] of Object.entries(config)) {
-      if (typeof value === "string") {
+      if (typeof value === "string" && prompt.includes(`{{${key}}}`)) {
         prompt = prompt.replaceAll(`{{${key}}}`, value);
+        resolved = true;
       }
     }
-    if (typeof config.rootCauseLibrary === "string") {
+    if (resolved && typeof config.rootCauseLibrary === "string") {
       const libPath = resolve(process.cwd(), config.rootCauseLibrary);
       const entries: { id: string; description: string }[] = JSON.parse(readFileSync(libPath, "utf-8"));
       const section = entries.map((e) => `- **${e.id}**: ${e.description}`).join("\n");
