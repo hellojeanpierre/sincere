@@ -1,4 +1,4 @@
-import { readFileSync, globSync } from "fs";
+import { readFileSync, globSync, existsSync } from "fs";
 import { resolve, basename, relative, dirname } from "path";
 import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
@@ -63,8 +63,25 @@ function parseSkillFrontmatter(f: string): { name: string; description: string; 
 }
 
 export function loadSystemPrompt(promptPath: string): string {
-  const prompt = readFileSync(promptPath, "utf-8");
+  let prompt = readFileSync(promptPath, "utf-8");
   const srcDir = dirname(promptPath);
+
+  // Resolve config template variables and inject root cause library
+  const configPath = resolve(srcDir, "config.json");
+  if (existsSync(configPath)) {
+    const config: Record<string, unknown> = JSON.parse(readFileSync(configPath, "utf-8"));
+    for (const [key, value] of Object.entries(config)) {
+      if (typeof value === "string") {
+        prompt = prompt.replaceAll(`{{${key}}}`, value);
+      }
+    }
+    if (typeof config.rootCauseLibrary === "string") {
+      const libPath = resolve(process.cwd(), config.rootCauseLibrary);
+      const entries: { id: string; description: string }[] = JSON.parse(readFileSync(libPath, "utf-8"));
+      const section = entries.map((e) => `- **${e.id}**: ${e.description}`).join("\n");
+      prompt += `\n\n## Root causes\n\n${section}`;
+    }
+  }
 
   const skillEnv = process.env.SKILL;
   const skillFiles = skillEnv

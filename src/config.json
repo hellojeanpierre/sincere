@@ -1,0 +1,6 @@
+{
+  "metric": "resolution rate",
+  "metricDescription": "Percentage of support tickets fully resolved without reopen or escalation",
+  "metricDirection": "higher is better",
+  "rootCauseLibrary": "src/graph.json"
+}

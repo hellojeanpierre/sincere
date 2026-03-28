@@ -14,9 +14,26 @@ const EVAL_SUFFIX = `
 Assess this work item. Respond with exactly this JSON and nothing else:
 {"verdict": "pass" | "hold", "rationale": "<one sentence naming the specific gap, or 'clean' if none>"}`;
 
-// --- Load only the skill under test ---
+// --- Load observer prompt with config + root causes ---
 function loadSystemPrompt(srcDir: string): string {
-  return readFileSync(resolve(srcDir, "skills", "transition-watch.md"), "utf-8");
+  let prompt = readFileSync(resolve(srcDir, "observer.md"), "utf-8");
+  const config: Record<string, unknown> = JSON.parse(
+    readFileSync(resolve(srcDir, "config.json"), "utf-8"),
+  );
+  for (const [key, value] of Object.entries(config)) {
+    if (typeof value === "string") {
+      prompt = prompt.replaceAll(`{{${key}}}`, value);
+    }
+  }
+  if (typeof config.rootCauseLibrary === "string") {
+    const libPath = resolve(process.cwd(), config.rootCauseLibrary);
+    const entries: { id: string; description: string }[] = JSON.parse(
+      readFileSync(libPath, "utf-8"),
+    );
+    const section = entries.map((e) => `- **${e.id}**: ${e.description}`).join("\n");
+    prompt += `\n\n## Root causes\n\n${section}`;
+  }
+  return prompt;
 }
 
 const systemPrompt = loadSystemPrompt(SRC_DIR);

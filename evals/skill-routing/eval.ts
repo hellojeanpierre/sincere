@@ -53,34 +53,11 @@ const scenarios: Scenario[] = [
     prompt: "Examine the structured data to figure out what's going wrong with resolution rates",
     expectedSkill: "data-analysis",
   },
-  // transition-watch: clear
-  {
-    prompt: "The agent is closing this work item. The customer reported a billing overcharge on their last invoice. The agent sent a password-reset walkthrough 4 minutes ago.",
-    expectedSkill: "transition-watch",
-  },
-  {
-    prompt: "This work item is being marked resolved. The customer asked for a refund on a canceled order. The agent applied a loyalty discount instead and closed without confirming.",
-    expectedSkill: "transition-watch",
-  },
-  {
-    prompt: "The agent is escalating this ticket to tier 2. The customer's issue is a simple DNS configuration that tier 1 handles routinely. The work item has been open for 90 seconds.",
-    expectedSkill: "transition-watch",
-  },
-  // transition-watch: near-boundary
-  {
-    prompt: "This work item just transitioned to solved. The customer described a problem connecting to WiFi after a firmware update. The agent walked them through a factory reset and the customer confirmed it's working.",
-    expectedSkill: "transition-watch",
-  },
-  {
-    prompt: "The agent is closing this ticket. The metadata says 'billing inquiry' but the customer's messages are about a missing delivery. The agent responded with a billing FAQ link.",
-    expectedSkill: "transition-watch",
-  },
 ];
 
 // --- Skill file paths (used to match tool_use read targets) ---
 const SKILL_FILES: Record<string, string> = {
   "data-analysis": "skills/data-analysis.md",
-  "transition-watch": "skills/transition-watch.md",
 };
 
 const SKILL_NAMES = Object.keys(SKILL_FILES);
