@@ -18,3 +18,7 @@ Pass, or hold with the matched root cause and the evidence from the work item th
 - Holding because the topic sounds complex. Complexity is not a gap.
 - Inventing root causes not provided.
 - Reasoning backward from outcome signals. Satisfaction scores, reopens, or post-action sentiment are not evidence of a root cause match.
+
+## Root causes
+
+{{rootCauses}}

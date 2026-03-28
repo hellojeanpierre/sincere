@@ -1,4 +1,4 @@
-import { readFileSync, globSync, existsSync } from "fs";
+import { readFileSync, globSync } from "fs";
 import { resolve, basename, relative, dirname } from "path";
 import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
@@ -8,6 +8,7 @@ import type { Handler } from "./lane.ts";
 import { intake } from "./intake.ts";
 import { logger } from "./lib/logger.ts";
 import { readTool } from "./tools/read.ts";
+import { resolveConfig } from "./lib/config.ts";
 
 // Known simplification: age is measured in user turns, so stale pruning only
 // activates in multi-turn conversations. Single-prompt runs never prune.
@@ -66,24 +67,11 @@ export function loadSystemPrompt(promptPath: string): string {
   let prompt = readFileSync(promptPath, "utf-8");
   const srcDir = dirname(promptPath);
 
-  // Resolve config template variables. Only prompts that use {{vars}} get
-  // root cause injection — this keeps the operator prompt clean.
-  const configPath = resolve(srcDir, "config.json");
-  if (existsSync(configPath)) {
-    const config: Record<string, unknown> = JSON.parse(readFileSync(configPath, "utf-8"));
-    let resolved = false;
-    for (const [key, value] of Object.entries(config)) {
-      if (typeof value === "string" && prompt.includes(`{{${key}}}`)) {
-        prompt = prompt.replaceAll(`{{${key}}}`, value);
-        resolved = true;
-      }
-    }
-    if (resolved && typeof config.rootCauseLibrary === "string") {
-      const libPath = resolve(process.cwd(), config.rootCauseLibrary);
-      const entries: { id: string; description: string }[] = JSON.parse(readFileSync(libPath, "utf-8"));
-      const section = entries.map((e) => `- **${e.id}**: ${e.description}`).join("\n");
-      prompt += `\n\n## Root causes\n\n${section}`;
-    }
+  // Generic template resolution: replace {{key}} placeholders with values
+  // from config.json. Prompts without placeholders pass through unchanged.
+  const vars = resolveConfig(srcDir);
+  for (const [key, value] of Object.entries(vars)) {
+    prompt = prompt.replaceAll(`{{${key}}}`, value);
   }
 
   const skillEnv = process.env.SKILL;
