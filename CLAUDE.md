@@ -15,7 +15,7 @@ Bun-based AI agent project using `@mariozechner/pi-agent-core` and `@mariozechne
 
 3. **Skills are context, not code.** A skill is a markdown file the Operator reads before acting. It contains failure modes, heuristics, and domain knowledge that shape the Operator's reasoning. Skills do not execute anything.
 
-4. **Operator prompt is the single source of reasoning.** The file `src/operator.md` is the sole source of agent reasoning principles. Do not scatter system-prompt fragments across code files.
+4. **Agent prompts are the single source of reasoning.** Each agent role (`src/observer.md`, `src/operator.md`) is the sole source of reasoning principles for that role. Do not scatter system-prompt fragments across code files.
 
 5. **Tools are typed functions, not classes.** Every tool is a plain function with metadata. Schemas are defined with TypeBox (from pi-ai). No class hierarchies, no `BaseTool`.
 
