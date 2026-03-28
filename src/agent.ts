@@ -8,6 +8,7 @@ import type { Handler } from "./lane.ts";
 import { intake } from "./intake.ts";
 import { logger } from "./lib/logger.ts";
 import { readTool } from "./tools/read.ts";
+import { resolveConfig } from "./lib/config.ts";
 
 // Known simplification: age is measured in user turns, so stale pruning only
 // activates in multi-turn conversations. Single-prompt runs never prune.
@@ -63,8 +64,15 @@ function parseSkillFrontmatter(f: string): { name: string; description: string; 
 }
 
 export function loadSystemPrompt(promptPath: string): string {
-  const prompt = readFileSync(promptPath, "utf-8");
+  let prompt = readFileSync(promptPath, "utf-8");
   const srcDir = dirname(promptPath);
+
+  // Generic template resolution: replace {{key}} placeholders with values
+  // from config.json. Prompts without placeholders pass through unchanged.
+  const vars = resolveConfig(srcDir);
+  for (const [key, value] of Object.entries(vars)) {
+    prompt = prompt.replaceAll(`{{${key}}}`, value);
+  }
 
   const skillEnv = process.env.SKILL;
   const skillFiles = skillEnv

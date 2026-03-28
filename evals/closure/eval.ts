@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+import { resolveConfig } from "../../src/lib/config.ts";
 
 // --- Config ---
 const DATASET_PATH = process.argv[2] || "./data/tickets.jsonl";
@@ -14,9 +15,14 @@ const EVAL_SUFFIX = `
 Assess this work item. Respond with exactly this JSON and nothing else:
 {"verdict": "pass" | "hold", "rationale": "<one sentence naming the specific gap, or 'clean' if none>"}`;
 
-// --- Load only the skill under test ---
+// --- Load observer prompt with resolved config ---
 function loadSystemPrompt(srcDir: string): string {
-  return readFileSync(resolve(srcDir, "skills", "transition-watch.md"), "utf-8");
+  let prompt = readFileSync(resolve(srcDir, "observer.md"), "utf-8");
+  const vars = resolveConfig(srcDir);
+  for (const [key, value] of Object.entries(vars)) {
+    prompt = prompt.replaceAll(`{{${key}}}`, value);
+  }
+  return prompt;
 }
 
 const systemPrompt = loadSystemPrompt(SRC_DIR);

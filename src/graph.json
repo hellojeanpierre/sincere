@@ -1,0 +1,22 @@
+[
+  {
+    "id": "premature_closure",
+    "description": "Agent closes ticket without addressing the stated issue — template response, minimal handle time, no investigation"
+  },
+  {
+    "id": "miscategorized",
+    "description": "Agent selects wrong issue category or subcategory — right team, wrong classification"
+  },
+  {
+    "id": "misrouted",
+    "description": "Ticket sent to a team that does not handle this type of issue"
+  },
+  {
+    "id": "copy_paste_sop",
+    "description": "Agent applies a standard operating procedure that does not fit the situation — correct SOP for other cases, wrong for this one"
+  },
+  {
+    "id": "escalation_avoidance",
+    "description": "Agent attempts fix outside scope to avoid escalation metric hit — issue requires handoff but agent resolves or closes instead"
+  }
+]
