@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sincere — Timeline</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['"JetBrains Mono"', '"SF Mono"', '"Fira Code"', 'Consolas', 'monospace'],
+            logo: ['"Playfair Display"', 'Georgia', 'serif'],
+          },
+          colors: {
+            primary: '#E35335',
+          },
+        },
+      },
+    };
+  </script>
+</head>
+<body class="bg-stone-100 text-stone-900 min-h-screen antialiased">
+  <div class="max-w-xl mx-auto px-6 py-16">
+
+    <!-- Timeline -->
+    <div id="timeline" class="relative flex flex-col items-center">
+      <!-- Vertical line -->
+      <div class="absolute top-0 bottom-0 w-px border-l border-dashed border-stone-300"></div>
+    </div>
+
+  </div>
+
+  <script>
+    const timelineData = [
+      {
+        type: "metric",
+        label: "Customer Satisfaction",
+        current: "82%",
+        delta: "-4%",
+        deltaDirection: "down",
+        target: "90%",
+        description:
+          "Customer Satisfaction has dropped below the target threshold over the last 30 days. High volume of incomplete resolutions detected.",
+        action: { label: "Investigate historical data" },
+      },
+    ];
+
+    const timeline = document.getElementById("timeline");
+
+    function renderMetricCard(item) {
+      const el = document.createElement("div");
+      el.className = "relative w-full flex flex-col items-center mb-16";
+      el.innerHTML = `
+        <!-- Card -->
+        <div class="relative z-10 border border-stone-200 rounded-2xl p-8 bg-white shadow-sm text-center max-w-md w-full">
+          <!-- Label -->
+          <p class="text-xs font-mono tracking-[0.2em] uppercase text-stone-400 mb-4">${item.label}</p>
+
+          <!-- Score -->
+          <div class="flex items-baseline justify-center gap-3 mb-2">
+            <span class="font-mono text-6xl font-semibold tracking-tight text-stone-900">${item.current}</span>
+            <span class="inline-flex items-center gap-1 text-sm font-mono px-2 py-0.5 rounded bg-red-50 text-red-400">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 112 0v7.586l2.293-2.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+              </svg>
+              ${item.delta}
+            </span>
+          </div>
+
+          <!-- Target -->
+          <p class="text-sm font-mono text-stone-400 mb-6">Target: ${item.target}</p>
+
+          <!-- Description -->
+          <p class="text-sm text-stone-500 leading-relaxed mb-6">${item.description}</p>
+
+          <!-- Action -->
+          ${item.action ? `
+          <button
+            class="inline-flex items-center gap-2 text-sm font-medium text-white bg-primary rounded-full px-6 py-3 hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z"/>
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.415l2.261-2.261A4 4 0 1011 5z" clip-rule="evenodd"/>
+            </svg>
+            ${item.action.label}
+          </button>
+          ` : ""}
+        </div>
+
+        <!-- Dot below card on the timeline -->
+        <div class="relative z-10 mt-6 w-3 h-3 rounded-full bg-blue-500 ring-4 ring-white shadow-sm"></div>
+      `;
+      return el;
+    }
+
+    // Render timeline
+    timelineData.forEach((item) => {
+      if (item.type === "metric") {
+        timeline.appendChild(renderMetricCard(item));
+      }
+    });
+  </script>
+</body>
+</html>
