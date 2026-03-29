@@ -308,5 +308,25 @@
     "actual_subcategory": "board_removed",
     "agent_tenure_bucket": "new",
     "should_have_escalated": true
+  },
+  "4800101": {
+    "failure_mode": null,
+    "failure_type": null,
+    "failure_description": null,
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "account_access",
+    "actual_subcategory": "account_locked",
+    "agent_tenure_bucket": "mid"
+  },
+  "4800102": {
+    "failure_mode": "premature_closure",
+    "failure_type": "resolution_mismatch",
+    "failure_description": "Agent sent generic help-center redirect for a $2,400 unauthorized charge without investigating the billing discrepancy, checking campaign history, or escalating to the billing team",
+    "is_followup": false,
+    "original_ticket_id": null,
+    "actual_category": "ads_billing",
+    "actual_subcategory": "unauthorized_charge",
+    "agent_tenure_bucket": "new"
   }
 }
