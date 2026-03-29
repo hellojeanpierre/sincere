@@ -141,7 +141,6 @@
       const reasoningEl = document.getElementById('agent-reasoning');
       const labelEl = document.getElementById('agent-label');
       const statusEl = document.getElementById('agent-status');
-      const dotEl = document.getElementById('agent-dot');
       let fullText = '';
 
       fetch('/api/investigate', { method: 'POST' }).then((res) => {
@@ -190,8 +189,6 @@
             <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
           </svg>
           <span class="text-emerald-400">Complete</span>`;
-        dotEl.classList.remove('bg-amber-500');
-        dotEl.classList.add('bg-emerald-400');
       }
 
       function markError(msg) {
@@ -200,8 +197,6 @@
             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
           </svg>
           <span class="text-red-400">${msg}</span>`;
-        dotEl.classList.remove('bg-amber-500');
-        dotEl.classList.add('bg-red-400');
       }
     });
   </script>
