@@ -4,104 +4,204 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sincere — Timeline</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: {
-            mono: ['"JetBrains Mono"', '"SF Mono"', '"Fira Code"', 'Consolas', 'monospace'],
-            logo: ['"Playfair Display"', 'Georgia', 'serif'],
-          },
           colors: {
-            primary: '#E35335',
+            surface: '#1a1614',
+            card: '#242020',
+            accent: '#d4856a',
+            'accent-hover': '#c07058',
           },
         },
       },
     };
   </script>
+  <style>
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      background-size: 256px 256px;
+      opacity: 0.14;
+    }
+    body > * { position: relative; z-index: 1; }
+    @property --angle {
+      syntax: '<angle>';
+      initial-value: 0deg;
+      inherits: false;
+    }
+    @keyframes rotate-gradient {
+      to { --angle: 360deg; }
+    }
+    .gradient-border {
+      position: relative;
+      border-radius: 1rem;
+      padding: 1px;
+      background: conic-gradient(from var(--angle), #d4856a, #6b4c3b, #3a2d28, #d4856a);
+      animation: rotate-gradient 4s linear infinite;
+    }
+    .gradient-border > div {
+      border-radius: calc(1rem - 1px);
+    }
+  </style>
 </head>
-<body class="bg-stone-100 text-stone-900 min-h-screen antialiased">
-  <div class="max-w-xl mx-auto px-6 py-16">
+<body class="bg-surface text-stone-200 min-h-screen antialiased">
+  <div class="max-w-2xl mx-auto px-4 py-12">
 
-    <!-- Timeline -->
-    <div id="timeline" class="relative flex flex-col items-center">
-      <!-- Vertical line -->
-      <div class="absolute top-0 bottom-0 w-px border-l border-dashed border-stone-300"></div>
-    </div>
+    <!-- centered vertical timeline -->
+    <div class="relative flex flex-col items-center">
+      <!-- vertical line -->
+      <div class="absolute top-0 bottom-0 w-px bg-accent/30"></div>
 
+      <!-- Timeline entry: CSAT metric card -->
+      <div class="relative z-10 w-full max-w-md">
+        <div class="gradient-border">
+          <div class="bg-card p-6 space-y-4">
+            <!-- header row -->
+            <div>
+              <p class="text-xs uppercase tracking-wider text-stone-500 mb-1">Customer Satisfaction</p>
+              <div class="flex items-baseline gap-3">
+                <span class="text-4xl font-bold text-stone-100">82%</span>
+                <span class="text-sm text-stone-500">target 85%</span>
+              </div>
+            </div>
+
+            <!-- description -->
+            <p class="text-sm text-stone-400 leading-relaxed">
+              Customer Satisfaction Score measures how satisfied customers are with Pinterest
+              through a survey asking customers to rate their experience.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Investigate button as timeline endpoint -->
+      <div class="relative z-10 mt-8 flex flex-col items-center">
+        <button
+          id="btn-investigate"
+          class="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-surface text-sm font-medium px-4 py-2 rounded-full transition-colors"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+          </svg>
+          Investigate historical data
+        </button>
+      </div>
+
+    </div><!-- /timeline -->
   </div>
 
   <script>
-    const timelineData = [
-      {
-        type: "metric",
-        label: "Customer Satisfaction",
-        current: "82%",
-        delta: "-4%",
-        deltaDirection: "down",
-        target: "90%",
-        description:
-          "Customer Satisfaction has dropped below the target threshold over the last 30 days. High volume of incomplete resolutions detected.",
-        action: { label: "Investigate historical data" },
-      },
-    ];
+    document.getElementById('btn-investigate').addEventListener('click', () => {
+      const btn = document.getElementById('btn-investigate');
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'pointer-events-none');
 
-    const timeline = document.getElementById("timeline");
+      // Insert agent card into timeline before the button
+      const btnContainer = btn.parentElement;
+      const timelineRoot = btnContainer.parentElement;
 
-    function renderMetricCard(item) {
-      const el = document.createElement("div");
-      el.className = "relative w-full flex flex-col items-center mb-16";
-      el.innerHTML = `
-        <!-- Card -->
-        <div class="relative z-10 border border-stone-200 rounded-2xl p-8 bg-white shadow-sm text-center max-w-md w-full">
-          <!-- Label -->
-          <p class="text-xs font-mono tracking-[0.2em] uppercase text-stone-400 mb-4">${item.label}</p>
+      // Deactivate gradient border on previous cards
+      timelineRoot.querySelectorAll('.gradient-border').forEach((el) => {
+        el.classList.remove('gradient-border');
+        el.style.background = 'none';
+        el.style.border = '1px solid #3a2d28';
+        el.style.borderRadius = '1rem';
+      });
 
-          <!-- Score -->
-          <div class="flex items-baseline justify-center gap-3 mb-2">
-            <span class="font-mono text-6xl font-semibold tracking-tight text-stone-900">${item.current}</span>
-            <span class="inline-flex items-center gap-1 text-sm font-mono px-2 py-0.5 rounded bg-red-50 text-red-400">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 112 0v7.586l2.293-2.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-              </svg>
-              ${item.delta}
-            </span>
+      const agentEntry = document.createElement('div');
+      agentEntry.className = 'relative z-10 w-full max-w-md mt-8';
+      agentEntry.innerHTML = `
+        <div class="gradient-border">
+          <div class="bg-card p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <p class="text-xs uppercase tracking-wider text-stone-500">Agent: Historical Analysis</p>
+              <span id="agent-status" class="flex items-center gap-2 text-xs text-stone-500">
+                <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                <span id="agent-label">Connecting...</span>
+              </span>
+            </div>
+            <pre id="agent-reasoning" class="text-sm text-stone-400 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto scrollbar-thin"></pre>
           </div>
-
-          <!-- Target -->
-          <p class="text-sm font-mono text-stone-400 mb-6">Target: ${item.target}</p>
-
-          <!-- Description -->
-          <p class="text-sm text-stone-500 leading-relaxed mb-6">${item.description}</p>
-
-          <!-- Action -->
-          ${item.action ? `
-          <button
-            class="inline-flex items-center gap-2 text-sm font-medium text-white bg-primary rounded-full px-6 py-3 hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z"/>
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.415l2.261-2.261A4 4 0 1011 5z" clip-rule="evenodd"/>
-            </svg>
-            ${item.action.label}
-          </button>
-          ` : ""}
         </div>
-
-        <!-- Dot below card on the timeline -->
-        <div class="relative z-10 mt-6 w-3 h-3 rounded-full bg-blue-500 ring-4 ring-white shadow-sm"></div>
       `;
-      return el;
-    }
+      timelineRoot.insertBefore(agentEntry, btnContainer);
+      btnContainer.classList.add('hidden');
 
-    // Render timeline
-    timelineData.forEach((item) => {
-      if (item.type === "metric") {
-        timeline.appendChild(renderMetricCard(item));
+      const reasoningEl = document.getElementById('agent-reasoning');
+      const labelEl = document.getElementById('agent-label');
+      const statusEl = document.getElementById('agent-status');
+      const dotEl = document.getElementById('agent-dot');
+      let fullText = '';
+
+      fetch('/api/investigate', { method: 'POST' }).then((res) => {
+        if (!res.ok || !res.body) { markError('Connection failed'); return; }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function pump() {
+          reader.read().then(({ done, value }) => {
+            if (done) { markComplete(); return; }
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              try { handleEvent(JSON.parse(line.slice(6))); } catch {}
+            }
+            pump();
+          }).catch(() => markError('Stream interrupted'));
+        }
+        pump();
+      }).catch(() => markError('Connection failed'));
+
+      function handleEvent(ev) {
+        if (ev.type === 'meta') {
+          labelEl.textContent = `Analyzing ${ev.ticketCount} tickets\u2026`;
+        } else if (ev.type === 'reasoning_delta') {
+          fullText += ev.text;
+          reasoningEl.textContent = fullText;
+          reasoningEl.scrollTop = reasoningEl.scrollHeight;
+        } else if (ev.type === 'reasoning') {
+          fullText = ev.text;
+          reasoningEl.textContent = fullText;
+          reasoningEl.scrollTop = reasoningEl.scrollHeight;
+        } else if (ev.type === 'done') {
+          markComplete();
+        } else if (ev.type === 'error') {
+          markError(ev.message || 'Agent error');
+        }
+      }
+
+      function markComplete() {
+        statusEl.innerHTML = `
+          <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+          </svg>
+          <span class="text-emerald-400">Complete</span>`;
+        dotEl.classList.remove('bg-amber-500');
+        dotEl.classList.add('bg-emerald-400');
+      }
+
+      function markError(msg) {
+        statusEl.innerHTML = `
+          <svg class="w-3.5 h-3.5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+          </svg>
+          <span class="text-red-400">${msg}</span>`;
+        dotEl.classList.remove('bg-amber-500');
+        dotEl.classList.add('bg-red-400');
       }
     });
   </script>
