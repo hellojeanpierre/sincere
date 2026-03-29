@@ -62,10 +62,7 @@
 
       <!-- Timeline entry: CSAT metric card -->
       <div class="relative z-10 w-full max-w-md">
-        <!-- dot -->
-        <div class="absolute left-1/2 -translate-x-1/2 -top-2 w-4 h-4 rounded-full bg-accent ring-4 ring-surface"></div>
-
-        <div class="mt-6 gradient-border">
+        <div class="gradient-border">
           <div class="bg-card p-6 space-y-4">
             <!-- header row -->
             <div>
@@ -102,24 +99,104 @@
   </div>
 
   <script>
-    document.getElementById('btn-investigate').addEventListener('click', async () => {
+    document.getElementById('btn-investigate').addEventListener('click', () => {
       const btn = document.getElementById('btn-investigate');
       btn.disabled = true;
-      btn.textContent = 'Investigating\u2026';
+      btn.classList.add('opacity-50', 'pointer-events-none');
 
-      try {
-        const res = await fetch('/api/investigate', { method: 'POST' });
+      // Insert agent card into timeline before the button
+      const btnContainer = btn.parentElement;
+      const timelineRoot = btnContainer.parentElement;
+
+      // Deactivate gradient border on previous cards
+      timelineRoot.querySelectorAll('.gradient-border').forEach((el) => {
+        el.classList.remove('gradient-border');
+        el.style.background = 'none';
+        el.style.border = '1px solid #3a2d28';
+        el.style.borderRadius = '1rem';
+      });
+
+      const agentEntry = document.createElement('div');
+      agentEntry.className = 'relative z-10 w-full max-w-md mt-8';
+      agentEntry.innerHTML = `
+        <div class="gradient-border">
+          <div class="bg-card p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <p class="text-xs uppercase tracking-wider text-stone-500">Agent: Historical Analysis</p>
+              <span id="agent-status" class="flex items-center gap-2 text-xs text-stone-500">
+                <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                <span id="agent-label">Connecting...</span>
+              </span>
+            </div>
+            <pre id="agent-reasoning" class="text-sm text-stone-400 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto scrollbar-thin"></pre>
+          </div>
+        </div>
+      `;
+      timelineRoot.insertBefore(agentEntry, btnContainer);
+      btnContainer.classList.add('hidden');
+
+      const reasoningEl = document.getElementById('agent-reasoning');
+      const labelEl = document.getElementById('agent-label');
+      const statusEl = document.getElementById('agent-status');
+      let fullText = '';
+
+      fetch('/api/investigate', { method: 'POST' }).then((res) => {
+        if (!res.ok || !res.body) { markError('Connection failed'); return; }
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        let buffer = '';
+
+        function pump() {
+          reader.read().then(({ done, value }) => {
+            if (done) { markComplete(); return; }
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              try { handleEvent(JSON.parse(line.slice(6))); } catch {}
+            }
+            pump();
+          }).catch(() => markError('Stream interrupted'));
         }
-      } catch (e) {
-        console.error('investigate failed', e);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Investigate historical data';
+        pump();
+      }).catch(() => markError('Connection failed'));
+
+      function handleEvent(ev) {
+        if (ev.type === 'meta') {
+          labelEl.textContent = `Analyzing ${ev.ticketCount} tickets\u2026`;
+        } else if (ev.type === 'reasoning_delta') {
+          fullText += ev.text;
+          reasoningEl.textContent = fullText;
+          reasoningEl.scrollTop = reasoningEl.scrollHeight;
+        } else if (ev.type === 'reasoning') {
+          fullText = ev.text;
+          reasoningEl.textContent = fullText;
+          reasoningEl.scrollTop = reasoningEl.scrollHeight;
+        } else if (ev.type === 'done') {
+          markComplete();
+        } else if (ev.type === 'error') {
+          markError(ev.message || 'Agent error');
+        }
+      }
+
+      function markComplete() {
+        statusEl.innerHTML = `
+          <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+          </svg>
+          <span class="text-emerald-400">Complete</span>`;
+      }
+
+      function markError(msg) {
+        statusEl.innerHTML = `
+          <svg class="w-3.5 h-3.5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+          </svg>
+          <span class="text-red-400">${msg}</span>`;
       }
     });
   </script>
