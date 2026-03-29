@@ -168,10 +168,31 @@
       function handleEvent(ev) {
         if (ev.type === 'meta') {
           labelEl.textContent = `Analyzing ${ev.ticketCount} tickets\u2026`;
-        } else if (ev.type === 'reasoning_delta') {
+        } else if (ev.type === 'thinking_delta') {
+          labelEl.textContent = 'Thinking\u2026';
           fullText += ev.text;
           reasoningEl.textContent = fullText;
           reasoningEl.scrollTop = reasoningEl.scrollHeight;
+        } else if (ev.type === 'reasoning_delta') {
+          if (labelEl.textContent !== 'Writing\u2026') {
+            // Transition from thinking to writing: clear thinking text
+            fullText = '';
+            labelEl.textContent = 'Writing\u2026';
+          }
+          fullText += ev.text;
+          reasoningEl.textContent = fullText;
+          reasoningEl.scrollTop = reasoningEl.scrollHeight;
+        } else if (ev.type === 'tool_start') {
+          labelEl.textContent = ev.tool === 'exec' ? 'Running command\u2026' : `Reading ${ev.args?.path || ev.tool}\u2026`;
+          const preview = ev.tool === 'exec' ? (ev.args?.command || '') : (ev.args?.path || '');
+          if (preview) {
+            const truncated = preview.length > 200 ? preview.slice(0, 200) + '\u2026' : preview;
+            const toolEl = document.createElement('div');
+            toolEl.className = 'text-xs text-stone-500 font-mono mt-2 p-2 bg-stone-900/50 rounded overflow-hidden whitespace-pre-wrap break-all';
+            toolEl.textContent = (ev.tool === 'exec' ? '$ ' : '') + truncated;
+            reasoningEl.appendChild(toolEl);
+            reasoningEl.scrollTop = reasoningEl.scrollHeight;
+          }
         } else if (ev.type === 'reasoning') {
           fullText = ev.text;
           reasoningEl.textContent = fullText;

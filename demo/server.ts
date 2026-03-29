@@ -51,8 +51,16 @@ function investigateStream(): Response {
       }, 5000);
 
       const unsub = agent.subscribe((e) => {
-        if (e.type === "message_update" && e.assistantMessageEvent.type === "text_delta") {
-          send({ type: "reasoning_delta", text: e.assistantMessageEvent.delta });
+        if (e.type === "message_update") {
+          if (e.assistantMessageEvent.type === "text_delta") {
+            send({ type: "reasoning_delta", text: e.assistantMessageEvent.delta });
+          }
+          if (e.assistantMessageEvent.type === "thinking_delta") {
+            send({ type: "thinking_delta", text: e.assistantMessageEvent.delta });
+          }
+        }
+        if (e.type === "tool_execution_start") {
+          send({ type: "tool_start", tool: e.toolName, args: e.args });
         }
         if (e.type === "message_end" && "role" in e.message && e.message.role === "assistant") {
           const msg = e.message as AssistantMessage;
