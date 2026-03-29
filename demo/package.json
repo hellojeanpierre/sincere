@@ -1,0 +1,7 @@
+{
+  "name": "sincere-demo",
+  "private": true,
+  "scripts": {
+    "dev": "bun run server.ts"
+  }
+}
