@@ -46,6 +46,10 @@ function investigateStream(): Response {
 
       send({ type: "meta", ticketCount: tickets.length });
 
+      const keepalive = setInterval(() => {
+        controller.enqueue(encoder.encode(": keepalive\n\n"));
+      }, 5000);
+
       const unsub = agent.subscribe((e) => {
         if (e.type === "message_update" && e.assistantMessageEvent.type === "text_delta") {
           send({ type: "reasoning_delta", text: e.assistantMessageEvent.delta });
@@ -69,6 +73,7 @@ function investigateStream(): Response {
       } catch (err) {
         send({ type: "error", message: err instanceof Error ? err.message : String(err) });
       } finally {
+        clearInterval(keepalive);
         unsub();
         controller.close();
       }
@@ -86,6 +91,7 @@ function investigateStream(): Response {
 
 const server = Bun.serve({
   port: 3001,
+  idleTimeout: 120,
   async fetch(req) {
     const url = new URL(req.url);
 
