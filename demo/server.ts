@@ -7,10 +7,8 @@ const DATA_PATH = join(import.meta.dir, "../data/pintest-v2/smoke-tickets/smoke_
 const PROMPT_PATH = join(import.meta.dir, "../src/operator.md");
 const STATIC_DIR = import.meta.dir;
 
-// Load ticket data at startup
-const ticketLines = (await Bun.file(DATA_PATH).text()).trim().split("\n");
-const tickets = ticketLines.map((line) => JSON.parse(line));
-console.log(`Loaded ${tickets.length} tickets from smoke_tickets.jsonl`);
+// Count tickets at startup (UI needs the count, agent reads the file itself)
+const ticketCount = (await Bun.file(DATA_PATH).text()).trim().split("\n").length;
 
 function sseStream(): Response {
   const stream = new ReadableStream({
@@ -44,7 +42,7 @@ function investigateStream(): Response {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       };
 
-      send({ type: "meta", ticketCount: tickets.length });
+      send({ type: "meta", ticketCount });
 
       const keepalive = setInterval(() => {
         controller.enqueue(encoder.encode(": keepalive\n\n"));
@@ -73,9 +71,8 @@ function investigateStream(): Response {
       });
 
       try {
-        const ticketSummary = JSON.stringify(tickets, null, 2);
         await agent.prompt(
-          `Investigate the following ${tickets.length} support tickets and identify root causes for low resolution rates.\n\n${ticketSummary}`,
+          `Available data (paths relative to project root):\n- data/pintest-v2/smoke-tickets/smoke_tickets.jsonl — ticket snapshots\n- data/pintest-v2/smoke-tickets/smoke_events.jsonl — Zendesk event audit trail\n- data/pintest-v2/sop/ — SOP files (use 00_index.md as entry point)`,
         );
         send({ type: "done" });
       } catch (err) {
