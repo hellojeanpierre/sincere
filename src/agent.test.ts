@@ -122,7 +122,7 @@ describe("transformContext", () => {
         const text = tr.content[0];
         if (text.type === "text") {
           expect(text.text).toContain("x".repeat(2000));
-          expect(text.text).toContain("[Full output:");
+          expect(text.text).toContain("[Full output persisted to");
           expect(text.text.length).toBeLessThan(2200);
         }
       }
@@ -243,7 +243,7 @@ describe("transformContext", () => {
       if (tr.role === "toolResult") {
         const text = tr.content[0];
         if (text.type === "text") {
-          expect(text.text).toContain("[Full output:");
+          expect(text.text).toContain("[Full output persisted to");
           expect(text.text.length).toBeLessThan(2200);
         }
       }

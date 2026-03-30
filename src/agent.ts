@@ -38,7 +38,6 @@ export function makeTransformContext(sessionDir: string) {
 
     return Promise.all(messages.map(async (msg, i) => {
       if (msg.role !== "toolResult" || msg.isError) return msg;
-      if (!("toolCallId" in msg) || !msg.toolCallId) return msg;
       const trMsg = msg as ToolResultMessage;
 
       if (ages[i] > 8) {
@@ -49,7 +48,9 @@ export function makeTransformContext(sessionDir: string) {
       const totalLen = texts.reduce((sum, b) => sum + b.text.length, 0);
 
       // Microcompaction: persist full output to disk, replace with 2k preview.
-      if (totalLen > 10_000) {
+      // Requires a valid toolCallId for the filename; fall through to age-based
+      // compaction if missing.
+      if (totalLen > 10_000 && trMsg.toolCallId) {
         const joined = texts.map(b => b.text).join("\n");
         const safeId = trMsg.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_");
         const path = `${sessionDir}/${safeId}.txt`;
@@ -65,7 +66,7 @@ export function makeTransformContext(sessionDir: string) {
           return {
             ...trMsg,
             content: [
-              { type: "text" as const, text: preview + `\n\n[Full output: ${path}]` },
+              { type: "text" as const, text: preview + `\n\n[Full output persisted to ${path} — use read tool to access]` },
               ...nonText,
             ],
           };
