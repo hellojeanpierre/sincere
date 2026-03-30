@@ -20,7 +20,7 @@ const agent = createAgent({
   thinkingLevel: "high",
 });
 
-subscribeTrace(agent, "operator");
+const _unsubTrace = subscribeTrace(agent, "operator");
 
 agent.subscribe((event) => {
   switch (event.type) {

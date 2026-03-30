@@ -1,11 +1,13 @@
 import { mkdirSync, appendFileSync, symlinkSync, unlinkSync, existsSync } from "fs";
-import { resolve } from "path";
+import { resolve, basename, dirname } from "path";
 import type { Agent } from "@mariozechner/pi-agent-core";
 import { logger } from "./logger.ts";
 
 export type TraceSource = "operator" | "demo";
 
-const tracesDir = resolve("data/traces");
+// Anchor to repo root (src/lib/ → ../../data/traces) so traces land in the
+// right place regardless of the caller's cwd.
+const tracesDir = resolve(dirname(import.meta.path), "../../data/traces");
 
 function formatEvent(event: Parameters<Parameters<Agent["subscribe"]>[0]>[0], startTime: number): string | null {
   switch (event.type) {
@@ -42,7 +44,7 @@ function formatEvent(event: Parameters<Parameters<Agent["subscribe"]>[0]>[0], st
       const result = event.result;
       const text = result?.content
         ?.filter((b: { type: string }): b is { type: "text"; text: string } => b.type === "text")
-        .map((b) => b.text)
+        .map((b: { type: "text"; text: string }) => b.text)
         .join("\n") ?? "(no text content)";
       const prefix = event.isError ? "[ERROR] " : "";
       return `## Tool Result: ${event.toolName}\n\n${prefix}${text}`;
@@ -59,6 +61,7 @@ export function subscribeTrace(agent: Agent, source: TraceSource): () => void {
   let startTime = 0;
 
   function traceAppend(content: string) {
+    if (!traceFile) return;
     try {
       appendFileSync(traceFile, content + "\n\n");
     } catch (err) {
@@ -83,7 +86,7 @@ export function subscribeTrace(agent: Agent, source: TraceSource): () => void {
     if (event.type === "agent_end") {
       const latestLink = resolve(tracesDir, "latest.md");
       if (existsSync(latestLink)) unlinkSync(latestLink);
-      symlinkSync(traceFile, latestLink);
+      symlinkSync(basename(traceFile), latestLink);
     }
   });
 }
