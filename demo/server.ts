@@ -5,6 +5,7 @@ import type { AssistantMessage } from "@mariozechner/pi-ai";
 
 const DATA_PATH = join(import.meta.dir, "../data/pintest-v2/smoke-tickets/smoke_tickets.jsonl");
 const PROMPT_PATH = join(import.meta.dir, "../src/operator.md");
+const SAMPLE_FINDINGS_PATH = join(import.meta.dir, "sample_findings.txt");
 const STATIC_DIR = import.meta.dir;
 
 // Count tickets at startup (UI needs the count, agent reads the file itself)
@@ -15,6 +16,37 @@ function sseStream(): Response {
     start(controller) {
       // Empty SSE stream — close immediately
       controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
+
+function skipStream(): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: Record<string, unknown>) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+      };
+
+      send({ type: "meta", ticketCount });
+
+      try {
+        const text = await Bun.file(SAMPLE_FINDINGS_PATH).text();
+        send({ type: "reasoning", text });
+        send({ type: "done" });
+      } catch (err) {
+        send({ type: "error", message: err instanceof Error ? err.message : String(err) });
+      } finally {
+        controller.close();
+      }
     },
   });
 
@@ -95,7 +127,7 @@ function investigateStream(): Response {
 }
 
 const server = Bun.serve({
-  port: 3001,
+  port: Number(process.env.PORT || 3001),
   idleTimeout: 120,
   async fetch(req) {
     const url = new URL(req.url);
@@ -103,6 +135,9 @@ const server = Bun.serve({
     // API routes
     if (req.method === "POST" && url.pathname === "/api/investigate") {
       try {
+        if (url.searchParams.get("skip") === "true") {
+          return skipStream();
+        }
         return investigateStream();
       } catch (err) {
         console.error("investigate failed:", err);
