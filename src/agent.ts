@@ -1,4 +1,4 @@
-import { readFileSync, mkdirSync, globSync } from "fs";
+import { readFileSync, globSync } from "fs";
 import { resolve, basename, relative, dirname } from "path";
 import { writeFile, mkdir } from "fs/promises";
 import { Agent } from "@mariozechner/pi-agent-core";
@@ -11,45 +11,19 @@ import { logger } from "./lib/logger.ts";
 import { readTool } from "./tools/read.ts";
 import { resolveConfig } from "./lib/config.ts";
 
-function ageBasedPreview(msg: ToolResultMessage, texts: TextContent[], totalLen: number): AgentMessage {
-  const joined = texts.map(b => b.text).join("\n");
-  const preview = joined.length <= 500
-    ? joined
-    : joined.slice(0, 300) + "\n…\n" + joined.slice(-200);
-  const nonText = msg.content.filter(b => b.type !== "text");
-  return { ...msg, content: [{ type: "text" as const, text: `[${msg.toolName}: ${totalLen} chars]\n${preview}` }, ...nonText] };
-}
-
-// Known simplification: age is measured in user turns, so stale pruning only
-// activates in multi-turn conversations. Single-prompt runs never prune.
-// Known design choice: trace logger sees full results (via tool_execution_end
-// events) while the LLM sees compressed stubs. This divergence is intentional —
-// traces are the audit log, context projection is for token efficiency.
+// Microcompaction: persist oversized tool results to disk, keep a 2k preview
+// inline so the Operator can decide whether to read the full output.
 export function makeTransformContext(sessionDir: string) {
   let dirReady = false;
 
   return async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
-    const ages = new Array<number>(messages.length);
-    let userCount = 0;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "user") userCount++;
-      ages[i] = userCount;
-    }
-
-    return Promise.all(messages.map(async (msg, i) => {
+    return Promise.all(messages.map(async (msg) => {
       if (msg.role !== "toolResult" || msg.isError) return msg;
       const trMsg = msg as ToolResultMessage;
-
-      if (ages[i] > 8) {
-        return { ...msg, content: [{ type: "text" as const, text: `[stale result: ${trMsg.toolName}, ${ages[i]} turns ago]` }] };
-      }
 
       const texts = trMsg.content.filter((b): b is TextContent => b.type === "text");
       const totalLen = texts.reduce((sum, b) => sum + b.text.length, 0);
 
-      // Microcompaction: persist full output to disk, replace with 2k preview.
-      // Requires a valid toolCallId for the filename; fall through to age-based
-      // compaction if missing.
       if (totalLen > 10_000 && trMsg.toolCallId) {
         const joined = texts.map(b => b.text).join("\n");
         const safeId = trMsg.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -81,12 +55,6 @@ export function makeTransformContext(sessionDir: string) {
           };
         }
       }
-
-      // Age-based compaction: fresh exec results (age <= 2) get 10k chars
-      // to prevent the Operator from re-querying fragmented output. Ages 3-8
-      // fall to the default 3k threshold; age > 8 is already stubbed above.
-      const limit = trMsg.toolName === "exec" && ages[i] <= 2 ? 10_000 : 3_000;
-      if (totalLen > limit) return ageBasedPreview(trMsg, texts, totalLen);
 
       return msg;
     }));
