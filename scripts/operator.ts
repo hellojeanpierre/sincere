@@ -1,8 +1,8 @@
-import { mkdirSync, appendFileSync, symlinkSync, unlinkSync, existsSync } from "fs";
 import { resolve } from "path";
 import { createAgent } from "../src/agent.ts";
 import { execTool } from "../src/tools/exec.ts";
 import { logger } from "../src/lib/logger.ts";
+import { subscribeTrace } from "../src/lib/trace.ts";
 
 if (import.meta.main) {
   runOperator().catch((err) => {
@@ -20,86 +20,9 @@ const agent = createAgent({
   thinkingLevel: "high",
 });
 
-// --- Trace logging to markdown ---
-const tracesDir = resolve("data/traces");
-mkdirSync(tracesDir, { recursive: true });
-
-let traceTimestamp = "";
-let traceFile = "";
-let traceStartTime = Date.now();
-
-function traceAppend(content: string) {
-  try {
-    appendFileSync(traceFile, content + "\n\n");
-  } catch (err) {
-    logger.error({ err, traceFile }, "failed to write trace");
-  }
-}
-
-function formatEvent(event: Parameters<Parameters<typeof agent.subscribe>[0]>[0]): string | null {
-  switch (event.type) {
-    case "agent_start":
-      return null; // handled separately to write H1
-    case "agent_end": {
-      const durationSec = ((Date.now() - traceStartTime) / 1000).toFixed(1);
-      return `## Investigation Ended\n\nDuration: ${durationSec}s`;
-    }
-    case "message_end":
-      if (event.message.role === "assistant") {
-        const parts: string[] = [];
-        for (const b of event.message.content) {
-          if (b.type === "thinking" && b.thinking) {
-            parts.push(`<details><summary>Thinking</summary>\n\n${b.thinking}\n\n</details>`);
-          } else if (b.type === "text") {
-            parts.push(b.text);
-          }
-        }
-        if (parts.length > 0) {
-          return `## Assistant\n\n${parts.join("\n\n")}`;
-        }
-      }
-      return null;
-    case "tool_execution_start": {
-      const args = event.args as Record<string, unknown>;
-      const yamlish = Object.entries(args)
-        .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
-        .join("\n");
-      return `## Tool Call: ${event.toolName}\n\n${yamlish}`;
-    }
-    case "tool_execution_end": {
-      const result = event.result;
-      const text = result?.content
-        ?.filter((b: { type: string }): b is { type: "text"; text: string } => b.type === "text")
-        .map((b) => b.text)
-        .join("\n") ?? "(no text content)";
-      const prefix = event.isError ? "[ERROR] " : "";
-      return `## Tool Result: ${event.toolName}\n\n${prefix}${text}`;
-    }
-    default:
-      return null;
-  }
-}
+const _unsubTrace = subscribeTrace(agent, "operator");
 
 agent.subscribe((event) => {
-  // Trace logging
-  if (event.type === "agent_start") {
-    traceStartTime = Date.now();
-    traceTimestamp = new Date().toISOString();
-    traceFile = resolve(tracesDir, `${traceTimestamp.replaceAll(":", "-")}.md`);
-    traceAppend(`# Investigation Trace — ${traceTimestamp}`);
-  }
-  const formatted = formatEvent(event);
-  if (formatted) {
-    traceAppend(formatted);
-  }
-  if (event.type === "agent_end") {
-    // Symlink latest.md
-    const latestLink = resolve(tracesDir, "latest.md");
-    if (existsSync(latestLink)) unlinkSync(latestLink);
-    symlinkSync(traceFile, latestLink);
-  }
-
-  // Existing pino logging
   switch (event.type) {
     case "agent_start":
       logger.info("agent started");
