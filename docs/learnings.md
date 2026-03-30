@@ -1,5 +1,10 @@
 # Learnings
 
+## 2026-03-30 — Shed raw output at generation time, not at compaction time
+
+Claude Code's microcompaction system persists tool results >50K chars to disk immediately, replacing inline content with a file path + 2KB preview. The threshold was lowered from 100K to 50K after observing quality gains. The design rationale is three-fold: (1) large inline results degrade reasoning quality on all context through attention dilution, not just by consuming space; (2) compaction summaries are lossy — a grep result summarized as "47 errors across 12 files" loses the specific detail needed two turns later; (3) compaction requires its own context headroom to run, so bloated context can prevent the cleanup pass entirely. The file-on-disk approach preserves full output for selective re-reading while keeping the active context clean for reasoning.
+Implication: Observer verdicts should shed raw evidence to structured storage at write time, not carry it inline hoping compaction preserves the right details.
+
 ## 2026-03-30 — Uniform tool-output truncation causes agent spiraling, not laziness
 
 The Operator's ~50-call spiral was not laziness. transformContext crushed fresh exec output (15,847 chars → 500-char preview at the 3000-char threshold), so the agent re-queried in smaller slices. Traces confirmed correct scripts — output destroyed before reasoning. Fix: age-aware threshold in agent.ts — fresh exec results (≤2 turns) get 10,000 chars; older results keep 3,000. Implication: When agent behavior looks lazy, check infra constraints before blaming the model.

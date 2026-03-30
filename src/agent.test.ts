@@ -1,22 +1,11 @@
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { existsSync, rmSync, readdirSync, readFileSync } from "fs";
+import { describe, test, expect } from "bun:test";
+import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
-import { mkdtemp } from "fs/promises";
-import { tmpdir } from "os";
 import { makeTransformContext, loadSystemPrompt } from "./agent.ts";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
-let tmpDir: string;
-let transformContext: ReturnType<typeof makeTransformContext>;
-
-beforeAll(async () => {
-  tmpDir = await mkdtemp(resolve(tmpdir(), "tc-test-"));
-  transformContext = makeTransformContext(tmpDir);
-});
-
-afterAll(() => {
-  rmSync(tmpDir, { recursive: true, force: true });
-});
+const TEST_DIR = resolve(import.meta.dirname, "..", "data/test-tool-results");
+const transformContext = makeTransformContext(TEST_DIR);
 
 function userMsg(text: string): AgentMessage {
   return { role: "user", content: [{ type: "text", text }] };
@@ -34,10 +23,10 @@ function assistantMsg(text: string): AgentMessage {
   };
 }
 
-function toolResult(toolName: string, text: string, opts?: { isError?: boolean; extraContent?: any[] }): AgentMessage {
+function toolResult(toolName: string, text: string, opts?: { isError?: boolean; extraContent?: any[]; toolCallId?: string }): AgentMessage {
   return {
     role: "toolResult",
-    toolCallId: "tc_" + Math.random().toString(36).slice(2),
+    toolCallId: opts?.toolCallId ?? "tc_" + Math.random().toString(36).slice(2),
     toolName,
     content: [
       { type: "text" as const, text },
@@ -65,34 +54,11 @@ describe("transformContext", () => {
       }
     });
 
-    test("results over 10k get persisted to disk with 2k preview", async () => {
-      const messages: AgentMessage[] = [
-        userMsg("go"),
-        toolResult("exec", "x".repeat(15_000)),
-      ];
-      const result = await transformContext(messages);
-      const tr = result[1];
-      if (tr.role === "toolResult") {
-        const text = tr.content[0];
-        if (text.type === "text") {
-          expect(text.text.length).toBeLessThan(2_200); // 2k preview + pointer
-          expect(text.text).toContain("[Full output persisted to");
-          expect(text.text).toContain("use read tool to access]");
-        }
-      }
-
-      // Verify file was written to disk
-      const files = readdirSync(tmpDir).filter(f => f.endsWith(".txt"));
-      expect(files.length).toBeGreaterThan(0);
-      const written = readFileSync(resolve(tmpDir, files[files.length - 1]), "utf-8");
-      expect(written).toBe("x".repeat(15_000));
-    });
-
-    test("preserves non-text content blocks during microcompaction", async () => {
+    test("preserves non-text content blocks when microcompacting", async () => {
       const imageBlock = { type: "image" as const, source: { type: "base64" as const, media_type: "image/png" as const, data: "abc" } };
       const messages: AgentMessage[] = [
         userMsg("go"),
-        toolResult("read", "x".repeat(12_000), { extraContent: [imageBlock] }),
+        toolResult("read", "x".repeat(11_000), { extraContent: [imageBlock] }),
       ];
 
       const result = await transformContext(messages);
@@ -104,8 +70,8 @@ describe("transformContext", () => {
       }
     });
 
-    test("preview is first 2000 chars of joined text", async () => {
-      const fullText = "A".repeat(2_000) + "B".repeat(10_000);
+    test("microcompaction persists full text and keeps 2k preview", async () => {
+      const fullText = "x".repeat(12_000);
       const messages: AgentMessage[] = [
         userMsg("go"),
         toolResult("read", fullText),
@@ -116,8 +82,44 @@ describe("transformContext", () => {
       if (tr.role === "toolResult") {
         const text = tr.content[0];
         if (text.type === "text") {
-          expect(text.text.startsWith("A".repeat(2_000))).toBe(true);
-          expect(text.text).not.toContain("B".repeat(100));
+          expect(text.text).toContain("x".repeat(2_000));
+          expect(text.text).toContain("[Full output persisted to");
+          expect(text.text.length).toBeLessThan(2_200);
+        }
+      }
+    });
+
+    test("persisted file contains full original text", async () => {
+      const callId = "tc_persist_check_" + Date.now();
+      const fullText = "y".repeat(12_000);
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("read", fullText, { toolCallId: callId }),
+      ];
+
+      await transformContext(messages);
+
+      const filePath = resolve(TEST_DIR, `${callId}.txt`);
+      expect(existsSync(filePath)).toBe(true);
+      const written = readFileSync(filePath, "utf-8");
+      expect(written).toBe(fullText);
+    });
+
+    test("write failure still truncates to preview", async () => {
+      const failCtx = makeTransformContext("/dev/null/impossible/path");
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("exec", "z".repeat(15_000)),
+      ];
+
+      const result = await failCtx(messages);
+      const tr = result[1];
+      if (tr.role === "toolResult") {
+        const text = tr.content[0];
+        if (text.type === "text") {
+          expect(text.text.length).toBeLessThan(2_200);
+          expect(text.text).toContain("z".repeat(2_000));
+          expect(text.text).toContain("[Full output lost");
         }
       }
     });
