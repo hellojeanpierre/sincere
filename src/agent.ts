@@ -32,7 +32,11 @@ export const transformContext = async (messages: AgentMessage[]): Promise<AgentM
 
     const texts = msg.content.filter((b): b is TextContent => b.type === "text");
     const totalLen = texts.reduce((sum, b) => sum + b.text.length, 0);
-    if (totalLen <= 3000) return msg;
+    // Fresh exec results (age <= 2: current + previous turn) get 10k chars
+    // to prevent the Operator from re-querying fragmented output. Ages 3-8
+    // fall to the default 3k threshold; age > 8 is already stubbed above.
+    const limit = msg.toolName === "exec" && ages[i] <= 2 ? 10_000 : 3_000;
+    if (totalLen <= limit) return msg;
 
     const joined = texts.map(b => b.text).join("\n");
     const preview = joined.length <= 500

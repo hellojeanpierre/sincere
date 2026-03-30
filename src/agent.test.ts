@@ -189,6 +189,94 @@ describe("transformContext", () => {
       }
     });
   });
+
+  describe("age-aware exec threshold", () => {
+    test("fresh exec (age 1) under 10k passes through unchanged", async () => {
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("exec", "x".repeat(5000)),
+      ];
+      const result = await transformContext(messages);
+      const tr = result[1];
+      if (tr.role === "toolResult") {
+        const text = tr.content[0];
+        if (text.type === "text") {
+          expect(text.text).toBe("x".repeat(5000));
+        }
+      }
+    });
+
+    test("fresh exec (age 1) over 10k gets preview", async () => {
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("exec", "x".repeat(12000)),
+      ];
+      const result = await transformContext(messages);
+      const tr = result[1];
+      if (tr.role === "toolResult") {
+        const text = tr.content[0];
+        if (text.type === "text") {
+          expect(text.text).toContain("[exec: 12000 chars]");
+          expect(text.text.length).toBeLessThan(600);
+        }
+      }
+    });
+
+    test("older exec (age 3) truncates at 3k threshold", async () => {
+      // 3 user messages after the exec result → age 3
+      const messages: AgentMessage[] = [
+        userMsg("q0"),
+        toolResult("exec", "x".repeat(5000)),
+        userMsg("q1"),
+        assistantMsg("a1"),
+        userMsg("q2"),
+        assistantMsg("a2"),
+        userMsg("q3"),
+        assistantMsg("a3"),
+      ];
+      const result = await transformContext(messages);
+      const tr = result[1];
+      if (tr.role === "toolResult") {
+        const text = tr.content[0];
+        if (text.type === "text") {
+          expect(text.text).toContain("[exec: 5000 chars]");
+        }
+      }
+    });
+
+    test("fresh read (age 1) still truncates at 3k threshold", async () => {
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("read", "x".repeat(5000)),
+      ];
+      const result = await transformContext(messages);
+      const tr = result[1];
+      if (tr.role === "toolResult") {
+        const text = tr.content[0];
+        if (text.type === "text") {
+          expect(text.text).toContain("[read: 5000 chars]");
+        }
+      }
+    });
+
+    test("exec at boundary age 2 still gets 10k budget", async () => {
+      // 2 user messages after the exec result → age 2 (boundary of <= 2)
+      const messages: AgentMessage[] = [
+        userMsg("q0"),
+        toolResult("exec", "x".repeat(5000)),
+        userMsg("q1"),
+        assistantMsg("a1"),
+      ];
+      const result = await transformContext(messages);
+      const tr = result[1];
+      if (tr.role === "toolResult") {
+        const text = tr.content[0];
+        if (text.type === "text") {
+          expect(text.text).toBe("x".repeat(5000));
+        }
+      }
+    });
+  });
 });
 
 describe("loadSystemPrompt", () => {
