@@ -68,7 +68,7 @@
             <div>
               <p class="text-xs uppercase tracking-wider text-stone-500 mb-1">Customer Satisfaction</p>
               <div class="flex items-baseline gap-3">
-                <span class="text-4xl font-bold text-stone-100">82%</span>
+                <span class="text-4xl font-bold text-stone-100">39%</span>
                 <span class="text-sm text-stone-500">target 85%</span>
               </div>
             </div>
@@ -114,6 +114,7 @@
         el.style.background = 'none';
         el.style.border = '1px solid #3a2d28';
         el.style.borderRadius = '1rem';
+        el.querySelector(':scope > div').style.borderRadius = 'calc(1rem - 1px)';
       });
 
       const agentEntry = document.createElement('div');
