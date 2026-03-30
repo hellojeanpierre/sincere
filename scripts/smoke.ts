@@ -32,13 +32,13 @@ const allProcessed = new Promise<void>((r) => {
   resolveAll = r;
 });
 
-const { handler } = createSessionHandler(() =>
+const { handler } = createSessionHandler((workItemId) =>
   createAgent({
     promptPath: resolve(import.meta.dirname, "../src/observer.md"),
     model: process.env.MODEL || "claude-haiku-4-5-20251001",
     tools: [],
     thinkingLevel: "off",
-  })
+  }, workItemId)
 );
 const lane = createLane(async (body, workItemId) => {
   try {

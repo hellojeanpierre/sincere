@@ -1,51 +1,65 @@
 import { readFileSync, globSync } from "fs";
 import { resolve, basename, relative, dirname } from "path";
+import { writeFile, mkdir } from "fs/promises";
 import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
 import type { AgentTool, AgentMessage } from "@mariozechner/pi-agent-core";
-import type { TextContent } from "@mariozechner/pi-ai";
+import type { TextContent, ToolResultMessage } from "@mariozechner/pi-ai";
 import type { Handler } from "./lane.ts";
 import { intake } from "./intake.ts";
 import { logger } from "./lib/logger.ts";
 import { readTool } from "./tools/read.ts";
 import { resolveConfig } from "./lib/config.ts";
 
-// Known simplification: age is measured in user turns, so stale pruning only
-// activates in multi-turn conversations. Single-prompt runs never prune.
-// Known design choice: trace logger sees full results (via tool_execution_end
-// events) while the LLM sees compressed stubs. This divergence is intentional —
-// traces are the audit log, context projection is for token efficiency.
-export const transformContext = async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
-  const ages = new Array<number>(messages.length);
-  let userCount = 0;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === "user") userCount++;
-    ages[i] = userCount;
-  }
+// Microcompaction: persist oversized tool results to disk, keep a 2k preview
+// inline so the Operator can decide whether to read the full output.
+export function makeTransformContext(sessionDir: string) {
+  let dirReady = false;
 
-  return messages.map((msg, i) => {
-    if (msg.role !== "toolResult" || msg.isError) return msg;
+  return async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
+    return Promise.all(messages.map(async (msg) => {
+      if (msg.role !== "toolResult" || msg.isError) return msg;
+      const trMsg = msg as ToolResultMessage;
 
-    if (ages[i] > 8) {
-      return { ...msg, content: [{ type: "text" as const, text: `[stale result: ${msg.toolName}, ${ages[i]} turns ago]` }] };
-    }
+      const texts = trMsg.content.filter((b): b is TextContent => b.type === "text");
+      const totalLen = texts.reduce((sum, b) => sum + b.text.length, 0);
 
-    const texts = msg.content.filter((b): b is TextContent => b.type === "text");
-    const totalLen = texts.reduce((sum, b) => sum + b.text.length, 0);
-    // Fresh exec results (age <= 2: current + previous turn) get 10k chars
-    // to prevent the Operator from re-querying fragmented output. Ages 3-8
-    // fall to the default 3k threshold; age > 8 is already stubbed above.
-    const limit = msg.toolName === "exec" && ages[i] <= 2 ? 10_000 : 3_000;
-    if (totalLen <= limit) return msg;
+      if (totalLen > 10_000 && trMsg.toolCallId) {
+        const joined = texts.map(b => b.text).join("\n");
+        const safeId = trMsg.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_");
+        const path = `${sessionDir}/${safeId}.txt`;
+        const nonText = trMsg.content.filter(b => b.type !== "text");
+        const preview = joined.slice(0, 2_000);
+        try {
+          if (!dirReady) {
+            await mkdir(sessionDir, { recursive: true });
+            dirReady = true;
+          }
+          await writeFile(path, joined);
+          logger.info({ toolCallId: trMsg.toolCallId, toolName: trMsg.toolName, chars: totalLen, path }, "microcompaction persisted");
+          return {
+            ...trMsg,
+            content: [
+              { type: "text" as const, text: preview + `\n\n[Full output persisted to ${path} — use read tool to access]` },
+              ...nonText,
+            ],
+          };
+        } catch (err) {
+          logger.error({ toolCallId: trMsg.toolCallId, err }, "microcompaction write failed, truncating without persistence");
+          return {
+            ...trMsg,
+            content: [
+              { type: "text" as const, text: preview + `\n\n[Full output lost — persistence failed]` },
+              ...nonText,
+            ],
+          };
+        }
+      }
 
-    const joined = texts.map(b => b.text).join("\n");
-    const preview = joined.length <= 500
-      ? joined
-      : joined.slice(0, 300) + "\n…\n" + joined.slice(-200);
-    const nonText = msg.content.filter(b => b.type !== "text");
-    return { ...msg, content: [{ type: "text" as const, text: `[${msg.toolName}: ${totalLen} chars]\n${preview}` }, ...nonText] };
-  });
-};
+      return msg;
+    }));
+  };
+}
 
 function parseSkillFrontmatter(f: string): { name: string; description: string; file: string } | null {
   let raw: string;
@@ -100,11 +114,16 @@ export interface AgentOptions {
   thinkingLevel?: "off" | "low" | "medium" | "high";
 }
 
-export function createAgent(opts: AgentOptions): Agent {
+export function createAgent(opts: AgentOptions, workItemId?: string): Agent {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY not set");
   }
+
+  const srcDir = dirname(opts.promptPath);
+  const sessionDir = workItemId
+    ? resolve(srcDir, "..", "data/sessions", workItemId.replace(/[^a-zA-Z0-9_-]/g, "_"), "tool-results")
+    : resolve(srcDir, "..", "data/tool-results");
 
   const systemPrompt = loadSystemPrompt(opts.promptPath);
   const model = getModel("anthropic", opts.model);
@@ -113,7 +132,7 @@ export function createAgent(opts: AgentOptions): Agent {
   return new Agent({
     streamFn: streamSimple,
     getApiKey: () => apiKey,
-    transformContext,
+    transformContext: makeTransformContext(sessionDir),
     initialState: {
       systemPrompt,
       model,
@@ -123,13 +142,13 @@ export function createAgent(opts: AgentOptions): Agent {
   });
 }
 
-export function createSessionHandler(createAgentFn: () => Agent) {
+export function createSessionHandler(createAgentFn: (workItemId: string) => Agent) {
   const store = new Map<string, AgentMessage[]>();
 
   const handler: Handler = async (body, workItemId) => {
     logger.info({ workItemId }, "handler start");
     const saved = store.get(workItemId) ?? [];
-    const agent = createAgentFn();
+    const agent = createAgentFn(workItemId);
 
     if (saved.length > 0) {
       agent.replaceMessages(saved);
