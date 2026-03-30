@@ -1,5 +1,8 @@
 # Learnings
 
+## 2026-03-30 — Tool return shape, not prompt instructions, determines whether agents use programmatic analysis — and skipping code actively degrades reasoning at any dataset size
+ 
+When structured data fits in context, models rationally skip code and reason over raw records directly ("Coding Agents are Effective Long-Context Processors," arXiv 2603.20432). But this shortcut is actively harmful: input length alone degrades reasoning even when all evidence is retrievable and optimally positioned ("Context Length Alone Hurts LLM Performance Despite Perfect Retrieval," arXiv 2510.05381), superseding the older "Lost in the Middle" positional finding. The fix is environmental, not behavioral. Manus, Google ADK, and the CodeAct paper (ICML 2024, up to 20% higher success with code actions) all converge: tool API shape is a stronger behavioral attractor than skill instructions. A `read` tool that returns full file contents invites inline reasoning; one that returns a manifest (count, schema, sample rows, file path) forces `exec`. Design rule: `read` on a JSONL returns metadata by default, accepts an optional `record_id` for single-record retrieval. This encodes "aggregate to find patterns, read individuals to find causes" into the tool contract rather than relying on the prompt to override the model's preference for the lazy path.
 
 ## 2026-03-26 — Analytical guidance in skills shifts agent strategy from mechanism-finding to dimension-slicing, degrading performance with each iteration
 
