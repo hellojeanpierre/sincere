@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Demo Server",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "demo/server.ts"],
+      "port": 3001,
+      "autoPort": true
+    }
+  ]
+}
