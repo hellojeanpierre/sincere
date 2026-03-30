@@ -1,5 +1,8 @@
 # Learnings
 
+## 2026-03-30 — LLMs don't naturally formulate good BM25 queries; environment constraints beat reasoning instructions for retrieval routing
+LLMs produce natural language queries but BM25 requires lexical overlap — vocabulary mismatch is a known failure mode (Zilliz 2024, Elasticsearch 2026). Entire research subfields exist to compensate: query rewriting, query expansion, HyDE (Anyscale docs). Elasticsearch tested progressively explicit prompts for keyword extraction and found only the most prescriptive prompt improved retrieval, and marginally (+1pt). This confirms our own finding: prescriptive reasoning instructions are weak levers. For document retrieval routing, constraining what read returns (environment design) is more reliable than instructing the agent how to search. Implication: prefer mechanical constraints over skill-level retrieval guidance.
+
 ## 2026-03-30 — BM25 is sufficient for in-agent text-to-text matching without embeddings or vector infrastructure
 
 rank_bm25 (Python, zero-dependency) returns ranked scores for every document in a corpus — giving relative confidence, multi-match overlap, and low-score detection as a positive finding ("no matching document exists"). Google's "Sufficient Context" (ICLR 2025) validates that detecting insufficient context is as valuable as retrieval itself. Runs inside a single exec call with no infrastructure beyond what the agent already has.
