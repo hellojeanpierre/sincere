@@ -93,31 +93,26 @@ describe("transformContext", () => {
     });
   });
 
-  describe("reshaping large results", () => {
-    test("preserves non-text content blocks", async () => {
+  describe("microcompaction", () => {
+    test("preserves non-text content blocks when microcompacting", async () => {
       const imageBlock = { type: "image" as const, source: { type: "base64" as const, media_type: "image/png" as const, data: "abc" } };
       const messages: AgentMessage[] = [
         userMsg("go"),
-        toolResult("read", "x".repeat(4000), { extraContent: [imageBlock] }),
+        toolResult("read", "x".repeat(11000), { extraContent: [imageBlock] }),
       ];
 
       const result = await transformContext(messages);
       const tr = result[1];
       if (tr.role === "toolResult") {
-        // Should have the summary text block + the preserved image block
+        // Should have the microcompacted text block + the preserved image block
         expect(tr.content.length).toBe(2);
         expect(tr.content[0].type).toBe("text");
         expect(tr.content[1].type).toBe("image");
       }
     });
 
-    test("preview takes first 300 + last 200 chars", async () => {
-      const head = "H".repeat(300);
-      const middle = "M".repeat(3000);
-      const tail = "[Showing lines 0-99 of 500. Call read again with offset=100 to continue.]";
-      const padded = tail.padStart(200, "T");
-      const fullText = head + middle + padded;
-
+    test("microcompaction persists full text and keeps 2k preview", async () => {
+      const fullText = "x".repeat(12000);
       const messages: AgentMessage[] = [
         userMsg("go"),
         toolResult("read", fullText),
@@ -128,17 +123,18 @@ describe("transformContext", () => {
       if (tr.role === "toolResult") {
         const text = tr.content[0];
         if (text.type === "text") {
-          expect(text.text).toContain(head); // first 300
-          expect(text.text).toContain("Call read again with offset=100"); // tail hint preserved
-          expect(text.text).not.toContain("M".repeat(100)); // middle is dropped
+          expect(text.text).toContain("x".repeat(2000));
+          expect(text.text).toContain("[Full output persisted to");
+          expect(text.text).toContain("use read tool to access]");
+          expect(text.text.length).toBeLessThan(2200);
         }
       }
     });
 
-    test("does not reshape results under 3000 chars", async () => {
+    test("results under 10k pass through unchanged", async () => {
       const messages: AgentMessage[] = [
         userMsg("go"),
-        toolResult("read", "x".repeat(2999)),
+        toolResult("read", "x".repeat(9999)),
       ];
 
       const result = await transformContext(messages);
@@ -146,7 +142,7 @@ describe("transformContext", () => {
       if (tr.role === "toolResult") {
         const text = tr.content[0];
         if (text.type === "text") {
-          expect(text.text).toBe("x".repeat(2999));
+          expect(text.text).toBe("x".repeat(9999));
         }
       }
     });
@@ -206,7 +202,7 @@ describe("transformContext", () => {
       }
     });
 
-    test("fresh exec (age 1) over 10k gets preview", async () => {
+    test("fresh exec (age 1) over 10k gets microcompacted", async () => {
       const messages: AgentMessage[] = [
         userMsg("go"),
         toolResult("exec", "x".repeat(12000)),
@@ -216,13 +212,13 @@ describe("transformContext", () => {
       if (tr.role === "toolResult") {
         const text = tr.content[0];
         if (text.type === "text") {
-          expect(text.text).toContain("[exec: 12000 chars]");
-          expect(text.text.length).toBeLessThan(600);
+          expect(text.text).toContain("[Full output persisted to");
+          expect(text.text.length).toBeLessThan(2200);
         }
       }
     });
 
-    test("older exec (age 3) truncates at 3k threshold", async () => {
+    test("sub-10k results pass through regardless of age or tool", async () => {
       // 3 user messages after the exec result → age 3
       const messages: AgentMessage[] = [
         userMsg("q0"),
@@ -239,33 +235,15 @@ describe("transformContext", () => {
       if (tr.role === "toolResult") {
         const text = tr.content[0];
         if (text.type === "text") {
-          expect(text.text).toContain("[exec: 5000 chars]");
+          expect(text.text).toBe("x".repeat(5000));
         }
       }
     });
 
-    test("fresh read (age 1) still truncates at 3k threshold", async () => {
+    test("fresh read under 10k passes through unchanged", async () => {
       const messages: AgentMessage[] = [
         userMsg("go"),
         toolResult("read", "x".repeat(5000)),
-      ];
-      const result = await transformContext(messages);
-      const tr = result[1];
-      if (tr.role === "toolResult") {
-        const text = tr.content[0];
-        if (text.type === "text") {
-          expect(text.text).toContain("[read: 5000 chars]");
-        }
-      }
-    });
-
-    test("exec at boundary age 2 still gets 10k budget", async () => {
-      // 2 user messages after the exec result → age 2 (boundary of <= 2)
-      const messages: AgentMessage[] = [
-        userMsg("q0"),
-        toolResult("exec", "x".repeat(5000)),
-        userMsg("q1"),
-        assistantMsg("a1"),
       ];
       const result = await transformContext(messages);
       const tr = result[1];

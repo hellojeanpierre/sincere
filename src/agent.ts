@@ -1,14 +1,17 @@
-import { readFileSync, globSync } from "fs";
+import { readFileSync, mkdirSync, globSync } from "fs";
 import { resolve, basename, relative, dirname } from "path";
 import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
 import type { AgentTool, AgentMessage } from "@mariozechner/pi-agent-core";
-import type { TextContent } from "@mariozechner/pi-ai";
+import type { TextContent, ToolResultMessage } from "@mariozechner/pi-ai";
 import type { Handler } from "./lane.ts";
 import { intake } from "./intake.ts";
 import { logger } from "./lib/logger.ts";
 import { readTool } from "./tools/read.ts";
 import { resolveConfig } from "./lib/config.ts";
+
+const TOOL_RESULTS_DIR = "data/tool-results";
+mkdirSync(TOOL_RESULTS_DIR, { recursive: true });
 
 // Known simplification: age is measured in user turns, so stale pruning only
 // activates in multi-turn conversations. Single-prompt runs never prune.
@@ -23,28 +26,38 @@ export const transformContext = async (messages: AgentMessage[]): Promise<AgentM
     ages[i] = userCount;
   }
 
-  return messages.map((msg, i) => {
+  return Promise.all(messages.map(async (msg, i) => {
     if (msg.role !== "toolResult" || msg.isError) return msg;
+    const trMsg = msg as ToolResultMessage;
 
     if (ages[i] > 8) {
-      return { ...msg, content: [{ type: "text" as const, text: `[stale result: ${msg.toolName}, ${ages[i]} turns ago]` }] };
+      return { ...msg, content: [{ type: "text" as const, text: `[stale result: ${trMsg.toolName}, ${ages[i]} turns ago]` }] };
     }
 
-    const texts = msg.content.filter((b): b is TextContent => b.type === "text");
+    const texts = trMsg.content.filter((b): b is TextContent => b.type === "text");
     const totalLen = texts.reduce((sum, b) => sum + b.text.length, 0);
-    // Fresh exec results (age <= 2: current + previous turn) get 10k chars
-    // to prevent the Operator from re-querying fragmented output. Ages 3-8
-    // fall to the default 3k threshold; age > 8 is already stubbed above.
-    const limit = msg.toolName === "exec" && ages[i] <= 2 ? 10_000 : 3_000;
-    if (totalLen <= limit) return msg;
 
-    const joined = texts.map(b => b.text).join("\n");
-    const preview = joined.length <= 500
-      ? joined
-      : joined.slice(0, 300) + "\n…\n" + joined.slice(-200);
-    const nonText = msg.content.filter(b => b.type !== "text");
-    return { ...msg, content: [{ type: "text" as const, text: `[${msg.toolName}: ${totalLen} chars]\n${preview}` }, ...nonText] };
-  });
+    if (totalLen > 10_000) {
+      const joined = texts.map(b => b.text).join("\n");
+      const path = `${TOOL_RESULTS_DIR}/${trMsg.toolCallId}.txt`;
+      try {
+        await Bun.write(path, joined);
+        logger.info({ toolCallId: trMsg.toolCallId, toolName: trMsg.toolName, chars: totalLen, path }, "microcompaction persisted");
+        const nonText = trMsg.content.filter(b => b.type !== "text");
+        return {
+          ...trMsg,
+          content: [
+            { type: "text" as const, text: joined.slice(0, 2_000) + `\n\n[Full output persisted to ${path} — use read tool to access]` },
+            ...nonText,
+          ],
+        };
+      } catch (err) {
+        logger.error({ toolCallId: trMsg.toolCallId, err }, "microcompaction write failed, keeping original content");
+      }
+    }
+
+    return msg;
+  }));
 };
 
 function parseSkillFrontmatter(f: string): { name: string; description: string; file: string } | null {
