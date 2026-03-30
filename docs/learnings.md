@@ -1,5 +1,10 @@
 # Learnings
 
+## 2026-03-30 — BM25 is sufficient for in-agent text-to-text matching without embeddings or vector infrastructure
+
+rank_bm25 (Python, zero-dependency) returns ranked scores for every document in a corpus — giving relative confidence, multi-match overlap, and low-score detection as a positive finding ("no matching document exists"). Google's "Sufficient Context" (ICLR 2025) validates that detecting insufficient context is as valuable as retrieval itself. Runs inside a single exec call with no infrastructure beyond what the agent already has.
+Implication: Fuzzy document matching (e.g., SOPs to ticket clusters) belongs in exec as a retrieval script, not in the model's head via read-everything-then-reason.
+
 ## 2026-03-30 — Smaller tool outputs improve LLM accuracy; longer context degrades reasoning even with perfect retrieval; production systems optimize for reasoning headroom, not utilization
 
 Three independent findings. (1) Simplifying JSON tool responses by 12x improved LLM accuracy by 8–38 percentage points depending on the model — more raw data in context makes the model worse, not better (arXiv 2510.15955, October 2025). (2) Sheer input length degrades reasoning even when the model successfully locates the evidence, independent of the "lost in the middle" position effect — inserting 25k whitespace tokens into an otherwise correct prompt flips answers from right to wrong (arXiv 2510.05381, October 2025). (3) Anthropic's Claude Code saves large tool outputs to disk instead of inlining them, triggers compaction at ~75% utilization rather than 95% to preserve reasoning headroom, and ships Programmatic Tool Calling to move heavy data processing out of context entirely. Their finding: the optimization target is free context for reasoning, not maximum context utilization.
