@@ -15,7 +15,7 @@ Fields you never inspect cannot produce findings. Verify the full field inventor
 
 ## Investigation framework
 
-Write Python scripts that load the full dataset and compute aggregates.
+Write Python scripts that load the dataset dataset and compute targeted aggregates.
 
 **Completeness.** Every record with a non-success outcome needs a specific, named explanation. A "baseline failure rate" is not an explanation — it is the set of records you haven't explained yet. A cohort is not explained until you have named the specific event, field value, or transcript pattern that produces the outcome for each record in it — and tested whether the same pattern appears in records with a different outcome.
 
