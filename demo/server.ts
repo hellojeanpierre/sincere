@@ -72,7 +72,7 @@ function investigateStream(): Response {
 
       try {
         await agent.prompt(
-          `Available data (paths relative to project root):\n- data/pintest-v2/smoke-tickets/smoke_tickets.jsonl — ticket snapshots\n- data/pintest-v2/smoke-tickets/smoke_events.jsonl — Zendesk event audit trail\n- data/pintest-v2/sop/ — SOP files (use 00_index.md as entry point)`,
+          `Available data (paths relative to project root):\n- data/pintest-v2/smoke-tickets/smoke_tickets.jsonl — ticket snapshots\n- data/pintest-v2/smoke-tickets/smoke_events.jsonl — Zendesk event audit trail\n- data/pintest-v2/smoke-tickets/policy.jsonl — standard operating procedures`,
         );
         send({ type: "done" });
       } catch (err) {
