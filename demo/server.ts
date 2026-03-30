@@ -1,6 +1,7 @@
 import { join } from "path";
 import { createAgent } from "../src/agent.ts";
 import { execTool } from "../src/tools/exec.ts";
+import { subscribeTrace } from "../src/lib/trace.ts";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 
 const DATA_PATH = join(import.meta.dir, "../data/pintest-v2/smoke-tickets/smoke_tickets.jsonl");
@@ -34,6 +35,8 @@ function investigateStream(): Response {
     tools: [execTool],
     thinkingLevel: "high",
   });
+
+  const unsubTrace = subscribeTrace(agent, "demo");
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -80,6 +83,7 @@ function investigateStream(): Response {
       } finally {
         clearInterval(keepalive);
         unsub();
+        unsubTrace();
         controller.close();
       }
     },
