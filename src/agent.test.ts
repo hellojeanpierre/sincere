@@ -1,8 +1,11 @@
 import { describe, test, expect } from "bun:test";
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
-import { transformContext, loadSystemPrompt } from "./agent.ts";
+import { makeTransformContext, loadSystemPrompt } from "./agent.ts";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+
+const TEST_DIR = resolve(import.meta.dirname, "..", "data/test-tool-results");
+const transformContext = makeTransformContext(TEST_DIR);
 
 function userMsg(text: string): AgentMessage {
   return { role: "user", content: [{ type: "text", text }] };
@@ -20,10 +23,10 @@ function assistantMsg(text: string): AgentMessage {
   };
 }
 
-function toolResult(toolName: string, text: string, opts?: { isError?: boolean; extraContent?: any[] }): AgentMessage {
+function toolResult(toolName: string, text: string, opts?: { isError?: boolean; extraContent?: any[]; toolCallId?: string }): AgentMessage {
   return {
     role: "toolResult",
-    toolCallId: "tc_" + Math.random().toString(36).slice(2),
+    toolCallId: opts?.toolCallId ?? "tc_" + Math.random().toString(36).slice(2),
     toolName,
     content: [
       { type: "text" as const, text },
@@ -37,7 +40,6 @@ function toolResult(toolName: string, text: string, opts?: { isError?: boolean; 
 describe("transformContext", () => {
   describe("age counter direction", () => {
     test("older messages get higher age values with 10+ user turns", async () => {
-      // Build a conversation with 12 user turns, each followed by an assistant + toolResult
       const messages: AgentMessage[] = [];
       for (let turn = 0; turn < 12; turn++) {
         messages.push(userMsg(`question ${turn}`));
@@ -47,7 +49,6 @@ describe("transformContext", () => {
 
       const result = await transformContext(messages);
 
-      // Turn 0's toolResult (index 2) should be stale (age 12 > 8)
       const firstResult = result[2];
       expect(firstResult.role).toBe("toolResult");
       if (firstResult.role === "toolResult") {
@@ -59,7 +60,6 @@ describe("transformContext", () => {
         }
       }
 
-      // Turn 11's toolResult (last, index 35) should be untouched (age 1)
       const lastResult = result[35];
       expect(lastResult.role).toBe("toolResult");
       if (lastResult.role === "toolResult") {
@@ -80,7 +80,6 @@ describe("transformContext", () => {
 
       const result = await transformContext(messages);
 
-      // All results should be untouched — max age is 5, under threshold of 8
       for (let turn = 0; turn < 5; turn++) {
         const tr = result[turn * 3 + 2];
         if (tr.role === "toolResult") {
@@ -93,31 +92,25 @@ describe("transformContext", () => {
     });
   });
 
-  describe("reshaping large results", () => {
-    test("preserves non-text content blocks", async () => {
+  describe("microcompaction", () => {
+    test("preserves non-text content blocks when microcompacting", async () => {
       const imageBlock = { type: "image" as const, source: { type: "base64" as const, media_type: "image/png" as const, data: "abc" } };
       const messages: AgentMessage[] = [
         userMsg("go"),
-        toolResult("read", "x".repeat(4000), { extraContent: [imageBlock] }),
+        toolResult("read", "x".repeat(11000), { extraContent: [imageBlock] }),
       ];
 
       const result = await transformContext(messages);
       const tr = result[1];
       if (tr.role === "toolResult") {
-        // Should have the summary text block + the preserved image block
         expect(tr.content.length).toBe(2);
         expect(tr.content[0].type).toBe("text");
         expect(tr.content[1].type).toBe("image");
       }
     });
 
-    test("preview takes first 300 + last 200 chars", async () => {
-      const head = "H".repeat(300);
-      const middle = "M".repeat(3000);
-      const tail = "[Showing lines 0-99 of 500. Call read again with offset=100 to continue.]";
-      const padded = tail.padStart(200, "T");
-      const fullText = head + middle + padded;
-
+    test("microcompaction persists full text and keeps 2k preview", async () => {
+      const fullText = "x".repeat(12000);
       const messages: AgentMessage[] = [
         userMsg("go"),
         toolResult("read", fullText),
@@ -128,17 +121,52 @@ describe("transformContext", () => {
       if (tr.role === "toolResult") {
         const text = tr.content[0];
         if (text.type === "text") {
-          expect(text.text).toContain(head); // first 300
-          expect(text.text).toContain("Call read again with offset=100"); // tail hint preserved
-          expect(text.text).not.toContain("M".repeat(100)); // middle is dropped
+          expect(text.text).toContain("x".repeat(2000));
+          expect(text.text).toContain("[Full output persisted to");
+          expect(text.text.length).toBeLessThan(2200);
         }
       }
     });
 
-    test("does not reshape results under 3000 chars", async () => {
+    test("persisted file contains full original text", async () => {
+      const callId = "tc_persist_check_" + Date.now();
+      const fullText = "y".repeat(12000);
       const messages: AgentMessage[] = [
         userMsg("go"),
-        toolResult("read", "x".repeat(2999)),
+        toolResult("read", fullText, { toolCallId: callId }),
+      ];
+
+      await transformContext(messages);
+
+      const filePath = resolve(TEST_DIR, `${callId}.txt`);
+      expect(existsSync(filePath)).toBe(true);
+      const written = readFileSync(filePath, "utf-8");
+      expect(written).toBe(fullText);
+    });
+
+    test("write failure still truncates to preview", async () => {
+      const failCtx = makeTransformContext("/dev/null/impossible/path");
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("exec", "z".repeat(15000)),
+      ];
+
+      const result = await failCtx(messages);
+      const tr = result[1];
+      if (tr.role === "toolResult") {
+        const text = tr.content[0];
+        if (text.type === "text") {
+          expect(text.text.length).toBeLessThan(2200);
+          expect(text.text).toContain("z".repeat(2000));
+          expect(text.text).toContain("[Full output lost");
+        }
+      }
+    });
+
+    test("results under 10k fall through to age-based logic", async () => {
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("read", "x".repeat(5000)),
       ];
 
       const result = await transformContext(messages);
@@ -146,7 +174,7 @@ describe("transformContext", () => {
       if (tr.role === "toolResult") {
         const text = tr.content[0];
         if (text.type === "text") {
-          expect(text.text).toBe("x".repeat(2999));
+          expect(text.text).toContain("[read: 5000 chars]");
         }
       }
     });
@@ -176,7 +204,6 @@ describe("transformContext", () => {
         messages.push(userMsg(`q ${turn}`));
         messages.push(assistantMsg(`a ${turn}`));
       }
-      // Insert an error result at the very beginning (after first user msg)
       messages.splice(1, 0, toolResult("exec", "old error", { isError: true }));
 
       const result = await transformContext(messages);
@@ -206,7 +233,7 @@ describe("transformContext", () => {
       }
     });
 
-    test("fresh exec (age 1) over 10k gets preview", async () => {
+    test("fresh exec (age 1) over 10k gets microcompacted", async () => {
       const messages: AgentMessage[] = [
         userMsg("go"),
         toolResult("exec", "x".repeat(12000)),
@@ -216,8 +243,8 @@ describe("transformContext", () => {
       if (tr.role === "toolResult") {
         const text = tr.content[0];
         if (text.type === "text") {
-          expect(text.text).toContain("[exec: 12000 chars]");
-          expect(text.text.length).toBeLessThan(600);
+          expect(text.text).toContain("[Full output persisted to");
+          expect(text.text.length).toBeLessThan(2200);
         }
       }
     });
