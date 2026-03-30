@@ -1,5 +1,9 @@
 # Learnings
 
+## 2026-03-30 — Uniform tool-output truncation causes agent spiraling, not laziness
+
+The Operator's ~50-call spiral was not laziness. transformContext crushed fresh exec output (15,847 chars → 500-char preview at the 3000-char threshold), so the agent re-queried in smaller slices. Traces confirmed correct scripts — output destroyed before reasoning. Fix: age-aware threshold in agent.ts — fresh exec results (≤2 turns) get 10,000 chars; older results keep 3,000. Implication: When agent behavior looks lazy, check infra constraints before blaming the model.
+
 ## 2026-03-30 — LLMs don't naturally formulate good BM25 queries; environment constraints beat reasoning instructions for retrieval routing
 LLMs produce natural language queries but BM25 requires lexical overlap — vocabulary mismatch is a known failure mode (Zilliz 2024, Elasticsearch 2026). Entire research subfields exist to compensate: query rewriting, query expansion, HyDE (Anyscale docs). Elasticsearch tested progressively explicit prompts for keyword extraction and found only the most prescriptive prompt improved retrieval, and marginally (+1pt). This confirms our own finding: prescriptive reasoning instructions are weak levers. For document retrieval routing, constraining what read returns (environment design) is more reliable than instructing the agent how to search. Implication: prefer mechanical constraints over skill-level retrieval guidance.
 
