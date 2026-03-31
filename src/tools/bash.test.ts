@@ -303,6 +303,43 @@ describe("bash tool", () => {
     expect(text.length).toBe(1001); // 1000 z's + newline
   });
 
+  // --- Infrastructure contract tests ---
+
+  test("stdout matching sentinel pattern is returned verbatim", async () => {
+    const sentinel = "__BASH_SENTINEL_550e8400-e29b-41d4-a716-446655440000__";
+    const result = await tool.execute("sentinel-test", {
+      command: `python3 -c "print('${sentinel}')"`,
+    });
+    expect(result.content[0].text).toBe(sentinel + "\n");
+    expect(result.details!.exitCode).toBe(0);
+  });
+
+  test("exact non-zero exit code is captured", async () => {
+    const result = await tool.execute("exit-test", {
+      command: 'python3 -c "import sys; sys.exit(42)"',
+    });
+    expect(result.details).not.toBeNull();
+    expect(result.details!.exitCode).toBe(42);
+  });
+
+  test("stdout and stderr are merged with [stderr] separator", async () => {
+    const result = await tool.execute("both-streams", {
+      command: 'python3 -c "import sys; print(\'OUT\'); print(\'ERR\', file=sys.stderr)"',
+    });
+    const text = result.content[0].text;
+    expect(text).toContain("OUT");
+    expect(text).toContain("[stderr]");
+    expect(text).toContain("ERR");
+  });
+
+  test("empty output returns (no output) sentinel", async () => {
+    const result = await tool.execute("empty-test", {
+      command: 'python3 -c "pass"',
+    });
+    expect(result.content[0].text).toBe("(no output)");
+    expect(result.details!.exitCode).toBe(0);
+  });
+
   test("description includes sessionDir and truncation note", () => {
     expect(tool.description).toContain(tmpDir);
     expect(tool.description).toContain("Output over 25,000 chars is truncated");
