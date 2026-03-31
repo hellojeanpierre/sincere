@@ -2,14 +2,14 @@ import { describe, test, expect, afterAll } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { execTool } from "./exec.ts";
+import { bashTool } from "./bash.ts";
 
-const tmpDir = mkdtempSync(join(tmpdir(), "exec-test-"));
+const tmpDir = mkdtempSync(join(tmpdir(), "bash-test-"));
 afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
 
-const tool = execTool(tmpDir);
+const tool = bashTool(tmpDir);
 
-describe("exec tool", () => {
+describe("bash tool", () => {
   test("runs a simple command and returns stdout", async () => {
     const result = await tool.execute("test", { command: "cat package.json" });
     expect(result.content[0].text).toContain("name");

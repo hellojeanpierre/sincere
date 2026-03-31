@@ -4,7 +4,7 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
 import { logger } from "../lib/logger.ts";
 
-const execSchema = Type.Object({
+const bashSchema = Type.Object({
   command: Type.String({ description: "Shell command to execute against the working directory" }),
 });
 
@@ -243,14 +243,14 @@ function validateCommand(command: string): string | null {
 const MAX_OUTPUT = 25_000;
 const PREVIEW_LIMIT = 2_000;
 
-export function execTool(sessionDir: string): AgentTool<typeof execSchema> {
+export function bashTool(sessionDir: string): AgentTool<typeof bashSchema> {
   let dirReady = false;
 
   return {
-    name: "exec",
+    name: "bash",
     label: "Execute Command",
     description: `Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). 30-second timeout. Output over 25,000 chars is truncated to a 2,000-char preview. Full output is persisted to ${sessionDir}/{toolCallId}.txt.`,
-    parameters: execSchema,
+    parameters: bashSchema,
     async execute(toolCallId, params) {
       const error = validateCommand(params.command);
       if (error) {
@@ -283,7 +283,7 @@ export function execTool(sessionDir: string): AgentTool<typeof execSchema> {
       const durationMs = Math.round(performance.now() - start);
 
       if (proc.signalCode) {
-        logger.info({ command: params.command, durationMs, signal: proc.signalCode }, "exec timeout");
+        logger.info({ command: params.command, durationMs, signal: proc.signalCode }, "bash timeout");
         return {
           content: [{ type: "text", text: `Error: command timed out after 30s` }],
           details: null,
@@ -298,7 +298,7 @@ export function execTool(sessionDir: string): AgentTool<typeof execSchema> {
         text = "(no output)";
       }
 
-      logger.info({ command: params.command, exitCode, durationMs }, "exec command");
+      logger.info({ command: params.command, exitCode, durationMs }, "bash command");
 
       if (text.length > MAX_OUTPUT) {
         const safeId = toolCallId ? toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_") : String(Date.now());
@@ -312,13 +312,13 @@ export function execTool(sessionDir: string): AgentTool<typeof execSchema> {
             dirReady = true;
           }
           await writeFile(path, text);
-          logger.info({ toolCallId, command: params.command, chars: text.length, path }, "exec output truncated and persisted");
+          logger.info({ toolCallId, command: params.command, chars: text.length, path }, "bash output truncated and persisted");
           return {
             content: [{ type: "text", text: preview + `\n\n[Full output persisted to ${path} — use read tool to access]` }],
             details: { command: params.command, exitCode, durationMs },
           };
         } catch (err) {
-          logger.error({ toolCallId, err }, "exec output persistence failed");
+          logger.error({ toolCallId, err }, "bash output persistence failed");
           return {
             content: [{ type: "text", text: preview + `\n\n[Full output lost — persistence failed]` }],
             details: { command: params.command, exitCode, durationMs },
