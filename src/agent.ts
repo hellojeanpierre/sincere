@@ -24,6 +24,8 @@ export function makeTransformContext(sessionDir: string, hintDir: string) {
     // Find freshBoundary: index of the FRESH_WINDOW_TURNS-th assistant message
     // from the end. Everything at or after this index is fresh.
     let assistantCount = 0;
+    // 0 means all messages are in the fresh window — correct default when the
+    // conversation has fewer than FRESH_WINDOW_TURNS assistant turns.
     let freshBoundary = 0;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "assistant") {
@@ -37,6 +39,10 @@ export function makeTransformContext(sessionDir: string, hintDir: string) {
 
     return Promise.all(messages.map(async (msg, idx) => {
       if (msg.role !== "toolResult" || msg.isError) return msg;
+      // Assumes ordering: user → assistant → toolResult(s). If multiple
+      // toolResults follow one assistant message, this index-based check still
+      // holds — they all share the same stale/fresh classification. Would only
+      // misclassify if toolResults appeared before their assistant message.
       if (idx >= freshBoundary) return msg;
 
       const trMsg = msg as ToolResultMessage;

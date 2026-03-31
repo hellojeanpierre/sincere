@@ -39,7 +39,8 @@ function toolResult(toolName: string, text: string, opts?: { isError?: boolean; 
 }
 
 // Append enough turns after a target message to push it into the stale zone
-// (before freshBoundary). FRESH_WINDOW_TURNS = 4, so we need 5 assistant turns.
+// (before freshBoundary). Needs at least FRESH_WINDOW_TURNS + 1 assistant turns
+// after the target.
 function stalePadding(): AgentMessage[] {
   const pad: AgentMessage[] = [];
   for (let i = 0; i < 5; i++) {
@@ -57,12 +58,10 @@ describe("transformContext", () => {
       ];
       const result = await transformContext(messages);
       const tr = result[1];
-      if (tr.role === "toolResult") {
-        const text = tr.content[0];
-        if (text.type === "text") {
-          expect(text.text).toBe("x".repeat(9_999));
-        }
-      }
+      expect(tr.role).toBe("toolResult");
+      const text = (tr as any).content[0];
+      expect(text.type).toBe("text");
+      expect(text.text).toBe("x".repeat(9_999));
     });
 
     test("preserves non-text content blocks when microcompacting", async () => {
@@ -75,11 +74,11 @@ describe("transformContext", () => {
 
       const result = await transformContext(messages);
       const tr = result[1];
-      if (tr.role === "toolResult") {
-        expect(tr.content.length).toBe(2);
-        expect(tr.content[0].type).toBe("text");
-        expect(tr.content[1].type).toBe("image");
-      }
+      expect(tr.role).toBe("toolResult");
+      const content = (tr as any).content;
+      expect(content.length).toBe(2);
+      expect(content[0].type).toBe("text");
+      expect(content[1].type).toBe("image");
     });
 
     test("microcompaction persists full text and keeps 2k preview", async () => {
@@ -92,14 +91,12 @@ describe("transformContext", () => {
 
       const result = await transformContext(messages);
       const tr = result[1];
-      if (tr.role === "toolResult") {
-        const text = tr.content[0];
-        if (text.type === "text") {
-          expect(text.text).toContain("x".repeat(2_000));
-          expect(text.text).toContain("[Full output persisted to data/sessions/latest/tool-results/");
-          expect(text.text.length).toBeLessThan(2_200);
-        }
-      }
+      expect(tr.role).toBe("toolResult");
+      const text = (tr as any).content[0];
+      expect(text.type).toBe("text");
+      expect(text.text).toContain("x".repeat(2_000));
+      expect(text.text).toContain("[Full output persisted to data/sessions/latest/tool-results/");
+      expect(text.text.length).toBeLessThan(2_200);
     });
 
     test("persisted file contains full original text", async () => {
@@ -129,14 +126,12 @@ describe("transformContext", () => {
 
       const result = await failCtx(messages);
       const tr = result[1];
-      if (tr.role === "toolResult") {
-        const text = tr.content[0];
-        if (text.type === "text") {
-          expect(text.text.length).toBeLessThan(2_200);
-          expect(text.text).toContain("z".repeat(2_000));
-          expect(text.text).toContain("[Full output lost");
-        }
-      }
+      expect(tr.role).toBe("toolResult");
+      const text = (tr as any).content[0];
+      expect(text.type).toBe("text");
+      expect(text.text.length).toBeLessThan(2_200);
+      expect(text.text).toContain("z".repeat(2_000));
+      expect(text.text).toContain("[Full output lost");
     });
   });
 
@@ -149,12 +144,10 @@ describe("transformContext", () => {
       ];
       const result = await transformContext(messages);
       const tr = result[2];
-      if (tr.role === "toolResult") {
-        const text = tr.content[0];
-        if (text.type === "text") {
-          expect(text.text).toBe("x".repeat(12_000));
-        }
-      }
+      expect(tr.role).toBe("toolResult");
+      const text = (tr as any).content[0];
+      expect(text.type).toBe("text");
+      expect(text.text).toBe("x".repeat(12_000));
     });
 
     test("stale large results are microcompacted", async () => {
@@ -166,13 +159,11 @@ describe("transformContext", () => {
       ];
       const result = await transformContext(messages);
       const tr = result[2];
-      if (tr.role === "toolResult") {
-        const text = tr.content[0];
-        if (text.type === "text") {
-          expect(text.text).toContain("[Full output persisted to");
-          expect(text.text.length).toBeLessThan(2_200);
-        }
-      }
+      expect(tr.role).toBe("toolResult");
+      const text = (tr as any).content[0];
+      expect(text.type).toBe("text");
+      expect(text.text).toContain("[Full output persisted to");
+      expect(text.text.length).toBeLessThan(2_200);
     });
 
     test("stale small results pass through unchanged", async () => {
@@ -184,12 +175,10 @@ describe("transformContext", () => {
       ];
       const result = await transformContext(messages);
       const tr = result[2];
-      if (tr.role === "toolResult") {
-        const text = tr.content[0];
-        if (text.type === "text") {
-          expect(text.text).toBe("x".repeat(5_000));
-        }
-      }
+      expect(tr.role).toBe("toolResult");
+      const text = (tr as any).content[0];
+      expect(text.type).toBe("text");
+      expect(text.text).toBe("x".repeat(5_000));
     });
 
     test("boundary: first turn stale, last four fresh", async () => {
@@ -206,22 +195,18 @@ describe("transformContext", () => {
 
       // Turn 1 result (idx 2) — stale, compacted
       const t1 = result[2];
-      if (t1.role === "toolResult") {
-        const text = t1.content[0];
-        if (text.type === "text") {
-          expect(text.text).toContain("[Full output persisted to");
-        }
-      }
+      expect(t1.role).toBe("toolResult");
+      const t1text = (t1 as any).content[0];
+      expect(t1text.type).toBe("text");
+      expect(t1text.text).toContain("[Full output persisted to");
 
       // Turns 2-5 results — fresh, pass through
       for (const idx of [5, 8, 11, 14]) {
         const tr = result[idx];
-        if (tr.role === "toolResult") {
-          const text = tr.content[0];
-          if (text.type === "text") {
-            expect(text.text.length).toBe(12_000);
-          }
-        }
+        expect(tr.role).toBe("toolResult");
+        const text = (tr as any).content[0];
+        expect(text.type).toBe("text");
+        expect(text.text.length).toBe(12_000);
       }
     });
 
@@ -235,12 +220,10 @@ describe("transformContext", () => {
       const result = await transformContext(messages);
       for (const idx of [2, 5, 8]) {
         const tr = result[idx];
-        if (tr.role === "toolResult") {
-          const text = tr.content[0];
-          if (text.type === "text") {
-            expect(text.text.length).toBe(20_000);
-          }
-        }
+        expect(tr.role).toBe("toolResult");
+        const text = (tr as any).content[0];
+        expect(text.type).toBe("text");
+        expect(text.text.length).toBe(20_000);
       }
     });
   });
@@ -256,12 +239,10 @@ describe("transformContext", () => {
 
       const result = await transformContext(messages);
       const tr = result[1];
-      if (tr.role === "toolResult") {
-        const text = tr.content[0];
-        if (text.type === "text") {
-          expect(text.text).toBe(bigError);
-        }
-      }
+      expect(tr.role).toBe("toolResult");
+      const text = (tr as any).content[0];
+      expect(text.type).toBe("text");
+      expect(text.text).toBe(bigError);
     });
   });
 });
