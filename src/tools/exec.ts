@@ -1,7 +1,11 @@
 import { basename } from "path";
+import { writeFile, mkdir } from "fs/promises";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
 import { logger } from "../lib/logger.ts";
+
+const OUTPUT_CEILING = 25_000;
+const PREVIEW_SIZE = 2_000;
 
 const execSchema = Type.Object({
   command: Type.String({ description: "Shell command to execute against the working directory" }),
@@ -239,64 +243,114 @@ function validateCommand(command: string): string | null {
   return null;
 }
 
-export const execTool: AgentTool<typeof execSchema> = {
-  name: "exec",
-  label: "Execute Command",
-  description:
-    "Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). 30-second timeout.",
-  parameters: execSchema,
-  async execute(_toolCallId, params) {
-    const error = validateCommand(params.command);
-    if (error) {
+const BASE_DESCRIPTION =
+  "Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). 30-second timeout.";
+
+const TRUNCATION_NOTE =
+  " Output over 25,000 chars is truncated. Full output is persisted to disk — use read to access.";
+
+/**
+ * Cut text at the last newline boundary before `limit` to avoid splitting
+ * mid-line or mid-UTF8 sequence. Falls back to `limit` if no newline found.
+ */
+function previewSlice(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const cut = text.lastIndexOf("\n", limit);
+  return text.slice(0, cut > 0 ? cut : limit);
+}
+
+export function createExecTool(sessionDir?: string): AgentTool<typeof execSchema> {
+  let dirReady = false;
+
+  return {
+    name: "exec",
+    label: "Execute Command",
+    description: sessionDir ? BASE_DESCRIPTION + TRUNCATION_NOTE : BASE_DESCRIPTION,
+    parameters: execSchema,
+    async execute(toolCallId, params) {
+      const error = validateCommand(params.command);
+      if (error) {
+        return {
+          content: [{ type: "text", text: error }],
+          details: null,
+        };
+      }
+
+      const start = performance.now();
+
+      const proc = Bun.spawn(["sh", "-c", params.command], {
+        cwd: process.cwd(),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const timeout = setTimeout(() => {
+        proc.kill();
+      }, 30_000);
+
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+
+      clearTimeout(timeout);
+
+      const durationMs = Math.round(performance.now() - start);
+
+      if (proc.signalCode) {
+        logger.info({ command: params.command, durationMs, signal: proc.signalCode }, "exec timeout");
+        return {
+          content: [{ type: "text", text: `Error: command timed out after 30s` }],
+          details: null,
+        };
+      }
+
+      let text = stdout;
+      if (stderr) {
+        text += text ? `\n[stderr]\n${stderr}` : `[stderr]\n${stderr}`;
+      }
+      if (!text) {
+        text = "(no output)";
+      }
+
+      logger.info({ command: params.command, exitCode, durationMs }, "exec command");
+
+      const details = { command: params.command, exitCode, durationMs };
+
+      // Tool-level truncation: persist full output, return preview
+      if (sessionDir && text.length > OUTPUT_CEILING) {
+        const safeId = (toolCallId || `${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "_");
+        const path = `${sessionDir}/${safeId}.txt`;
+        const preview = previewSlice(text, PREVIEW_SIZE);
+
+        try {
+          if (!dirReady) {
+            await mkdir(sessionDir, { recursive: true });
+            dirReady = true;
+          }
+          await writeFile(path, text);
+          logger.info({ toolCallId, command: params.command, chars: text.length, path }, "exec output persisted");
+          return {
+            content: [{ type: "text", text: preview + `\n\n[Full output persisted to ${path} — use read tool to access]` }],
+            details,
+          };
+        } catch (err) {
+          logger.error({ toolCallId, err }, "exec output persistence failed, truncating without persistence");
+          return {
+            content: [{ type: "text", text: preview + `\n\n[Full output lost — persistence failed]` }],
+            details,
+          };
+        }
+      }
+
       return {
-        content: [{ type: "text", text: error }],
-        details: null,
+        content: [{ type: "text", text }],
+        details,
       };
-    }
+    },
+  };
+}
 
-    const start = performance.now();
-
-    const proc = Bun.spawn(["sh", "-c", params.command], {
-      cwd: process.cwd(),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const timeout = setTimeout(() => {
-      proc.kill();
-    }, 30_000);
-
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]);
-
-    clearTimeout(timeout);
-
-    const durationMs = Math.round(performance.now() - start);
-
-    if (proc.signalCode) {
-      logger.info({ command: params.command, durationMs, signal: proc.signalCode }, "exec timeout");
-      return {
-        content: [{ type: "text", text: `Error: command timed out after 30s` }],
-        details: null,
-      };
-    }
-
-    let text = stdout;
-    if (stderr) {
-      text += text ? `\n[stderr]\n${stderr}` : `[stderr]\n${stderr}`;
-    }
-    if (!text) {
-      text = "(no output)";
-    }
-
-    logger.info({ command: params.command, exitCode, durationMs }, "exec command");
-
-    return {
-      content: [{ type: "text", text }],
-      details: { command: params.command, exitCode, durationMs },
-    };
-  },
-};
+/** Default exec tool without truncation (backward compat for tests/scripts). */
+export const execTool = createExecTool();

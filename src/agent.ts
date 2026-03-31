@@ -9,6 +9,7 @@ import type { Handler } from "./lane.ts";
 import { intake } from "./intake.ts";
 import { logger } from "./lib/logger.ts";
 import { readTool } from "./tools/read.ts";
+import { createExecTool } from "./tools/exec.ts";
 import { resolveConfig } from "./lib/config.ts";
 
 // Microcompaction: persist oversized tool results to disk, keep a 2k preview
@@ -127,7 +128,10 @@ export function createAgent(opts: AgentOptions, workItemId?: string): Agent {
 
   const systemPrompt = loadSystemPrompt(opts.promptPath);
   const model = getModel("anthropic", opts.model);
-  const tools: AgentTool<any>[] = [readTool, ...(opts.tools ?? [])];
+  const tools: AgentTool<any>[] = [
+    readTool,
+    ...(opts.tools ?? []).map(t => t.name === "exec" ? createExecTool(sessionDir) : t),
+  ];
 
   return new Agent({
     streamFn: streamSimple,
