@@ -1,16 +1,24 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, afterAll } from "bun:test";
+import { mkdtempSync, rmSync, readFileSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import { execTool } from "./exec.ts";
+
+const tmpDir = mkdtempSync(join(tmpdir(), "exec-test-"));
+afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
+
+const tool = execTool(tmpDir);
 
 describe("exec tool", () => {
   test("runs a simple command and returns stdout", async () => {
-    const result = await execTool.execute("test", { command: "cat package.json" });
+    const result = await tool.execute("test", { command: "cat package.json" });
     expect(result.content[0].text).toContain("name");
     expect(result.details).not.toBeNull();
     expect(result.details!.exitCode).toBe(0);
   });
 
   test("returns stderr for failed command", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "cat nonexistent-file-abc123",
     });
     const text = result.content[0].text;
@@ -18,7 +26,7 @@ describe("exec tool", () => {
   });
 
   test("non-zero exit code is reported", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "grep impossible-string-xyz /dev/null",
     });
     expect(result.details).not.toBeNull();
@@ -26,14 +34,14 @@ describe("exec tool", () => {
   });
 
   test("disallowed binary is blocked", async () => {
-    const result = await execTool.execute("test", { command: "rm somefile" });
+    const result = await tool.execute("test", { command: "rm somefile" });
     expect(result.content[0].text).toContain("binary not allowed");
     expect(result.content[0].text).toContain("rm");
     expect(result.details).toBeNull();
   });
 
   test("redirect operator is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "grep foo > out.txt",
     });
     expect(result.content[0].text).toContain("redirect operator");
@@ -41,7 +49,7 @@ describe("exec tool", () => {
   });
 
   test("comparison inside double quotes is allowed", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: 'python3 -c "x > 5"',
     });
     expect(result.content[0].text).not.toContain("redirect operator");
@@ -49,7 +57,7 @@ describe("exec tool", () => {
   });
 
   test("arrow inside nested quotes is allowed", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: `python3 -c "print('dict -> keys')"`,
     });
     expect(result.content[0].text).not.toContain("redirect operator");
@@ -57,7 +65,7 @@ describe("exec tool", () => {
   });
 
   test("disallowed binary in pipeline is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "cat foo | rm bar",
     });
     expect(result.content[0].text).toContain("binary not allowed");
@@ -65,7 +73,7 @@ describe("exec tool", () => {
   });
 
   test("semicolon chaining is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "jq . file ; rm file",
     });
     expect(result.content[0].text).toContain("disallowed shell operator");
@@ -73,7 +81,7 @@ describe("exec tool", () => {
   });
 
   test("&& chaining is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "grep foo file && rm file",
     });
     expect(result.content[0].text).toContain("disallowed shell operator");
@@ -81,7 +89,7 @@ describe("exec tool", () => {
   });
 
   test("|| chaining is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "grep foo file || rm file",
     });
     expect(result.content[0].text).toContain("disallowed shell operator");
@@ -89,7 +97,7 @@ describe("exec tool", () => {
   });
 
   test("command substitution $() is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "grep $(rm foo) file",
     });
     expect(result.content[0].text).toContain("disallowed shell operator");
@@ -97,7 +105,7 @@ describe("exec tool", () => {
   });
 
   test("backtick substitution is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "grep `rm foo` file",
     });
     expect(result.content[0].text).toContain("disallowed shell operator");
@@ -105,7 +113,7 @@ describe("exec tool", () => {
   });
 
   test("pipeline of allowed binaries works", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "echo hello | grep hello | wc -l",
     });
     // echo is not in allowlist, so this should fail
@@ -114,7 +122,7 @@ describe("exec tool", () => {
   });
 
   test("pipeline of only allowed binaries succeeds", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "cat package.json | grep name | head -1",
     });
     expect(result.details).not.toBeNull();
@@ -125,28 +133,28 @@ describe("exec tool", () => {
   // --- Quote-aware parser tests ---
 
   test("jq with pipe inside single quotes is allowed", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "jq '.foo | keys[]' package.json",
     });
     expect(result.details).not.toBeNull();
   });
 
   test("jq with > inside single quotes is allowed", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "jq 'select(.version > \"1\")' package.json",
     });
     expect(result.details).not.toBeNull();
   });
 
   test("jq with @tsv is allowed", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "jq -r '.[] | @tsv' package.json",
     });
     expect(result.details).not.toBeNull();
   });
 
   test("jq piped to head with real pipe works", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "jq '.name' package.json | head -5",
     });
     expect(result.details).not.toBeNull();
@@ -154,7 +162,7 @@ describe("exec tool", () => {
   });
 
   test("real redirect in unquoted context is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "jq '.foo' package.json > out.txt",
     });
     expect(result.content[0].text).toContain("redirect operator");
@@ -162,7 +170,7 @@ describe("exec tool", () => {
   });
 
   test("real semicolon in unquoted context is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "jq '.foo' package.json ; rm bar",
     });
     expect(result.content[0].text).toContain("disallowed shell operator");
@@ -170,21 +178,21 @@ describe("exec tool", () => {
   });
 
   test("VAR=value prefix before binary is allowed", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "FOO=bar jq '.name' package.json",
     });
     expect(result.details).not.toBeNull();
   });
 
   test("quoted binary name is allowed", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: `"jq" '.name' package.json`,
     });
     expect(result.details).not.toBeNull();
   });
 
   test("input redirect is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "jq '.foo' < input.txt",
     });
     expect(result.content[0].text).toContain("redirect operator");
@@ -192,7 +200,7 @@ describe("exec tool", () => {
   });
 
   test("fd redirect 2>&1 is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "jq '.foo' file.json 2>&1",
     });
     expect(result.content[0].text).toContain("redirect operator");
@@ -200,7 +208,7 @@ describe("exec tool", () => {
   });
 
   test("unterminated single quote is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "jq '.foo | keys[]",
     });
     expect(result.content[0].text).toContain("unterminated quote");
@@ -208,7 +216,7 @@ describe("exec tool", () => {
   });
 
   test("unterminated double quote is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: 'jq ".foo | keys[]',
     });
     expect(result.content[0].text).toContain("unterminated quote");
@@ -216,7 +224,7 @@ describe("exec tool", () => {
   });
 
   test("lone & (background operator) is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "jq '.foo' package.json &",
     });
     expect(result.content[0].text).toContain("disallowed shell operator");
@@ -224,7 +232,7 @@ describe("exec tool", () => {
   });
 
   test("& between commands is blocked", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "jq '.foo' package.json & rm -rf /",
     });
     expect(result.content[0].text).toContain("disallowed shell operator");
@@ -232,12 +240,71 @@ describe("exec tool", () => {
   });
 
   test("details object has correct shape", async () => {
-    const result = await execTool.execute("test", {
+    const result = await tool.execute("test", {
       command: "cat package.json | wc -l",
     });
     const d = result.details!;
     expect(d.command).toBe("cat package.json | wc -l");
     expect(typeof d.exitCode).toBe("number");
     expect(typeof d.durationMs).toBe("number");
+  });
+
+  // --- Truncation tests ---
+
+  test("output over 25k is truncated with persistence", async () => {
+    const result = await tool.execute("trunc-test", {
+      command: `python3 -c "print('x' * 30000)"`,
+    });
+    const text = result.content[0].text;
+    expect(text.length).toBeLessThan(3000);
+    expect(text).toContain("[Full output persisted to");
+    expect(text).toContain("use read tool to access]");
+    // Verify file was written
+    const path = join(tmpDir, "trunc-test.txt");
+    const persisted = readFileSync(path, "utf-8");
+    expect(persisted.length).toBe(30001); // 30000 x's + newline
+    // Details still present
+    expect(result.details).not.toBeNull();
+    expect(result.details!.exitCode).toBe(0);
+  });
+
+  test("preview cuts at last newline before 2000 chars", async () => {
+    // Generate lines of 100 chars each — newlines at 101, 202, 303, ...
+    const result = await tool.execute("newline-test", {
+      command: `python3 -c "
+for i in range(300):
+    print('a' * 100)
+"`,
+    });
+    const text = result.content[0].text;
+    const previewEnd = text.indexOf("\n\n[Full output persisted");
+    const preview = text.slice(0, previewEnd);
+    // Preview should end at a newline boundary, under 2000 chars
+    expect(preview.length).toBeLessThanOrEqual(2000);
+    expect(preview.endsWith("\n") || preview.length <= 2000).toBe(true);
+  });
+
+  test("empty toolCallId falls back to Date.now()", async () => {
+    const result = await tool.execute("", {
+      command: `python3 -c "print('y' * 30000)"`,
+    });
+    const text = result.content[0].text;
+    expect(text).toContain("[Full output persisted to");
+    // File should exist with a numeric name
+    expect(text).toMatch(/\/\d+\.txt/);
+  });
+
+  test("output under 25k is returned in full", async () => {
+    const result = await tool.execute("small-test", {
+      command: `python3 -c "print('z' * 1000)"`,
+    });
+    const text = result.content[0].text;
+    expect(text).not.toContain("[Full output persisted");
+    expect(text.length).toBe(1001); // 1000 z's + newline
+  });
+
+  test("description includes sessionDir and truncation note", () => {
+    expect(tool.description).toContain(tmpDir);
+    expect(tool.description).toContain("Output over 25,000 chars is truncated");
   });
 });

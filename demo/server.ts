@@ -1,6 +1,5 @@
 import { join } from "path";
 import { createAgent } from "../src/agent.ts";
-import { execTool } from "../src/tools/exec.ts";
 import { subscribeTrace } from "../src/lib/trace.ts";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 
@@ -64,7 +63,6 @@ function investigateStream(): Response {
   const agent = createAgent({
     promptPath: PROMPT_PATH,
     model: "claude-sonnet-4-6",
-    tools: [execTool],
     thinkingLevel: "high",
   });
 
