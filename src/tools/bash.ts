@@ -1,6 +1,7 @@
 import { basename } from "path";
 import { writeFile, mkdir } from "fs/promises";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { Subprocess } from "bun";
 import { Type } from "@mariozechner/pi-ai";
 import { logger } from "../lib/logger.ts";
 
@@ -215,7 +216,7 @@ function tokenizeShell(command: string): TokenizeResult | string {
   return { segments, operators };
 }
 
-function validateCommand(command: string): string | null {
+export function validateCommand(command: string): string | null {
   const result = tokenizeShell(command);
   if (typeof result === "string") return result;
 
@@ -243,13 +244,184 @@ function validateCommand(command: string): string | null {
 const MAX_OUTPUT = 25_000;
 const PREVIEW_LIMIT = 2_000;
 
-export function bashTool(sessionDir: string): AgentTool<typeof bashSchema> {
+// -- Persistent shell session types --
+
+interface RunResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  wasReset: boolean;
+}
+
+type Waiter = () => void;
+
+export function bashTool(sessionDir: string, opts?: { timeoutMs?: number }): AgentTool<typeof bashSchema> {
   let dirReady = false;
+  const timeoutMs = opts?.timeoutMs ?? 30_000;
+
+  // -- Persistent shell session state --
+  let proc: Subprocess<"pipe", "pipe", "pipe"> | null = null;
+  let stdoutBuf = "";
+  let stderrBuf = "";
+  let wasReset = false;
+  let waiters: Waiter[] = [];
+
+  function notifyWaiters() {
+    const pending = waiters;
+    waiters = [];
+    for (const w of pending) w();
+  }
+
+  function startReaders(p: Subprocess<"pipe", "pipe", "pipe">) {
+    const decoder = new TextDecoder();
+    const drain = async (stream: ReadableStream<Uint8Array>, target: "stdout" | "stderr") => {
+      try {
+        for await (const chunk of stream) {
+          const text = decoder.decode(chunk, { stream: true });
+          if (target === "stdout") stdoutBuf += text;
+          else stderrBuf += text;
+          notifyWaiters();
+        }
+      } catch {
+        // Stream closed — shell died
+      }
+      notifyWaiters();
+    };
+    drain(p.stdout as unknown as ReadableStream<Uint8Array>, "stdout");
+    drain(p.stderr as unknown as ReadableStream<Uint8Array>, "stderr");
+  }
+
+  function spawn() {
+    proc = Bun.spawn(["bash", "--norc", "--noprofile"], {
+      cwd: process.cwd(),
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    stdoutBuf = "";
+    stderrBuf = "";
+    startReaders(proc);
+  }
+
+  function isAlive(): boolean {
+    return proc !== null && proc.exitCode === null;
+  }
+
+  function kill() {
+    if (proc) {
+      wasReset = true;
+      if (proc.exitCode === null) proc.kill();
+    }
+    proc = null;
+    stdoutBuf = "";
+    stderrBuf = "";
+  }
+
+  function extractBetweenMarkers(
+    buf: string,
+    beginMarker: string,
+    exitPrefix: string,
+  ): { content: string; exitCode: number; endIdx: number } | null {
+    const beginIdx = buf.indexOf(beginMarker);
+    if (beginIdx === -1) return null;
+
+    const exitIdx = buf.indexOf(exitPrefix, beginIdx);
+    if (exitIdx === -1) return null;
+
+    const exitLineEnd = buf.indexOf("\n", exitIdx);
+    const exitLine = buf.slice(exitIdx, exitLineEnd === -1 ? undefined : exitLineEnd);
+
+    // Parse exit code: __SENTINEL_EXIT_<uuid>_<code>__
+    const codeStr = exitLine.slice(exitPrefix.length, exitLine.length - 2); // strip trailing __
+    const exitCode = parseInt(codeStr, 10);
+
+    // Content is between the begin marker line end and the exit marker
+    const contentStart = buf.indexOf("\n", beginIdx);
+    if (contentStart === -1) return null;
+    const content = buf.slice(contentStart + 1, exitIdx);
+
+    // Strip trailing newline from content (the echo '' before sentinel adds one)
+    const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
+
+    return { content: trimmed, exitCode, endIdx: exitLineEnd === -1 ? buf.length : exitLineEnd + 1 };
+  }
+
+  function waitForSentinels(
+    uuid: string,
+    timeout: number,
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const beginMarker = `__SENTINEL_BEGIN_${uuid}__`;
+    const exitPrefix = `__SENTINEL_EXIT_${uuid}_`;
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        // Remove our waiter so it doesn't fire after timeout
+        waiters = waiters.filter((w) => w !== check);
+        logger.info({ uuid, timeoutMs: timeout }, "bash session timeout, killing shell");
+        kill();
+        reject(new Error("timeout"));
+      }, timeout);
+
+      const check = () => {
+        const stdoutResult = extractBetweenMarkers(stdoutBuf, beginMarker, exitPrefix);
+        const stderrResult = extractBetweenMarkers(stderrBuf, beginMarker, exitPrefix);
+
+        if (stdoutResult && stderrResult) {
+          clearTimeout(timer);
+          // Trim consumed regions from buffers
+          stdoutBuf = stdoutBuf.slice(stdoutResult.endIdx);
+          stderrBuf = stderrBuf.slice(stderrResult.endIdx);
+          resolve({
+            stdout: stdoutResult.content,
+            stderr: stderrResult.content,
+            exitCode: stdoutResult.exitCode,
+          });
+          return;
+        }
+
+        // Not ready yet — re-register waiter
+        waiters.push(check);
+      };
+
+      check();
+    });
+  }
+
+  async function run(command: string): Promise<RunResult> {
+    if (!isAlive()) spawn();
+
+    const resetNotice = wasReset;
+    wasReset = false;
+
+    const uuid = crypto.randomUUID();
+    const ecVar = `__ec_${uuid.replace(/-/g, "_")}`;
+    const beginMarker = `__SENTINEL_BEGIN_${uuid}__`;
+    const exitSentinel = `__SENTINEL_EXIT_${uuid}_`;
+
+    const script = [
+      `echo '${beginMarker}'`,
+      `echo '${beginMarker}' >&2`,
+      command,
+      `${ecVar}=$?`,
+      `echo ''`,
+      `echo '${exitSentinel}'"\${${ecVar}}"'__'`,
+      `echo '${exitSentinel}'"\${${ecVar}}"'__' >&2`,
+    ].join("\n") + "\n";
+
+    proc!.stdin.write(script);
+    proc!.stdin.flush();
+
+    const result = await waitForSentinels(uuid, timeoutMs);
+
+    return { ...result, wasReset: resetNotice };
+  }
+
+  // -- Tool definition --
 
   return {
     name: "bash",
     label: "Execute Command",
-    description: `Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). 30-second timeout. Output over 25,000 chars is truncated to a 2,000-char preview. Full output is persisted to ${sessionDir}/{toolCallId}.txt.`,
+    description: `Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). ${Math.round(timeoutMs / 1000)}-second timeout. Output over 25,000 chars is truncated to a 2,000-char preview. Full output is persisted to ${sessionDir}/{toolCallId}.txt. Shell session persists across calls — env vars, cwd, and functions are retained. If the session is killed (timeout or crash), a fresh shell is spawned automatically.`,
     parameters: bashSchema,
     async execute(toolCallId, params) {
       const error = validateCommand(params.command);
@@ -262,43 +434,36 @@ export function bashTool(sessionDir: string): AgentTool<typeof bashSchema> {
 
       const start = performance.now();
 
-      const proc = Bun.spawn(["sh", "-c", params.command], {
-        cwd: process.cwd(),
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-
-      const timeout = setTimeout(() => {
-        proc.kill();
-      }, 30_000);
-
-      const [stdout, stderr, exitCode] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-      ]);
-
-      clearTimeout(timeout);
+      let result: RunResult;
+      try {
+        result = await run(params.command);
+      } catch (err) {
+        if (err instanceof Error && err.message === "timeout") {
+          const durationMs = Math.round(performance.now() - start);
+          logger.info({ command: params.command, durationMs }, "bash timeout");
+          return {
+            content: [{ type: "text", text: `Error: command timed out after ${Math.round(timeoutMs / 1000)}s` }],
+            details: null,
+          };
+        }
+        throw err;
+      }
 
       const durationMs = Math.round(performance.now() - start);
 
-      if (proc.signalCode) {
-        logger.info({ command: params.command, durationMs, signal: proc.signalCode }, "bash timeout");
-        return {
-          content: [{ type: "text", text: `Error: command timed out after 30s` }],
-          details: null,
-        };
-      }
-
-      let text = stdout;
-      if (stderr) {
-        text += text ? `\n[stderr]\n${stderr}` : `[stderr]\n${stderr}`;
+      let text = result.stdout;
+      if (result.stderr) {
+        text += text ? `\n[stderr]\n${result.stderr}` : `[stderr]\n${result.stderr}`;
       }
       if (!text) {
         text = "(no output)";
       }
 
-      logger.info({ command: params.command, exitCode, durationMs }, "bash command");
+      if (result.wasReset) {
+        text = "[Shell session was reset. Previous variables and state are lost.]\n" + text;
+      }
+
+      logger.info({ command: params.command, exitCode: result.exitCode, durationMs }, "bash command");
 
       if (text.length > MAX_OUTPUT) {
         const safeId = toolCallId ? toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_") : String(Date.now());
@@ -315,20 +480,20 @@ export function bashTool(sessionDir: string): AgentTool<typeof bashSchema> {
           logger.info({ toolCallId, command: params.command, chars: text.length, path }, "bash output truncated and persisted");
           return {
             content: [{ type: "text", text: preview + `\n\n[Full output persisted to ${path} — use read tool to access]` }],
-            details: { command: params.command, exitCode, durationMs },
+            details: { command: params.command, exitCode: result.exitCode, durationMs },
           };
         } catch (err) {
           logger.error({ toolCallId, err }, "bash output persistence failed");
           return {
             content: [{ type: "text", text: preview + `\n\n[Full output lost — persistence failed]` }],
-            details: { command: params.command, exitCode, durationMs },
+            details: { command: params.command, exitCode: result.exitCode, durationMs },
           };
         }
       }
 
       return {
         content: [{ type: "text", text }],
-        details: { command: params.command, exitCode, durationMs },
+        details: { command: params.command, exitCode: result.exitCode, durationMs },
       };
     },
   };

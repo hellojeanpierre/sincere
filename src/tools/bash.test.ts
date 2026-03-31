@@ -305,4 +305,52 @@ describe("bash tool", () => {
     expect(tool.description).toContain(tmpDir);
     expect(tool.description).toContain("Output over 25,000 chars is truncated");
   });
+
+  // --- Persistent session tests ---
+
+  test("session reuse: same parent PID across calls", async () => {
+    const sessionTool = bashTool(tmpDir);
+    const r1 = await sessionTool.execute("pid1", { command: "python3 -c \"import os; print(os.getppid())\"" });
+    const r2 = await sessionTool.execute("pid2", { command: "python3 -c \"import os; print(os.getppid())\"" });
+    const pid1 = r1.content[0].text.trim();
+    const pid2 = r2.content[0].text.trim();
+    expect(pid1).toBe(pid2);
+    expect(Number(pid1)).toBeGreaterThan(0);
+  });
+
+  test("timeout kills session, next call respawns with reset notice", async () => {
+    const fastTool = bashTool(tmpDir, { timeoutMs: 500 });
+    // First command: get baseline PID
+    const r0 = await fastTool.execute("pre", { command: "python3 -c \"import os; print(os.getppid())\"" });
+    const pidBefore = r0.content[0].text.trim();
+
+    // Second command: trigger timeout
+    const r1 = await fastTool.execute("t1", {
+      command: "python3 -c \"import time; time.sleep(10)\"",
+    });
+    expect(r1.content[0].text).toContain("timed out");
+    expect(r1.details).toBeNull();
+
+    // Third command: should succeed in new session with reset notice
+    const r2 = await fastTool.execute("t2", {
+      command: "cat package.json | head -1",
+    });
+    expect(r2.content[0].text).toContain("[Shell session was reset. Previous variables and state are lost.]");
+    expect(r2.details).not.toBeNull();
+    expect(r2.details!.exitCode).toBe(0);
+
+    // PID should differ after respawn
+    const r3 = await fastTool.execute("t3", { command: "python3 -c \"import os; print(os.getppid())\"" });
+    // Strip the reset notice if still present (it won't be — wasReset was consumed)
+    const pidAfter = r3.content[0].text.trim();
+    expect(pidAfter).not.toBe(pidBefore);
+  });
+
+  test("wasReset is false after normal sequence", async () => {
+    const sessionTool = bashTool(tmpDir);
+    const r1 = await sessionTool.execute("n1", { command: "cat package.json | head -1" });
+    expect(r1.content[0].text).not.toContain("[Shell session was reset");
+    const r2 = await sessionTool.execute("n2", { command: "cat package.json | head -1" });
+    expect(r2.content[0].text).not.toContain("[Shell session was reset");
+  });
 });
