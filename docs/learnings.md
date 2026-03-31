@@ -1,5 +1,13 @@
 # Learnings
 
+## 2026-03-31 — Tool-level truncation outperforms context-layer compaction for agent reasoning
+
+When truncation happens silently in transformContext, the agent cannot reason about it — the JSONL manifest destruction at age 0 was a direct consequence. Moving truncation to the tool boundary (matching Claude Code's read/exec tool descriptions) makes the constraint part of the tool contract: the agent sees it in the description, can plan around it (e.g., grep instead of cat), and the preview + disk-persist pointer is explicit, not surprising. Silent post-hoc compaction defeats upstream tool design intent. Implication: constrain the environment at the boundary the agent can see.
+
+## 2026-03-31 — Hypothesis: semantic compaction markers trigger retrieval; mechanical path hints do not
+
+Microcompaction markers like [Full output persisted to .../file.txt — use read tool] read as housekeeping. The agent doesn't retrieve because it doesn't know the persisted data is relevant to its current step — the how was never the bottleneck. Claude Code's microcompaction has the same pattern: path references that lose semantic content and can be dropped by downstream compaction. A content-descriptive marker like [Per-queue match rates (5 queues, 847 tickets) — .../file.txt] would turn the stub into a reasoning attractor. Untested. Implication: transformContext should generate semantic previews, not retrieval instructions.
+
 ## 2026-03-30 — Shed raw output at generation time, not at compaction time
 
 Claude Code's microcompaction system persists tool results >50K chars to disk immediately, replacing inline content with a file path + 2KB preview. The threshold was lowered from 100K to 50K after observing quality gains. The design rationale is three-fold: (1) large inline results degrade reasoning quality on all context through attention dilution, not just by consuming space; (2) compaction summaries are lossy — a grep result summarized as "47 errors across 12 files" loses the specific detail needed two turns later; (3) compaction requires its own context headroom to run, so bloated context can prevent the cleanup pass entirely. The file-on-disk approach preserves full output for selective re-reading while keeping the active context clean for reasoning.

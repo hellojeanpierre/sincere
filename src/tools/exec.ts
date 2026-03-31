@@ -1,4 +1,5 @@
 import { basename } from "path";
+import { writeFile, mkdir } from "fs/promises";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
 import { logger } from "../lib/logger.ts";
@@ -239,64 +240,96 @@ function validateCommand(command: string): string | null {
   return null;
 }
 
-export const execTool: AgentTool<typeof execSchema> = {
-  name: "exec",
-  label: "Execute Command",
-  description:
-    "Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). 30-second timeout.",
-  parameters: execSchema,
-  async execute(_toolCallId, params) {
-    const error = validateCommand(params.command);
-    if (error) {
+const MAX_OUTPUT = 25_000;
+const PREVIEW_LIMIT = 2_000;
+
+export function execTool(sessionDir: string): AgentTool<typeof execSchema> {
+  let dirReady = false;
+
+  return {
+    name: "exec",
+    label: "Execute Command",
+    description: `Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). 30-second timeout. Output over 25,000 chars is truncated to a 2,000-char preview. Full output is persisted to ${sessionDir}/{toolCallId}.txt.`,
+    parameters: execSchema,
+    async execute(toolCallId, params) {
+      const error = validateCommand(params.command);
+      if (error) {
+        return {
+          content: [{ type: "text", text: error }],
+          details: null,
+        };
+      }
+
+      const start = performance.now();
+
+      const proc = Bun.spawn(["sh", "-c", params.command], {
+        cwd: process.cwd(),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const timeout = setTimeout(() => {
+        proc.kill();
+      }, 30_000);
+
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+
+      clearTimeout(timeout);
+
+      const durationMs = Math.round(performance.now() - start);
+
+      if (proc.signalCode) {
+        logger.info({ command: params.command, durationMs, signal: proc.signalCode }, "exec timeout");
+        return {
+          content: [{ type: "text", text: `Error: command timed out after 30s` }],
+          details: null,
+        };
+      }
+
+      let text = stdout;
+      if (stderr) {
+        text += text ? `\n[stderr]\n${stderr}` : `[stderr]\n${stderr}`;
+      }
+      if (!text) {
+        text = "(no output)";
+      }
+
+      logger.info({ command: params.command, exitCode, durationMs }, "exec command");
+
+      if (text.length > MAX_OUTPUT) {
+        const safeId = toolCallId ? toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_") : String(Date.now());
+        const lastNewline = text.lastIndexOf("\n", PREVIEW_LIMIT);
+        const preview = text.slice(0, lastNewline > 0 ? lastNewline : PREVIEW_LIMIT);
+        const path = `${sessionDir}/${safeId}.txt`;
+
+        try {
+          if (!dirReady) {
+            await mkdir(sessionDir, { recursive: true });
+            dirReady = true;
+          }
+          await writeFile(path, text);
+          logger.info({ toolCallId, command: params.command, chars: text.length, path }, "exec output truncated and persisted");
+          return {
+            content: [{ type: "text", text: preview + `\n\n[Full output persisted to ${path} — use read tool to access]` }],
+            details: { command: params.command, exitCode, durationMs },
+          };
+        } catch (err) {
+          logger.error({ toolCallId, err }, "exec output persistence failed");
+          return {
+            content: [{ type: "text", text: preview + `\n\n[Full output lost — persistence failed]` }],
+            details: { command: params.command, exitCode, durationMs },
+          };
+        }
+      }
+
       return {
-        content: [{ type: "text", text: error }],
-        details: null,
+        content: [{ type: "text", text }],
+        details: { command: params.command, exitCode, durationMs },
       };
-    }
-
-    const start = performance.now();
-
-    const proc = Bun.spawn(["sh", "-c", params.command], {
-      cwd: process.cwd(),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const timeout = setTimeout(() => {
-      proc.kill();
-    }, 30_000);
-
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]);
-
-    clearTimeout(timeout);
-
-    const durationMs = Math.round(performance.now() - start);
-
-    if (proc.signalCode) {
-      logger.info({ command: params.command, durationMs, signal: proc.signalCode }, "exec timeout");
-      return {
-        content: [{ type: "text", text: `Error: command timed out after 30s` }],
-        details: null,
-      };
-    }
-
-    let text = stdout;
-    if (stderr) {
-      text += text ? `\n[stderr]\n${stderr}` : `[stderr]\n${stderr}`;
-    }
-    if (!text) {
-      text = "(no output)";
-    }
-
-    logger.info({ command: params.command, exitCode, durationMs }, "exec command");
-
-    return {
-      content: [{ type: "text", text }],
-      details: { command: params.command, exitCode, durationMs },
-    };
-  },
-};
+    },
+  };
+}

@@ -5,7 +5,8 @@ import { makeTransformContext, loadSystemPrompt } from "./agent.ts";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 const TEST_DIR = resolve(import.meta.dirname, "..", "data/test-tool-results");
-const transformContext = makeTransformContext(TEST_DIR);
+const TEST_HINT_DIR = "data/sessions/latest/tool-results";
+const transformContext = makeTransformContext(TEST_DIR, TEST_HINT_DIR);
 
 function userMsg(text: string): AgentMessage {
   return { role: "user", content: [{ type: "text", text }] };
@@ -95,7 +96,7 @@ describe("transformContext", () => {
         const text = tr.content[0];
         if (text.type === "text") {
           expect(text.text).toContain("x".repeat(2_000));
-          expect(text.text).toContain("[Full output persisted to");
+          expect(text.text).toContain("[Full output persisted to data/sessions/latest/tool-results/");
           expect(text.text.length).toBeLessThan(2_200);
         }
       }
@@ -119,7 +120,7 @@ describe("transformContext", () => {
     });
 
     test("write failure still truncates to preview", async () => {
-      const failCtx = makeTransformContext("/dev/null/impossible/path");
+      const failCtx = makeTransformContext("/dev/null/impossible/path", "data/sessions/latest/tool-results");
       const messages: AgentMessage[] = [
         userMsg("go"),
         toolResult("exec", "z".repeat(15_000)),
