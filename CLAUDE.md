@@ -34,7 +34,7 @@ Bun-based AI agent project using `@mariozechner/pi-agent-core` and `@mariozechne
 ## Tool Surface
 
 - **read** — returns file content as text. Unconditionally safe. Used for data files, knowledge graph triples, skill context, configuration.
-- **exec** — runs a shell command in a subprocess, returns stdout/stderr. Allowlisted binaries only. Used for computation the Operator cannot do in-context.
+- **bash** — runs a shell command in a subprocess, returns stdout/stderr. Allowlisted binaries only. Used for computation the Operator cannot do in-context.
 
 ## Project Layout
 

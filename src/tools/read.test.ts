@@ -326,7 +326,7 @@ describe("read tool — JSONL manifest", () => {
     expect(d.samplesReturned).toBe(3);
     const text = result.content[0].text;
     expect(text).toContain("offset/limit do not apply to JSONL manifests");
-    expect(text).toContain("exec");
+    expect(text).toContain("bash");
   });
 
   test("no offset/limit notice when params omitted", async () => {

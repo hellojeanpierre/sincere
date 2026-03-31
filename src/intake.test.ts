@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { resolve } from "path";
 import { createAgent } from "./agent.ts";
-import { execTool } from "./tools/exec.ts";
+import { bashTool } from "./tools/bash.ts";
 import { intake } from "./intake.ts";
 
 const EVENTS_PATH = "data/pintest-v2/smoke-tickets/smoke_events.jsonl";
@@ -20,7 +20,7 @@ describe("intake", () => {
   const agent = createAgent({
     promptPath: resolve(import.meta.dirname, "operator.md"),
     model: process.env.MODEL || "claude-sonnet-4-6",
-    tools: [execTool],
+    tools: [bashTool],
     thinkingLevel: "high",
   });
 

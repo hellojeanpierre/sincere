@@ -238,7 +238,7 @@ async function buildJsonlManifest(
     .join("\n");
 
   const paginationNote = paginationRequested
-    ? "\n\n[offset/limit do not apply to JSONL manifests. Use exec for record-level access.]"
+    ? "\n\n[offset/limit do not apply to JSONL manifests. Use bash for record-level access.]"
     : "";
 
   return {

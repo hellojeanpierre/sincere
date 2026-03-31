@@ -121,7 +121,7 @@ describe("transformContext", () => {
       const failCtx = makeTransformContext("/dev/null/impossible/path", "data/sessions/latest/tool-results");
       const messages: AgentMessage[] = [
         userMsg("go"),
-        toolResult("exec", "z".repeat(15_000)),
+        toolResult("bash", "z".repeat(15_000)),
         ...stalePadding(),
       ];
 
@@ -141,7 +141,7 @@ describe("transformContext", () => {
       const messages: AgentMessage[] = [
         userMsg("go"),
         assistantMsg("calling tool"),
-        toolResult("exec", "x".repeat(12_000)),
+        toolResult("bash", "x".repeat(12_000)),
       ];
       const result = await transformContext(messages);
       const tr = result[2];
@@ -155,7 +155,7 @@ describe("transformContext", () => {
       const messages: AgentMessage[] = [
         userMsg("go"),
         assistantMsg("calling tool"),
-        toolResult("exec", "x".repeat(12_000)),
+        toolResult("bash", "x".repeat(12_000)),
         ...stalePadding(),
       ];
       const result = await transformContext(messages);
@@ -171,7 +171,7 @@ describe("transformContext", () => {
       const messages: AgentMessage[] = [
         userMsg("go"),
         assistantMsg("calling tool"),
-        toolResult("exec", "x".repeat(5_000)),
+        toolResult("bash", "x".repeat(5_000)),
         ...stalePadding(),
       ];
       const result = await transformContext(messages);
@@ -185,12 +185,12 @@ describe("transformContext", () => {
     test("boundary: first turn stale, last four fresh", async () => {
       const messages: AgentMessage[] = [
         // Turn 1 (stale — before the 4th-from-end assistant msg)
-        userMsg("t1"), assistantMsg("a1"), toolResult("exec", "A".repeat(12_000)),
+        userMsg("t1"), assistantMsg("a1"), toolResult("bash", "A".repeat(12_000)),
         // Turns 2-5 (fresh window)
-        userMsg("t2"), assistantMsg("a2"), toolResult("exec", "B".repeat(12_000)),
-        userMsg("t3"), assistantMsg("a3"), toolResult("exec", "C".repeat(12_000)),
-        userMsg("t4"), assistantMsg("a4"), toolResult("exec", "D".repeat(12_000)),
-        userMsg("t5"), assistantMsg("a5"), toolResult("exec", "E".repeat(12_000)),
+        userMsg("t2"), assistantMsg("a2"), toolResult("bash", "B".repeat(12_000)),
+        userMsg("t3"), assistantMsg("a3"), toolResult("bash", "C".repeat(12_000)),
+        userMsg("t4"), assistantMsg("a4"), toolResult("bash", "D".repeat(12_000)),
+        userMsg("t5"), assistantMsg("a5"), toolResult("bash", "E".repeat(12_000)),
       ];
       const result = await transformContext(messages);
 
@@ -214,9 +214,9 @@ describe("transformContext", () => {
     test("short conversations never compact", async () => {
       // Only 3 assistant turns — all fresh
       const messages: AgentMessage[] = [
-        userMsg("t1"), assistantMsg("a1"), toolResult("exec", "x".repeat(20_000)),
-        userMsg("t2"), assistantMsg("a2"), toolResult("exec", "y".repeat(20_000)),
-        userMsg("t3"), assistantMsg("a3"), toolResult("exec", "z".repeat(20_000)),
+        userMsg("t1"), assistantMsg("a1"), toolResult("bash", "x".repeat(20_000)),
+        userMsg("t2"), assistantMsg("a2"), toolResult("bash", "y".repeat(20_000)),
+        userMsg("t3"), assistantMsg("a3"), toolResult("bash", "z".repeat(20_000)),
       ];
       const result = await transformContext(messages);
       for (const idx of [2, 5, 8]) {
@@ -234,7 +234,7 @@ describe("transformContext", () => {
       const bigError = "E".repeat(15_000);
       const messages: AgentMessage[] = [
         userMsg("go"),
-        toolResult("exec", bigError, { isError: true }),
+        toolResult("bash", bigError, { isError: true }),
         ...stalePadding(),
       ];
 

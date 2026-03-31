@@ -186,13 +186,13 @@
           reasoningEl.textContent = fullText;
           reasoningEl.scrollTop = reasoningEl.scrollHeight;
         } else if (ev.type === 'tool_start') {
-          labelEl.textContent = ev.tool === 'exec' ? 'Running command\u2026' : `Reading ${ev.args?.path || ev.tool}\u2026`;
-          const preview = ev.tool === 'exec' ? (ev.args?.command || '') : (ev.args?.path || '');
+          labelEl.textContent = ev.tool === 'bash' ? 'Running command\u2026' : `Reading ${ev.args?.path || ev.tool}\u2026`;
+          const preview = ev.tool === 'bash' ? (ev.args?.command || '') : (ev.args?.path || '');
           if (preview) {
             const truncated = preview.length > 200 ? preview.slice(0, 200) + '\u2026' : preview;
             const toolEl = document.createElement('div');
             toolEl.className = 'text-xs text-stone-500 font-mono mt-2 p-2 bg-stone-900/50 rounded overflow-hidden whitespace-pre-wrap break-all';
-            toolEl.textContent = (ev.tool === 'exec' ? '$ ' : '') + truncated;
+            toolEl.textContent = (ev.tool === 'bash' ? '$ ' : '') + truncated;
             reasoningEl.appendChild(toolEl);
             reasoningEl.scrollTop = reasoningEl.scrollHeight;
           }

@@ -9,12 +9,12 @@ import type { Handler } from "./lane.ts";
 import { intake } from "./intake.ts";
 import { logger } from "./lib/logger.ts";
 import { readTool } from "./tools/read.ts";
-import { execTool } from "./tools/exec.ts";
+import { bashTool } from "./tools/bash.ts";
 import { resolveConfig } from "./lib/config.ts";
 
 // Microcompaction: persist oversized stale tool results to disk, keep a 2k
 // preview inline. Fresh results (within the last FRESH_WINDOW_TURNS assistant
-// turns) pass through unchanged — exec owns the size gate for those.
+// turns) pass through unchanged — bash owns the size gate for those.
 const FRESH_WINDOW_TURNS = 4;
 
 export function makeTransformContext(sessionDir: string, hintDir: string) {
@@ -158,7 +158,7 @@ export function createAgent(opts: AgentOptions): Agent {
 
   const systemPrompt = loadSystemPrompt(opts.promptPath);
   const model = getModel("anthropic", opts.model);
-  const tools: AgentTool<any>[] = [readTool, execTool(sessionDir), ...(opts.tools ?? []).filter(t => t.name !== "exec")];
+  const tools: AgentTool<any>[] = [readTool, bashTool(sessionDir), ...(opts.tools ?? []).filter(t => t.name !== "bash")];
 
   return new Agent({
     streamFn: streamSimple,
