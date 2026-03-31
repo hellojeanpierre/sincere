@@ -17,7 +17,7 @@ import { resolveConfig } from "./lib/config.ts";
 // turns) pass through unchanged — bash owns the size gate for those.
 const FRESH_WINDOW_TURNS = 4;
 
-export function makeTransformContext(sessionDir: string, hintDir: string) {
+export function makeTransformContext(sessionDir: string, hintDir: string, injectEnv?: (key: string, value: string) => void) {
   let dirReady = false;
 
   return async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
@@ -60,6 +60,7 @@ export function makeTransformContext(sessionDir: string, hintDir: string) {
             dirReady = true;
           }
           await writeFile(writePath, joined);
+          injectEnv?.("LAST_RESULT", writePath);
           logger.info({ toolCallId: trMsg.toolCallId, toolName: trMsg.toolName, chars: totalLen, path: writePath }, "microcompaction persisted");
           return {
             ...trMsg,
@@ -158,12 +159,13 @@ export function createAgent(opts: AgentOptions): Agent {
 
   const systemPrompt = loadSystemPrompt(opts.promptPath);
   const model = getModel("anthropic", opts.model);
-  const tools: AgentTool<any>[] = [readTool, bashTool(sessionDir), ...(opts.tools ?? []).filter(t => t.name !== "bash")];
+  const bash = bashTool(sessionDir);
+  const tools: AgentTool<any>[] = [readTool, bash.tool, ...(opts.tools ?? []).filter(t => t.name !== "bash")];
 
   return new Agent({
     streamFn: streamSimple,
     getApiKey: () => apiKey,
-    transformContext: makeTransformContext(sessionDir, hintDir),
+    transformContext: makeTransformContext(sessionDir, hintDir, bash.injectEnv),
     initialState: {
       systemPrompt,
       model,

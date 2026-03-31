@@ -5,9 +5,13 @@ import { tmpdir } from "os";
 import { bashTool } from "./bash.ts";
 
 const tmpDir = mkdtempSync(join(tmpdir(), "bash-test-"));
-afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
+afterAll(() => {
+  bash.dispose();
+  rmSync(tmpDir, { recursive: true, force: true });
+});
 
-const tool = bashTool(tmpDir);
+const bash = bashTool(tmpDir);
+const tool = bash.tool;
 
 describe("bash tool", () => {
   test("runs a simple command and returns stdout", async () => {
@@ -304,5 +308,42 @@ describe("bash tool", () => {
   test("description includes sessionDir and truncation note", () => {
     expect(tool.description).toContain(tmpDir);
     expect(tool.description).toContain("Output over 25,000 chars is truncated");
+  });
+
+  // --- injectEnv tests ---
+
+  test("injectEnv makes variable visible in next execute call", async () => {
+    // Run an initial command to ensure the session is alive
+    await tool.execute("test", { command: "cat /dev/null" });
+    // Inject a variable
+    bash.injectEnv("TEST_INJECT_VAR", "/tmp/test-result.txt");
+    // Small delay to let fire-and-forget export complete
+    await new Promise(r => setTimeout(r, 100));
+    // Next command should see it
+    const result = await tool.execute("test", {
+      command: `python3 -c "import os; print(os.environ.get('TEST_INJECT_VAR', 'MISSING'))"`,
+    });
+    expect(result.content[0].text).toContain("/tmp/test-result.txt");
+  });
+
+  test("injectEnv shell-escapes values with single quotes", async () => {
+    await tool.execute("test", { command: "cat /dev/null" });
+    bash.injectEnv("TEST_QUOTE_VAR", "it's a test");
+    await new Promise(r => setTimeout(r, 100));
+    const result = await tool.execute("test", {
+      command: `python3 -c "import os; print(os.environ.get('TEST_QUOTE_VAR', 'MISSING'))"`,
+    });
+    expect(result.content[0].text).toContain("it's a test");
+  });
+
+  test("injectEnv after dispose is a silent no-op", async () => {
+    const tmp2 = mkdtempSync(join(tmpdir(), "bash-inject-"));
+    const bash2 = bashTool(tmp2);
+    // Run a command to start the session
+    await bash2.tool.execute("test", { command: "cat /dev/null" });
+    bash2.dispose();
+    // Should not throw
+    bash2.injectEnv("DEAD_VAR", "value");
+    rmSync(tmp2, { recursive: true, force: true });
   });
 });

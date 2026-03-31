@@ -243,10 +243,130 @@ function validateCommand(command: string): string | null {
 const MAX_OUTPUT = 25_000;
 const PREVIEW_LIMIT = 2_000;
 
-export function bashTool(sessionDir: string): AgentTool<typeof bashSchema> {
-  let dirReady = false;
+function shellEscape(value: string): string {
+  return "'" + value.replace(/'/g, "'\\''") + "'";
+}
+
+interface RunResult {
+  stdout: string;
+  exitCode: number;
+}
+
+function createBashSession() {
+  type Proc = ReturnType<typeof Bun.spawn>;
+  let proc: Proc | null = null;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  let buf = "";
+  const decoder = new TextDecoder();
+
+  // Serialize session.run() calls so only one command is in flight at a time.
+  let lock: Promise<void> = Promise.resolve();
+
+  function spawn() {
+    buf = "";
+    proc = Bun.spawn(["bash", "--norc", "--noprofile"], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      cwd: process.cwd(),
+    });
+    reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
+    // Drain stderr to prevent backpressure — we merge per-command via 2>&1.
+    new Response(proc.stderr).text().catch(() => {});
+  }
+
+  function alive(): boolean {
+    return proc !== null && proc.exitCode === null;
+  }
+
+  async function run(command: string, timeout: number): Promise<RunResult> {
+    let unlock!: () => void;
+    const prev = lock;
+    lock = new Promise<void>(r => { unlock = r; });
+    await prev;
+
+    try {
+      if (!alive()) spawn();
+
+      const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const sentinel = `__SINCERE_${id}__`;
+
+      const wrapped = `{ ${command}\n} 2>&1\necho "${sentinel} $?"\n`;
+      proc!.stdin.write(wrapped);
+      proc!.stdin.flush();
+
+      const deadline = Date.now() + timeout;
+
+      while (true) {
+        const sentinelIdx = buf.indexOf(sentinel);
+        if (sentinelIdx !== -1) {
+          const stdout = buf.slice(0, sentinelIdx);
+          const afterSentinel = buf.slice(sentinelIdx + sentinel.length);
+          const newlineIdx = afterSentinel.indexOf("\n");
+          const exitStr = afterSentinel.slice(0, newlineIdx !== -1 ? newlineIdx : undefined).trim();
+          const exitCode = parseInt(exitStr, 10) || 0;
+          buf = newlineIdx !== -1 ? afterSentinel.slice(newlineIdx + 1) : "";
+          return { stdout, exitCode };
+        }
+
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) {
+          proc!.kill();
+          proc = null;
+          reader = null;
+          buf = "";
+          throw new Error("timeout");
+        }
+
+        const chunk = await Promise.race([
+          reader!.read(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), remaining),
+          ),
+        ]);
+
+        if (chunk.done) {
+          proc = null;
+          reader = null;
+          buf = "";
+          throw new Error("session died");
+        }
+
+        buf += decoder.decode(chunk.value, { stream: true });
+      }
+    } finally {
+      unlock();
+    }
+  }
 
   return {
+    get alive() { return alive(); },
+    run,
+    dispose() {
+      if (reader) {
+        reader.cancel().catch(() => {});
+        reader = null;
+      }
+      if (proc) {
+        proc.kill();
+        proc = null;
+      }
+      buf = "";
+    },
+  };
+}
+
+export interface BashToolResult {
+  tool: AgentTool<typeof bashSchema>;
+  dispose: () => void;
+  injectEnv: (key: string, value: string) => void;
+}
+
+export function bashTool(sessionDir: string): BashToolResult {
+  let dirReady = false;
+  const session = createBashSession();
+
+  const tool: AgentTool<typeof bashSchema> = {
     name: "bash",
     label: "Execute Command",
     description: `Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). 30-second timeout. Output over 25,000 chars is truncated to a 2,000-char preview. Full output is persisted to ${sessionDir}/{toolCallId}.txt.`,
@@ -262,41 +382,30 @@ export function bashTool(sessionDir: string): AgentTool<typeof bashSchema> {
 
       const start = performance.now();
 
-      const proc = Bun.spawn(["sh", "-c", params.command], {
-        cwd: process.cwd(),
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-
-      const timeout = setTimeout(() => {
-        proc.kill();
-      }, 30_000);
-
-      const [stdout, stderr, exitCode] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-      ]);
-
-      clearTimeout(timeout);
-
-      const durationMs = Math.round(performance.now() - start);
-
-      if (proc.signalCode) {
-        logger.info({ command: params.command, durationMs, signal: proc.signalCode }, "bash timeout");
+      let stdout: string;
+      let exitCode: number;
+      try {
+        const result = await session.run(params.command, 30_000);
+        stdout = result.stdout;
+        exitCode = result.exitCode;
+      } catch (err) {
+        const durationMs = Math.round(performance.now() - start);
+        if ((err as Error).message === "timeout") {
+          logger.info({ command: params.command, durationMs }, "bash timeout");
+          return {
+            content: [{ type: "text", text: `Error: command timed out after 30s` }],
+            details: null,
+          };
+        }
+        logger.error({ command: params.command, err }, "bash session error");
         return {
-          content: [{ type: "text", text: `Error: command timed out after 30s` }],
+          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           details: null,
         };
       }
 
-      let text = stdout;
-      if (stderr) {
-        text += text ? `\n[stderr]\n${stderr}` : `[stderr]\n${stderr}`;
-      }
-      if (!text) {
-        text = "(no output)";
-      }
+      const durationMs = Math.round(performance.now() - start);
+      const text = stdout || "(no output)";
 
       logger.info({ command: params.command, exitCode, durationMs }, "bash command");
 
@@ -330,6 +439,15 @@ export function bashTool(sessionDir: string): AgentTool<typeof bashSchema> {
         content: [{ type: "text", text }],
         details: { command: params.command, exitCode, durationMs },
       };
+    },
+  };
+
+  return {
+    tool,
+    dispose: () => session.dispose(),
+    injectEnv(key: string, value: string) {
+      if (!session.alive) return;
+      session.run(`export ${key}=${shellEscape(value)}`, 5_000).catch(() => {});
     },
   };
 }

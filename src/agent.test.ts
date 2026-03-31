@@ -246,6 +246,57 @@ describe("transformContext", () => {
       expect(text.text).toBe(bigError);
     });
   });
+
+  describe("injectEnv integration", () => {
+    test("microcompaction calls injectEnv with absolute writePath", async () => {
+      const calls: [string, string][] = [];
+      const injectEnv = (key: string, value: string) => { calls.push([key, value]); };
+      const ctx = makeTransformContext(TEST_DIR, TEST_HINT_DIR, injectEnv);
+
+      const callId = "tc_inject_" + Date.now();
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("bash", "x".repeat(12_000), { toolCallId: callId }),
+        ...stalePadding(),
+      ];
+
+      await ctx(messages);
+
+      expect(calls.length).toBe(1);
+      expect(calls[0][0]).toBe("LAST_RESULT");
+      expect(calls[0][1]).toBe(`${TEST_DIR}/${callId}.txt`);
+    });
+
+    test("injectEnv not called for small results", async () => {
+      const calls: [string, string][] = [];
+      const injectEnv = (key: string, value: string) => { calls.push([key, value]); };
+      const ctx = makeTransformContext(TEST_DIR, TEST_HINT_DIR, injectEnv);
+
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("bash", "small output"),
+        ...stalePadding(),
+      ];
+
+      await ctx(messages);
+      expect(calls.length).toBe(0);
+    });
+
+    test("injectEnv not called when persistence fails", async () => {
+      const calls: [string, string][] = [];
+      const injectEnv = (key: string, value: string) => { calls.push([key, value]); };
+      const ctx = makeTransformContext("/dev/null/impossible/path", TEST_HINT_DIR, injectEnv);
+
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("bash", "x".repeat(12_000)),
+        ...stalePadding(),
+      ];
+
+      await ctx(messages);
+      expect(calls.length).toBe(0);
+    });
+  });
 });
 
 describe("loadSystemPrompt", () => {
