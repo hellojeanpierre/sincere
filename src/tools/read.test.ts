@@ -23,6 +23,11 @@ const nonObjectJsonl = resolve(tmpDir, "non-object.jsonl");
 const mixedTopJsonl = resolve(tmpDir, "mixed-top.jsonl");
 const crlfJsonl = resolve(tmpDir, "crlf.jsonl");
 
+// Field-truncation fixtures
+const longFieldJsonl = resolve(tmpDir, "long-field.jsonl");
+const nestedLongJsonl = resolve(tmpDir, "nested-long.jsonl");
+const arrayLongJsonl = resolve(tmpDir, "array-long.jsonl");
+
 beforeAll(async () => {
   await Bun.write(smallFile, "line0\nline1\nline2\n");
 
@@ -114,6 +119,18 @@ beforeAll(async () => {
     JSON.stringify("just a string"),
     JSON.stringify([10, 20]),
   ].join("\n"));
+
+  // ── Field-truncation fixtures ──
+
+  // Long string field (300 chars) + short field
+  const longStr = "x".repeat(300);
+  await Bun.write(longFieldJsonl, JSON.stringify({ body: longStr, id: 1 }));
+
+  // Nested object with a long string
+  await Bun.write(nestedLongJsonl, JSON.stringify({ meta: { description: longStr }, id: 2 }));
+
+  // Array of long strings
+  await Bun.write(arrayLongJsonl, JSON.stringify({ items: [longStr, longStr], n: 5 }));
 });
 
 afterAll(async () => {
@@ -380,5 +397,60 @@ describe("read tool — JSONL manifest", () => {
     expect(typeof d.schemaInferredFrom).toBe("number");
     expect(typeof d.malformedLines).toBe("number");
     expect(d.schema).toBeDefined();
+  });
+});
+
+// ── Field-value truncation tests ──
+
+describe("read tool — JSONL field-value truncation", () => {
+  test("long string field is truncated at 200 chars", async () => {
+    const result = await readTool.execute("test", { path: "tmp-test-read/long-field.jsonl" });
+    const text = result.content[0].text;
+    const sample = text.split("--- record 0 ---\n")[1];
+    const parsed = JSON.parse(sample);
+    expect(parsed.body).toHaveLength(200 + "…[truncated]".length);
+    expect(parsed.body).toEndWith("…[truncated]");
+  });
+
+  test("short fields are untouched", async () => {
+    const result = await readTool.execute("test", { path: "tmp-test-read/long-field.jsonl" });
+    const text = result.content[0].text;
+    const sample = text.split("--- record 0 ---\n")[1];
+    const parsed = JSON.parse(sample);
+    expect(parsed.id).toBe(1);
+  });
+
+  test("nested object — long string truncated recursively", async () => {
+    const result = await readTool.execute("test", { path: "tmp-test-read/nested-long.jsonl" });
+    const text = result.content[0].text;
+    const sample = text.split("--- record 0 ---\n")[1];
+    const parsed = JSON.parse(sample);
+    expect(parsed.meta.description).toEndWith("…[truncated]");
+    expect(parsed.meta.description.length).toBeLessThanOrEqual(200 + "…[truncated]".length);
+    expect(parsed.id).toBe(2);
+  });
+
+  test("array elements — each long string truncated", async () => {
+    const result = await readTool.execute("test", { path: "tmp-test-read/array-long.jsonl" });
+    const text = result.content[0].text;
+    const sample = text.split("--- record 0 ---\n")[1];
+    const parsed = JSON.parse(sample);
+    expect(parsed.items).toHaveLength(2);
+    for (const item of parsed.items) {
+      expect(item).toEndWith("…[truncated]");
+      expect(item.length).toBeLessThanOrEqual(200 + "…[truncated]".length);
+    }
+    expect(parsed.n).toBe(5);
+  });
+
+  test("non-string fields are unchanged", async () => {
+    const result = await readTool.execute("test", { path: "tmp-test-read/flat.jsonl" });
+    const text = result.content[0].text;
+    // flat.jsonl has short fields — samples should contain valid JSON with original values
+    const sampleSection = text.split("samples:\n")[1];
+    const firstSample = sampleSection.split("\n--- record")[0].replace(/^--- record \d+ ---\n/, "");
+    const parsed = JSON.parse(firstSample);
+    expect(typeof parsed.a).toBe("number");
+    expect(typeof parsed.b).toBe("string");
   });
 });

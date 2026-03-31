@@ -6,6 +6,7 @@ import { logger } from "../lib/logger.ts";
 const MAX_BYTES = 50 * 1024; // 50KB
 const SCHEMA_SAMPLE_COUNT = 10;
 const MAX_SAMPLE_BYTES = 8192;
+const MAX_FIELD_CHARS = 200;
 
 // ── JSONL manifest helpers ──────────────────────────────────────────
 
@@ -119,6 +120,21 @@ function truncateSample(text: string, maxBytes: number): string {
   return buf.subarray(0, end).toString("utf-8") + "…[truncated]";
 }
 
+function truncateFieldValues(v: unknown): unknown {
+  if (typeof v === "string") {
+    return v.length > MAX_FIELD_CHARS ? v.slice(0, MAX_FIELD_CHARS) + "…[truncated]" : v;
+  }
+  if (Array.isArray(v)) return v.map(truncateFieldValues);
+  if (v !== null && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      out[k] = truncateFieldValues(val);
+    }
+    return out;
+  }
+  return v;
+}
+
 /** Helper: stream lines from a Bun file, yielding each non-empty line. */
 async function* streamLines(file: ReturnType<typeof Bun.file>): AsyncGenerator<string> {
   const decoder = new TextDecoder();
@@ -216,6 +232,19 @@ async function buildJsonlManifest(
   }
   if (lastValid!.index !== firstValid!.index) {
     candidates.push(lastValid!);
+  }
+
+  // Truncate long field values so samples communicate structure, not usable content.
+  for (const c of candidates) {
+    try {
+      c.text = JSON.stringify(truncateFieldValues(JSON.parse(c.text)));
+    } catch {
+      // Structurally invalid despite passing JSON.parse in pass 1 (e.g. encoding
+      // drift between stream passes). Truncate raw text so full content never leaks.
+      if (c.text.length > MAX_FIELD_CHARS) {
+        c.text = c.text.slice(0, MAX_FIELD_CHARS) + "…[truncated]";
+      }
+    }
   }
 
   const samples: { recordIndex: number; text: string }[] = [];
