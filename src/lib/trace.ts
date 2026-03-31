@@ -75,18 +75,22 @@ export function subscribeTrace(agent: Agent, source: TraceSource): () => void {
       const timestamp = new Date().toISOString();
       traceFile = resolve(tracesDir, `${timestamp.replaceAll(":", "-")}.md`);
       traceAppend(`# Investigation Trace — ${timestamp} [${source}]`);
+
+      // Update symlink immediately so latest.md always points to the most
+      // recent trace, even if the run is interrupted before agent_end.
+      const latestLink = resolve(tracesDir, "latest.md");
+      try {
+        if (existsSync(latestLink)) unlinkSync(latestLink);
+        symlinkSync(basename(traceFile), latestLink);
+      } catch (err) {
+        logger.error({ err, latestLink }, "failed to update latest.md symlink");
+      }
       return;
     }
 
     const formatted = formatEvent(event, startTime);
     if (formatted) {
       traceAppend(formatted);
-    }
-
-    if (event.type === "agent_end") {
-      const latestLink = resolve(tracesDir, "latest.md");
-      if (existsSync(latestLink)) unlinkSync(latestLink);
-      symlinkSync(basename(traceFile), latestLink);
     }
   });
 }
