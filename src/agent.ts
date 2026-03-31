@@ -1,4 +1,4 @@
-import { readFileSync, globSync, existsSync, unlinkSync, symlinkSync, mkdirSync } from "fs";
+import { readFileSync, globSync, unlinkSync, symlinkSync, mkdirSync } from "fs";
 import { resolve, basename, relative, dirname } from "path";
 import { writeFile, mkdir } from "fs/promises";
 import { Agent } from "@mariozechner/pi-agent-core";
@@ -21,8 +21,6 @@ export function makeTransformContext(sessionDir: string, hintDir: string) {
   let dirReady = false;
 
   return async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
-    // Find freshBoundary: index of the FRESH_WINDOW_TURNS-th assistant message
-    // from the end. Everything at or after this index is fresh.
     let assistantCount = 0;
     // 0 means all messages are in the fresh window — correct default when the
     // conversation has fewer than FRESH_WINDOW_TURNS assistant turns.
@@ -155,7 +153,7 @@ export function createAgent(opts: AgentOptions): Agent {
   // Create/update the latest symlink (relative target so it works from the sessions dir)
   mkdirSync(sessionsBase, { recursive: true });
   const latestLink = resolve(sessionsBase, "latest");
-  if (existsSync(latestLink)) unlinkSync(latestLink);
+  try { unlinkSync(latestLink); } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
   symlinkSync(sessionId, latestLink);
 
   const systemPrompt = loadSystemPrompt(opts.promptPath);

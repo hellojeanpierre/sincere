@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { makeTransformContext, loadSystemPrompt } from "./agent.ts";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { ToolResultMessage } from "@mariozechner/pi-ai";
 
 const TEST_DIR = resolve(import.meta.dirname, "..", "data/test-tool-results");
 const TEST_HINT_DIR = "data/sessions/latest/tool-results";
@@ -59,7 +60,7 @@ describe("transformContext", () => {
       const result = await transformContext(messages);
       const tr = result[1];
       expect(tr.role).toBe("toolResult");
-      const text = (tr as any).content[0];
+      const text = (tr as ToolResultMessage).content[0];
       expect(text.type).toBe("text");
       expect(text.text).toBe("x".repeat(9_999));
     });
@@ -75,7 +76,7 @@ describe("transformContext", () => {
       const result = await transformContext(messages);
       const tr = result[1];
       expect(tr.role).toBe("toolResult");
-      const content = (tr as any).content;
+      const content = (tr as ToolResultMessage).content;
       expect(content.length).toBe(2);
       expect(content[0].type).toBe("text");
       expect(content[1].type).toBe("image");
@@ -92,7 +93,7 @@ describe("transformContext", () => {
       const result = await transformContext(messages);
       const tr = result[1];
       expect(tr.role).toBe("toolResult");
-      const text = (tr as any).content[0];
+      const text = (tr as ToolResultMessage).content[0];
       expect(text.type).toBe("text");
       expect(text.text).toContain("x".repeat(2_000));
       expect(text.text).toContain("[Full output persisted to data/sessions/latest/tool-results/");
@@ -127,7 +128,7 @@ describe("transformContext", () => {
       const result = await failCtx(messages);
       const tr = result[1];
       expect(tr.role).toBe("toolResult");
-      const text = (tr as any).content[0];
+      const text = (tr as ToolResultMessage).content[0];
       expect(text.type).toBe("text");
       expect(text.text.length).toBeLessThan(2_200);
       expect(text.text).toContain("z".repeat(2_000));
@@ -145,7 +146,7 @@ describe("transformContext", () => {
       const result = await transformContext(messages);
       const tr = result[2];
       expect(tr.role).toBe("toolResult");
-      const text = (tr as any).content[0];
+      const text = (tr as ToolResultMessage).content[0];
       expect(text.type).toBe("text");
       expect(text.text).toBe("x".repeat(12_000));
     });
@@ -160,7 +161,7 @@ describe("transformContext", () => {
       const result = await transformContext(messages);
       const tr = result[2];
       expect(tr.role).toBe("toolResult");
-      const text = (tr as any).content[0];
+      const text = (tr as ToolResultMessage).content[0];
       expect(text.type).toBe("text");
       expect(text.text).toContain("[Full output persisted to");
       expect(text.text.length).toBeLessThan(2_200);
@@ -176,7 +177,7 @@ describe("transformContext", () => {
       const result = await transformContext(messages);
       const tr = result[2];
       expect(tr.role).toBe("toolResult");
-      const text = (tr as any).content[0];
+      const text = (tr as ToolResultMessage).content[0];
       expect(text.type).toBe("text");
       expect(text.text).toBe("x".repeat(5_000));
     });
@@ -196,7 +197,7 @@ describe("transformContext", () => {
       // Turn 1 result (idx 2) — stale, compacted
       const t1 = result[2];
       expect(t1.role).toBe("toolResult");
-      const t1text = (t1 as any).content[0];
+      const t1text = (t1 as ToolResultMessage).content[0];
       expect(t1text.type).toBe("text");
       expect(t1text.text).toContain("[Full output persisted to");
 
@@ -204,7 +205,7 @@ describe("transformContext", () => {
       for (const idx of [5, 8, 11, 14]) {
         const tr = result[idx];
         expect(tr.role).toBe("toolResult");
-        const text = (tr as any).content[0];
+        const text = (tr as ToolResultMessage).content[0];
         expect(text.type).toBe("text");
         expect(text.text.length).toBe(12_000);
       }
@@ -221,7 +222,7 @@ describe("transformContext", () => {
       for (const idx of [2, 5, 8]) {
         const tr = result[idx];
         expect(tr.role).toBe("toolResult");
-        const text = (tr as any).content[0];
+        const text = (tr as ToolResultMessage).content[0];
         expect(text.type).toBe("text");
         expect(text.text.length).toBe(20_000);
       }
@@ -240,7 +241,7 @@ describe("transformContext", () => {
       const result = await transformContext(messages);
       const tr = result[1];
       expect(tr.role).toBe("toolResult");
-      const text = (tr as any).content[0];
+      const text = (tr as ToolResultMessage).content[0];
       expect(text.type).toBe("text");
       expect(text.text).toBe(bigError);
     });
