@@ -1,4 +1,4 @@
-import { readFileSync, globSync, existsSync, unlinkSync, symlinkSync, mkdirSync } from "fs";
+import { readFileSync, globSync, unlinkSync, symlinkSync, mkdirSync } from "fs";
 import { resolve, basename, relative, dirname } from "path";
 import { writeFile, mkdir } from "fs/promises";
 import { Agent } from "@mariozechner/pi-agent-core";
@@ -12,16 +12,38 @@ import { readTool } from "./tools/read.ts";
 import { execTool } from "./tools/exec.ts";
 import { resolveConfig } from "./lib/config.ts";
 
-// Microcompaction: persist oversized tool results to disk, keep a 2k preview
-// inline so the Operator can decide whether to read the full output.
+// Microcompaction: persist oversized stale tool results to disk, keep a 2k
+// preview inline. Fresh results (within the last FRESH_WINDOW_TURNS assistant
+// turns) pass through unchanged — exec owns the size gate for those.
+const FRESH_WINDOW_TURNS = 4;
+
 export function makeTransformContext(sessionDir: string, hintDir: string) {
   let dirReady = false;
 
   return async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
-    return Promise.all(messages.map(async (msg) => {
-      if (msg.role !== "toolResult" || msg.isError) return msg;
-      const trMsg = msg as ToolResultMessage;
+    let assistantCount = 0;
+    // 0 means all messages are in the fresh window — correct default when the
+    // conversation has fewer than FRESH_WINDOW_TURNS assistant turns.
+    let freshBoundary = 0;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") {
+        assistantCount++;
+        if (assistantCount >= FRESH_WINDOW_TURNS) {
+          freshBoundary = i;
+          break;
+        }
+      }
+    }
 
+    return Promise.all(messages.map(async (msg, idx) => {
+      if (msg.role !== "toolResult" || msg.isError) return msg;
+      // Assumes ordering: user → assistant → toolResult(s). If multiple
+      // toolResults follow one assistant message, this index-based check still
+      // holds — they all share the same stale/fresh classification. Would only
+      // misclassify if toolResults appeared before their assistant message.
+      if (idx >= freshBoundary) return msg;
+
+      const trMsg = msg as ToolResultMessage;
       const texts = trMsg.content.filter((b): b is TextContent => b.type === "text");
       const totalLen = texts.reduce((sum, b) => sum + b.text.length, 0);
 
@@ -131,7 +153,7 @@ export function createAgent(opts: AgentOptions): Agent {
   // Create/update the latest symlink (relative target so it works from the sessions dir)
   mkdirSync(sessionsBase, { recursive: true });
   const latestLink = resolve(sessionsBase, "latest");
-  if (existsSync(latestLink)) unlinkSync(latestLink);
+  try { unlinkSync(latestLink); } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
   symlinkSync(sessionId, latestLink);
 
   const systemPrompt = loadSystemPrompt(opts.promptPath);
