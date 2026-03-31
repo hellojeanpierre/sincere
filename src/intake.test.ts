@@ -1,7 +1,6 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, afterAll } from "bun:test";
 import { resolve } from "path";
 import { createAgent } from "./agent.ts";
-import { bashTool } from "./tools/bash.ts";
 import { intake } from "./intake.ts";
 
 const EVENTS_PATH = "data/pintest-v2/smoke-tickets/smoke_events.jsonl";
@@ -17,12 +16,12 @@ async function loadEvent(id: string): Promise<Record<string, unknown>> {
 }
 
 describe("intake", () => {
-  const agent = createAgent({
+  const { agent, dispose } = createAgent({
     promptPath: resolve(import.meta.dirname, "operator.md"),
     model: process.env.MODEL || "claude-sonnet-4-6",
-    tools: [bashTool],
     thinkingLevel: "high",
   });
+  afterAll(() => dispose());
 
   test(
     "processes ticket.created event (evt-00000353)",

@@ -12,7 +12,7 @@ if (import.meta.main) {
 
 async function runOperator() {
 
-const agent = createAgent({
+const { agent, dispose } = createAgent({
   promptPath: resolve(import.meta.dirname, "../src/operator.md"),
   model: process.env.MODEL || "claude-sonnet-4-6",
   thinkingLevel: "high",
@@ -61,6 +61,10 @@ agent.subscribe((event) => {
 });
 
 logger.info("prompting agent…");
-await agent.prompt("Analyze data/pintest-v1/manifest.json");
+try {
+  await agent.prompt("Analyze data/pintest-v1/manifest.json");
+} finally {
+  await dispose();
+}
 
 } // end runOperator
