@@ -271,17 +271,15 @@ describe("exec tool", () => {
   test("preview cuts at last newline before 2000 chars", async () => {
     // Generate lines of 100 chars each — newlines at 101, 202, 303, ...
     const result = await tool.execute("newline-test", {
-      command: `python3 -c "
-for i in range(300):
-    print('a' * 100)
-"`,
+      command: `python3 -c "exec('for i in range(300):\\n    print(chr(97) * 100)')"`,
     });
     const text = result.content[0].text;
     const previewEnd = text.indexOf("\n\n[Full output persisted");
     const preview = text.slice(0, previewEnd);
-    // Preview should end at a newline boundary, under 2000 chars
-    expect(preview.length).toBeLessThanOrEqual(2000);
-    expect(preview.endsWith("\n") || preview.length <= 2000).toBe(true);
+    // Each line is 101 chars (100 'a' + newline). lastIndexOf("\n", 2000)
+    // finds the newline, slice(0, pos) excludes it, so the preview is
+    // n complete lines minus the final newline: (n * 101) - 1.
+    expect((preview.length + 1) % 101).toBe(0);
   });
 
   test("empty toolCallId falls back to Date.now()", async () => {

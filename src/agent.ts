@@ -128,7 +128,7 @@ export function createAgent(opts: AgentOptions, workItemId?: string): Agent {
 
   const systemPrompt = loadSystemPrompt(opts.promptPath);
   const model = getModel("anthropic", opts.model);
-  const tools: AgentTool<any>[] = [readTool, execTool(sessionDir), ...(opts.tools ?? [])];
+  const tools: AgentTool<any>[] = [readTool, execTool(sessionDir), ...(opts.tools ?? []).filter(t => t.name !== "exec")];
 
   return new Agent({
     streamFn: streamSimple,
