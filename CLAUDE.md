@@ -36,13 +36,33 @@ Bun-based AI agent project using `@mariozechner/pi-agent-core` and `@mariozechne
 - **read** — returns file content as text. Unconditionally safe. Used for data files, knowledge graph triples, skill context, configuration.
 - **bash** — runs a shell command in a subprocess, returns stdout/stderr. Allowlisted binaries only. Used for computation the Operator cannot do in-context.
 
+## Architecture
+
+Two agent roles: **Operator** discovers root causes from data; **Observer** matches work items against known failure patterns. Each has its own prompt (`src/operator.md`, `src/observer.md`), tool set, and output contract. They do not share reasoning.
+
+Tool results larger than 10 KB are compacted after 4 assistant turns — persisted to disk with a 2 KB preview kept inline. This is microcompaction (`makeTransformContext` in `agent.ts`).
+
 ## Project Layout
 
 ```
 src/
   index.ts          # entry point
-  operator.md       # agent system prompt (sole source of reasoning principles)
-  lib/              # shared utilities (logger, etc.)
-  tools/            # tool definitions (typed functions + TypeBox schemas)
-  skills/           # markdown files read by Operator for domain context
+  agent.ts          # agent factory, microcompaction, session handler
+  intake.ts         # Zendesk event → agent prompt
+  gateway.ts        # HTTP server for webhooks
+  lane.ts           # per-workitem serial queue
+  operator.md       # Operator system prompt
+  observer.md       # Observer system prompt
+  config.json       # template variables for prompts
+  graph.json        # root cause library (injected as {{rootCauses}})
+  lib/
+    logger.ts       # pino logger
+    config.ts       # config loader + {{key}} template resolver
+    trace.ts        # markdown trace writer (SSE-compatible)
+  tools/            # typed functions + TypeBox schemas
+  skills/           # markdown files read by agents for domain context
+evals/              # eval harnesses (closure, skill-routing)
+demo/               # interactive demo server (port 3001)
+scripts/            # standalone runners (operator, smoke)
+data/               # test fixtures, sessions, datasets
 ```
