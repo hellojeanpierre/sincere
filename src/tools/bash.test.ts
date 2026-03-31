@@ -114,13 +114,21 @@ describe("bash tool", () => {
     expect(result.details).toBeNull();
   });
 
-  test("pipeline of allowed binaries works", async () => {
+  test("pipeline with disallowed binary is blocked", async () => {
+    const result = await tool.execute("test", {
+      command: "ls foo | grep hello | wc -l",
+    });
+    expect(result.content[0].text).toContain("binary not allowed");
+    expect(result.details).toBeNull();
+  });
+
+  test("pipeline of echo | grep | wc succeeds", async () => {
     const result = await tool.execute("test", {
       command: "echo hello | grep hello | wc -l",
     });
-    // echo is not in allowlist, so this should fail
-    expect(result.content[0].text).toContain("binary not allowed");
-    expect(result.details).toBeNull();
+    expect(result.details).not.toBeNull();
+    expect(result.details!.exitCode).toBe(0);
+    expect(result.content[0].text.trim()).toBe("1");
   });
 
   test("pipeline of only allowed binaries succeeds", async () => {
@@ -347,7 +355,7 @@ describe("bash tool", () => {
 
   // --- Persistent session tests ---
 
-  test("sequential commands share shell state", async () => {
+  test("sequential commands share shell state (PID)", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "bash-state-"));
     const marker = join(stateDir, "pid.txt");
     const { tool: t, dispose: d } = bashTool(tmpDir);
@@ -364,6 +372,37 @@ describe("bash tool", () => {
       rmSync(stateDir, { recursive: true, force: true });
     }
   });
+
+  test("env var persists across calls", async () => {
+    const { tool: t, dispose: d } = bashTool(tmpDir);
+    try {
+      await t.execute("env-1", { command: "export PERSIST_TEST=hello_persist" });
+      const result = await t.execute("env-2", { command: "echo $PERSIST_TEST" });
+      expect(result.content[0].text.trim()).toBe("hello_persist");
+      expect(result.details!.exitCode).toBe(0);
+    } finally {
+      await d();
+    }
+  });
+
+  test("cwd persists across calls", async () => {
+    const cwdDir = mkdtempSync(join(tmpdir(), "bash-cwd-"));
+    const { tool: t, dispose: d } = bashTool(tmpDir);
+    try {
+      await t.execute("cwd-1", { command: `cd ${cwdDir}` });
+      const result = await t.execute("cwd-2", { command: "pwd" });
+      // /tmp may resolve to /private/tmp on macOS
+      expect(result.content[0].text.trim()).toMatch(new RegExp(`${cwdDir}$`));
+      expect(result.details!.exitCode).toBe(0);
+    } finally {
+      await d();
+      rmSync(cwdDir, { recursive: true, force: true });
+    }
+  });
+
+  // Shell function persistence is not testable through execute() — both
+  // definition syntax (;, {}) and invocation (arbitrary function names)
+  // are blocked by the command validator.
 
   test("timeout returns partial output and reset notice surfaces on next command", async () => {
     // Use a 1s timeout so the test doesn't take 30s.

@@ -21,6 +21,11 @@ const ALLOWED_BINARIES = new Set([
   "uniq",
   "cut",
   "tr",
+  // Shell builtins — safe, needed for persistent session state management.
+  "export",
+  "cd",
+  "echo",
+  "pwd",
   // python3 is a full escape hatch — it can import os, subprocess, etc.
   // This is accepted risk: we need it for computation and trust the Operator
   // prompt to use it safely. The guard is defence-in-depth, not a sandbox.
