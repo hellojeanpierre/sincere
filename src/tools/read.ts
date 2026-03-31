@@ -239,8 +239,7 @@ async function buildJsonlManifest(
     try {
       c.text = JSON.stringify(truncateFieldValues(JSON.parse(c.text)));
     } catch {
-      // Structurally invalid despite passing JSON.parse in pass 1 (e.g. encoding
-      // drift between stream passes). Truncate raw text so full content never leaks.
+      // Defensive: should be unreachable but truncate raw text rather than leak full content.
       if (c.text.length > MAX_FIELD_CHARS) {
         c.text = c.text.slice(0, MAX_FIELD_CHARS) + "…[truncated]";
       }
