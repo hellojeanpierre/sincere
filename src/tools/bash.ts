@@ -1,7 +1,6 @@
 import { basename } from "path";
 import { writeFile, mkdir } from "fs/promises";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
-import type { Subprocess } from "bun";
 import { Type } from "@mariozechner/pi-ai";
 import { logger } from "../lib/logger.ts";
 
@@ -216,7 +215,7 @@ function tokenizeShell(command: string): TokenizeResult | string {
   return { segments, operators };
 }
 
-export function validateCommand(command: string): string | null {
+function validateCommand(command: string): string | null {
   const result = tokenizeShell(command);
   if (typeof result === "string") return result;
 
@@ -243,185 +242,229 @@ export function validateCommand(command: string): string | null {
 
 const MAX_OUTPUT = 25_000;
 const PREVIEW_LIMIT = 2_000;
+const COMMAND_TIMEOUT_MS = 30_000;
+const STDERR_FLUSH_DELAY_MS = 50;
+const POLL_INTERVAL_MS = 100;
 
-// -- Persistent shell session types --
-
-interface RunResult {
+interface ShellResult {
   stdout: string;
   stderr: string;
   exitCode: number;
-  wasReset: boolean;
+  timedOut: boolean;
+  reset: boolean;
 }
 
-type Waiter = () => void;
+// Shell state (cwd, env vars, functions) intentionally persists across commands
+// within a work item session. This is the core behavioral change vs the old
+// per-call Bun.spawn approach.
+class BashSession {
+  private proc: ReturnType<typeof Bun.spawn> | null = null;
+  private stdoutStr = "";
+  private stderrStr = "";
+  private dead = false;
+  private stdoutDone = false;
+  private stderrDone = false;
+  private pumpDonePromise: Promise<void> = Promise.resolve();
+  private resetOccurred = false;
+  // Readers stored so teardown() can cancel them immediately, unblocking any
+  // pending read() even if a child process holds the pipe open.
+  private stdoutReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  private stderrReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  // Single-flight lock: serializes run() calls and ensures kill() does not
+  // overlap with in-flight text assembly (post-sentinel) in _run().
+  private lock: Promise<void> = Promise.resolve();
+  readonly sentinel: string;
+  private readonly sentinelRe: RegExp;
 
-export function bashTool(sessionDir: string, opts?: { timeoutMs?: number }): AgentTool<typeof bashSchema> {
-  let dirReady = false;
-  const timeoutMs = opts?.timeoutMs ?? 30_000;
-
-  // -- Persistent shell session state --
-  let proc: Subprocess<"pipe", "pipe", "pipe"> | null = null;
-  let stdoutBuf = "";
-  let stderrBuf = "";
-  let wasReset = false;
-  let waiters: Waiter[] = [];
-
-  function notifyWaiters() {
-    const pending = waiters;
-    waiters = [];
-    for (const w of pending) w();
+  constructor() {
+    this.sentinel = `__BASH_SENTINEL_${crypto.randomUUID().replace(/-/g, "")}__`;
+    // No leading \n — zero-stdout commands have sentinel at buffer position 0.
+    // Trailing \n prevents a premature match while exit-code digits are still in flight.
+    this.sentinelRe = new RegExp(`${this.sentinel}(\\d+)\n`);
   }
 
-  function startReaders(p: Subprocess<"pipe", "pipe", "pipe">) {
-    const decoder = new TextDecoder();
-    const drain = async (stream: ReadableStream<Uint8Array>, target: "stdout" | "stderr") => {
-      try {
-        for await (const chunk of stream) {
-          const text = decoder.decode(chunk, { stream: true });
-          if (target === "stdout") stdoutBuf += text;
-          else stderrBuf += text;
-          notifyWaiters();
-        }
-      } catch {
-        // Stream closed — shell died
-      }
-      notifyWaiters();
-    };
-    drain(p.stdout as unknown as ReadableStream<Uint8Array>, "stdout");
-    drain(p.stderr as unknown as ReadableStream<Uint8Array>, "stderr");
+  // Advance the lock past p regardless of whether p resolves or rejects.
+  // The empty rejection handler is intentional — the lock must move forward
+  // even when run() throws, so a subsequent kill() or run() is not blocked.
+  private advance(p: Promise<unknown>): void {
+    this.lock = p.then(() => {}, () => {});
   }
 
-  function spawn() {
-    proc = Bun.spawn(["bash", "--norc", "--noprofile"], {
-      cwd: process.cwd(),
+  private ensureStarted() {
+    if (this.proc !== null) return;
+    this.dead = false;
+    this.stdoutDone = false;
+    this.stderrDone = false;
+    this.stdoutStr = "";
+    this.stderrStr = "";
+
+    const proc = Bun.spawn(["bash", "--norc", "--noprofile"], {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
+      cwd: process.cwd(),
     });
-    stdoutBuf = "";
-    stderrBuf = "";
-    startReaders(proc);
-  }
+    this.proc = proc;
 
-  function isAlive(): boolean {
-    return proc !== null && proc.exitCode === null;
-  }
+    const stdoutDecoder = new TextDecoder();
+    const stderrDecoder = new TextDecoder();
 
-  function kill() {
-    if (proc) {
-      wasReset = true;
-      if (proc.exitCode === null) proc.kill();
-    }
-    proc = null;
-    stdoutBuf = "";
-    stderrBuf = "";
-  }
+    const stdoutReader = proc.stdout.getReader();
+    const stderrReader = proc.stderr.getReader();
+    this.stdoutReader = stdoutReader;
+    this.stderrReader = stderrReader;
 
-  function extractBetweenMarkers(
-    buf: string,
-    beginMarker: string,
-    exitPrefix: string,
-  ): { content: string; exitCode: number; endIdx: number } | null {
-    const beginIdx = buf.indexOf(beginMarker);
-    if (beginIdx === -1) return null;
-
-    const exitIdx = buf.indexOf(exitPrefix, beginIdx);
-    if (exitIdx === -1) return null;
-
-    const exitLineEnd = buf.indexOf("\n", exitIdx);
-    const exitLine = buf.slice(exitIdx, exitLineEnd === -1 ? undefined : exitLineEnd);
-
-    // Parse exit code: __SENTINEL_EXIT_<uuid>_<code>__
-    const codeStr = exitLine.slice(exitPrefix.length, exitLine.length - 2); // strip trailing __
-    const exitCode = parseInt(codeStr, 10);
-
-    // Content is between the begin marker line end and the exit marker
-    const contentStart = buf.indexOf("\n", beginIdx);
-    if (contentStart === -1) return null;
-    const content = buf.slice(contentStart + 1, exitIdx);
-
-    // Strip trailing newline from content (the echo '' before sentinel adds one)
-    const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
-
-    return { content: trimmed, exitCode, endIdx: exitLineEnd === -1 ? buf.length : exitLineEnd + 1 };
-  }
-
-  function waitForSentinels(
-    uuid: string,
-    timeout: number,
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const beginMarker = `__SENTINEL_BEGIN_${uuid}__`;
-    const exitPrefix = `__SENTINEL_EXIT_${uuid}_`;
-
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        // Remove our waiter so it doesn't fire after timeout
-        waiters = waiters.filter((w) => w !== check);
-        logger.info({ uuid, timeoutMs: timeout }, "bash session timeout, killing shell");
-        kill();
-        reject(new Error("timeout"));
-      }, timeout);
-
-      const check = () => {
-        const stdoutResult = extractBetweenMarkers(stdoutBuf, beginMarker, exitPrefix);
-        const stderrResult = extractBetweenMarkers(stderrBuf, beginMarker, exitPrefix);
-
-        if (stdoutResult && stderrResult) {
-          clearTimeout(timer);
-          // Trim consumed regions from buffers
-          stdoutBuf = stdoutBuf.slice(stdoutResult.endIdx);
-          stderrBuf = stderrBuf.slice(stderrResult.endIdx);
-          resolve({
-            stdout: stdoutResult.content,
-            stderr: stderrResult.content,
-            exitCode: stdoutResult.exitCode,
-          });
-          return;
+    const pumpStdout = async () => {
+      try {
+        while (true) {
+          const { done, value } = await stdoutReader.read();
+          if (done) break;
+          this.stdoutStr += stdoutDecoder.decode(value, { stream: true });
         }
+      } catch {
+        // Reader was cancelled by teardown() — exit pump cleanly.
+      } finally {
+        this.stdoutDone = true;
+        this.dead = true;
+        // Null proc so ensureStarted() re-spawns after unexpected process death.
+        if (this.proc === proc) this.proc = null;
+      }
+    };
 
-        // Not ready yet — re-register waiter
-        waiters.push(check);
-      };
+    const pumpStderr = async () => {
+      try {
+        while (true) {
+          const { done, value } = await stderrReader.read();
+          if (done) break;
+          this.stderrStr += stderrDecoder.decode(value, { stream: true });
+        }
+      } catch {
+        // Reader was cancelled by teardown() — exit pump cleanly.
+      } finally {
+        this.stderrDone = true;
+      }
+    };
 
-      check();
-    });
+    this.pumpDonePromise = Promise.all([pumpStdout(), pumpStderr()]).then(() => {});
   }
 
-  async function run(command: string): Promise<RunResult> {
-    if (!isAlive()) spawn();
+  private async teardown() {
+    // Cancel readers first. This unblocks any pending read() immediately,
+    // even if a child process (e.g. python3 spawned by bash) holds the pipe
+    // open — which SIGTERM/SIGKILL alone cannot fix.
+    this.stdoutReader?.cancel();
+    this.stderrReader?.cancel();
+    this.stdoutReader = null;
+    this.stderrReader = null;
 
-    const resetNotice = wasReset;
-    wasReset = false;
+    const proc = this.proc;
+    if (proc !== null) {
+      proc.kill(); // SIGTERM
+      this.proc = null;
+    }
 
-    const uuid = crypto.randomUUID();
-    const ecVar = `__ec_${uuid.replace(/-/g, "_")}`;
-    const beginMarker = `__SENTINEL_BEGIN_${uuid}__`;
-    const exitSentinel = `__SENTINEL_EXIT_${uuid}_`;
+    // Pumps exit as soon as their readers are cancelled (next microtask).
+    // Race against 2s deadline + SIGKILL as belt-and-suspenders for any
+    // process trapping SIGTERM.
+    const deadline = new Promise<void>(resolve => setTimeout(resolve, 2000));
+    await Promise.race([this.pumpDonePromise, deadline]);
+    if (!this.stdoutDone || !this.stderrDone) {
+      proc?.kill(9); // SIGKILL
+      await this.pumpDonePromise;
+    }
 
-    const script = [
-      `echo '${beginMarker}'`,
-      `echo '${beginMarker}' >&2`,
-      command,
-      `${ecVar}=$?`,
-      `echo ''`,
-      `echo '${exitSentinel}'"\${${ecVar}}"'__'`,
-      `echo '${exitSentinel}'"\${${ecVar}}"'__' >&2`,
-    ].join("\n") + "\n";
-
-    proc!.stdin.write(script);
-    proc!.stdin.flush();
-
-    const result = await waitForSentinels(uuid, timeoutMs);
-
-    return { ...result, wasReset: resetNotice };
+    this.stdoutStr = "";
+    this.stderrStr = "";
+    this.resetOccurred = true;
   }
 
-  // -- Tool definition --
+  // Snapshot current buffers and return a failed ShellResult without calling teardown().
+  // Always call teardown() after this.
+  private partialResult(stderrMark: number, timedOut: boolean): ShellResult {
+    return { stdout: this.stdoutStr, stderr: this.stderrStr.slice(stderrMark), exitCode: -1, timedOut, reset: true };
+  }
 
-  return {
+  private async _run(command: string, timeoutMs: number): Promise<ShellResult> {
+    const wasReset = this.resetOccurred;
+    this.resetOccurred = false;
+
+    this.ensureStarted();
+
+    const stderrMark = this.stderrStr.length;
+
+    // Write command framed with sentinel. The ; is load-bearing: it ensures
+    // echo runs regardless of command exit code. Using && would make $? always 0.
+    const frame = `${command}; echo "${this.sentinel}$?"\n`;
+    try {
+      this.proc!.stdin.write(frame);
+      this.proc!.stdin.flush();
+    } catch {
+      // Process died between ensureStarted() and write — tear down and report.
+      await this.teardown();
+      return { stdout: "", stderr: "", exitCode: -1, timedOut: false, reset: true };
+    }
+
+    const deadline = Date.now() + timeoutMs;
+
+    while (true) {
+      const match = this.sentinelRe.exec(this.stdoutStr);
+      if (match) {
+        const stdout = this.stdoutStr.slice(0, match.index);
+        const exitCode = parseInt(match[1], 10);
+        // Advance buffer past the matched sentinel line.
+        this.stdoutStr = this.stdoutStr.slice(match.index + match[0].length);
+
+        // 50ms delay to let stderr flush — known imprecision, matches the reference
+        // implementation. Trade-off: simple vs. sentinel-framing stderr separately.
+        await Bun.sleep(STDERR_FLUSH_DELAY_MS);
+        const stderr = this.stderrStr.slice(stderrMark);
+        this.stderrStr = ""; // Reset; any bytes arriving after the delay are accepted loss.
+
+        return { stdout, stderr, exitCode, timedOut: false, reset: wasReset };
+      }
+
+      if (this.dead) {
+        const result = this.partialResult(stderrMark, false);
+        await this.teardown();
+        return result;
+      }
+
+      if (Date.now() > deadline) {
+        const result = this.partialResult(stderrMark, true);
+        await this.teardown();
+        return result;
+      }
+
+      await Bun.sleep(POLL_INTERVAL_MS);
+    }
+  }
+
+  run(command: string, timeoutMs: number): Promise<ShellResult> {
+    // Single-flight: chain onto lock so concurrent calls serialize.
+    const result = this.lock.then(() => this._run(command, timeoutMs));
+    this.advance(result);
+    return result;
+  }
+
+  kill(): Promise<void> {
+    // Signal the poll loop to exit at its next iteration (~POLL_INTERVAL_MS)
+    // instead of waiting up to the full command timeout. Still chains on the
+    // lock so teardown does not race with post-sentinel text assembly in _run().
+    this.dead = true;
+    const done = this.lock.then(() => this.teardown());
+    this.advance(done);
+    return done;
+  }
+}
+
+export function bashTool(sessionDir: string, timeoutMs = COMMAND_TIMEOUT_MS): { tool: AgentTool<typeof bashSchema>; dispose: () => Promise<void> } {
+  let dirReady = false;
+  const session = new BashSession();
+
+  const tool: AgentTool<typeof bashSchema> = {
     name: "bash",
     label: "Execute Command",
-    description: `Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). ${Math.round(timeoutMs / 1000)}-second timeout. Output over 25,000 chars is truncated to a 2,000-char preview. Full output is persisted to ${sessionDir}/{toolCallId}.txt. Shell session persists across calls — env vars, cwd, and functions are retained. If the session is killed (timeout or crash), a fresh shell is spawned automatically.`,
+    description: `Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). ${timeoutMs / 1000}-second timeout. Output over 25,000 chars is truncated to a 2,000-char preview. Full output is persisted to ${sessionDir}/{toolCallId}.txt.`,
     parameters: bashSchema,
     async execute(toolCallId, params) {
       const error = validateCommand(params.command);
@@ -433,37 +476,39 @@ export function bashTool(sessionDir: string, opts?: { timeoutMs?: number }): Age
       }
 
       const start = performance.now();
-
-      let result: RunResult;
-      try {
-        result = await run(params.command);
-      } catch (err) {
-        if (err instanceof Error && err.message === "timeout") {
-          const durationMs = Math.round(performance.now() - start);
-          logger.info({ command: params.command, durationMs }, "bash timeout");
-          return {
-            content: [{ type: "text", text: `Error: command timed out after ${Math.round(timeoutMs / 1000)}s` }],
-            details: null,
-          };
-        }
-        throw err;
-      }
-
+      const { stdout, stderr, exitCode, timedOut, reset } = await session.run(params.command, timeoutMs);
       const durationMs = Math.round(performance.now() - start);
 
-      let text = result.stdout;
-      if (result.stderr) {
-        text += text ? `\n[stderr]\n${result.stderr}` : `[stderr]\n${result.stderr}`;
+      // Build prefix notice. Timeout and session death also carry partial output
+      // captured before the failure — more useful to the agent than nothing.
+      let prefixNotice = "";
+      if (timedOut) {
+        logger.info({ command: params.command, durationMs }, "bash timeout");
+        prefixNotice = `[Timed out after ${timeoutMs / 1000}s — shell state has been reset.]\n`;
+      } else if (exitCode === -1) {
+        logger.info({ command: params.command, durationMs }, "bash shell session died");
+        prefixNotice = `[Shell session died unexpectedly — state has been reset.]\n`;
+      } else if (reset) {
+        prefixNotice = `[Shell session was reset. Previous variables and state are lost.]\n`;
+      }
+
+      let text = prefixNotice + stdout;
+      if (stderr) {
+        text += text.trimEnd() ? `\n[stderr]\n${stderr}` : `[stderr]\n${stderr}`;
       }
       if (!text) {
         text = "(no output)";
       }
 
-      if (result.wasReset) {
-        text = "[Shell session was reset. Previous variables and state are lost.]\n" + text;
+      // Timeout and session death always return details: null regardless of partial output.
+      if (timedOut || exitCode === -1) {
+        return {
+          content: [{ type: "text", text }],
+          details: null,
+        };
       }
 
-      logger.info({ command: params.command, exitCode: result.exitCode, durationMs }, "bash command");
+      logger.info({ command: params.command, exitCode, durationMs }, "bash command");
 
       if (text.length > MAX_OUTPUT) {
         const safeId = toolCallId ? toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_") : String(Date.now());
@@ -480,21 +525,23 @@ export function bashTool(sessionDir: string, opts?: { timeoutMs?: number }): Age
           logger.info({ toolCallId, command: params.command, chars: text.length, path }, "bash output truncated and persisted");
           return {
             content: [{ type: "text", text: preview + `\n\n[Full output persisted to ${path} — use read tool to access]` }],
-            details: { command: params.command, exitCode: result.exitCode, durationMs },
+            details: { command: params.command, exitCode, durationMs },
           };
         } catch (err) {
           logger.error({ toolCallId, err }, "bash output persistence failed");
           return {
             content: [{ type: "text", text: preview + `\n\n[Full output lost — persistence failed]` }],
-            details: { command: params.command, exitCode: result.exitCode, durationMs },
+            details: { command: params.command, exitCode, durationMs },
           };
         }
       }
 
       return {
         content: [{ type: "text", text }],
-        details: { command: params.command, exitCode: result.exitCode, durationMs },
+        details: { command: params.command, exitCode, durationMs },
       };
     },
   };
+
+  return { tool, dispose: () => session.kill() };
 }

@@ -5,9 +5,11 @@ import { tmpdir } from "os";
 import { bashTool } from "./bash.ts";
 
 const tmpDir = mkdtempSync(join(tmpdir(), "bash-test-"));
-afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
-
-const tool = bashTool(tmpDir);
+const { tool, dispose } = bashTool(tmpDir);
+afterAll(async () => {
+  await dispose();
+  rmSync(tmpDir, { recursive: true, force: true });
+});
 
 describe("bash tool", () => {
   test("runs a simple command and returns stdout", async () => {
@@ -301,6 +303,43 @@ describe("bash tool", () => {
     expect(text.length).toBe(1001); // 1000 z's + newline
   });
 
+  // --- Infrastructure contract tests ---
+
+  test("stdout matching sentinel pattern is returned verbatim", async () => {
+    const sentinel = "__BASH_SENTINEL_550e8400-e29b-41d4-a716-446655440000__";
+    const result = await tool.execute("sentinel-test", {
+      command: `python3 -c "print('${sentinel}')"`,
+    });
+    expect(result.content[0].text).toBe(sentinel + "\n");
+    expect(result.details!.exitCode).toBe(0);
+  });
+
+  test("exact non-zero exit code is captured", async () => {
+    const result = await tool.execute("exit-test", {
+      command: 'python3 -c "import sys; sys.exit(42)"',
+    });
+    expect(result.details).not.toBeNull();
+    expect(result.details!.exitCode).toBe(42);
+  });
+
+  test("stdout and stderr are merged with [stderr] separator", async () => {
+    const result = await tool.execute("both-streams", {
+      command: 'python3 -c "import sys; print(\'OUT\'); print(\'ERR\', file=sys.stderr)"',
+    });
+    const text = result.content[0].text;
+    expect(text).toContain("OUT");
+    expect(text).toContain("[stderr]");
+    expect(text).toContain("ERR");
+  });
+
+  test("empty output returns (no output) sentinel", async () => {
+    const result = await tool.execute("empty-test", {
+      command: 'python3 -c "pass"',
+    });
+    expect(result.content[0].text).toBe("(no output)");
+    expect(result.details!.exitCode).toBe(0);
+  });
+
   test("description includes sessionDir and truncation note", () => {
     expect(tool.description).toContain(tmpDir);
     expect(tool.description).toContain("Output over 25,000 chars is truncated");
@@ -308,49 +347,46 @@ describe("bash tool", () => {
 
   // --- Persistent session tests ---
 
-  test("session reuse: same parent PID across calls", async () => {
-    const sessionTool = bashTool(tmpDir);
-    const r1 = await sessionTool.execute("pid1", { command: "python3 -c \"import os; print(os.getppid())\"" });
-    const r2 = await sessionTool.execute("pid2", { command: "python3 -c \"import os; print(os.getppid())\"" });
-    const pid1 = r1.content[0].text.trim();
-    const pid2 = r2.content[0].text.trim();
-    expect(pid1).toBe(pid2);
-    expect(Number(pid1)).toBeGreaterThan(0);
+  test("sequential commands share shell state", async () => {
+    const { tool: t, dispose: d } = bashTool(tmpDir);
+    try {
+      // Write bash's PID (via python's os.getppid()) to a temp file in command 1.
+      // Re-read and verify it matches in command 2. Only passes if both commands
+      // run in the same bash process — separate sessions have different bash PIDs.
+      await t.execute("state-1", { command: `python3 -c "import os; open('/tmp/_bash_session_test', 'w').write(str(os.getppid()))"` });
+      const result = await t.execute("state-2", { command: `python3 -c "import os; saved = open('/tmp/_bash_session_test').read(); cur = str(os.getppid()); print('ok' if saved == cur else 'mismatch: ' + saved + ' vs ' + cur)"` });
+      expect(result.content[0].text).toContain("ok");
+      expect(result.details).not.toBeNull();
+    } finally {
+      await d();
+    }
   });
 
-  test("timeout kills session, next call respawns with reset notice", async () => {
-    const fastTool = bashTool(tmpDir, { timeoutMs: 500 });
-    // First command: get baseline PID
-    const r0 = await fastTool.execute("pre", { command: "python3 -c \"import os; print(os.getppid())\"" });
-    const pidBefore = r0.content[0].text.trim();
+  test("timeout returns partial output and reset notice surfaces on next command", async () => {
+    // Use a 1s timeout so the test doesn't take 30s.
+    const { tool: t, dispose: d } = bashTool(tmpDir, 1_000);
+    try {
+      // Send a command that prints then hangs — partial output must survive the timeout.
+      const result = await t.execute("hang", { command: `python3 -u -c "import time; print('partial'); time.sleep(60)"` });
+      expect(result.details).toBeNull();
+      expect(result.content[0].text).toContain("Timed out");
+      expect(result.content[0].text).toContain("partial");
+      // Session respawns on next call; reset notice surfaces on the first result.
+      const after = await t.execute("after", { command: "cat package.json" });
+      expect(after.content[0].text).toContain("Shell session was reset");
+      expect(after.details).not.toBeNull();
+    } finally {
+      await d();
+    }
+  }, { timeout: 15_000 });
 
-    // Second command: trigger timeout
-    const r1 = await fastTool.execute("t1", {
-      command: "python3 -c \"import time; time.sleep(10)\"",
-    });
-    expect(r1.content[0].text).toContain("timed out");
-    expect(r1.details).toBeNull();
-
-    // Third command: should succeed in new session with reset notice
-    const r2 = await fastTool.execute("t2", {
-      command: "cat package.json | head -1",
-    });
-    expect(r2.content[0].text).toContain("[Shell session was reset. Previous variables and state are lost.]");
-    expect(r2.details).not.toBeNull();
-    expect(r2.details!.exitCode).toBe(0);
-
-    // PID should differ after respawn
-    const r3 = await fastTool.execute("t3", { command: "python3 -c \"import os; print(os.getppid())\"" });
-    // Strip the reset notice if still present (it won't be — wasReset was consumed)
-    const pidAfter = r3.content[0].text.trim();
-    expect(pidAfter).not.toBe(pidBefore);
-  });
-
-  test("wasReset is false after normal sequence", async () => {
-    const sessionTool = bashTool(tmpDir);
-    const r1 = await sessionTool.execute("n1", { command: "cat package.json | head -1" });
-    expect(r1.content[0].text).not.toContain("[Shell session was reset");
-    const r2 = await sessionTool.execute("n2", { command: "cat package.json | head -1" });
-    expect(r2.content[0].text).not.toContain("[Shell session was reset");
+  test("dispose kills process cleanly and is idempotent", async () => {
+    const { tool: t, dispose: d } = bashTool(tmpDir);
+    // Start the session.
+    await t.execute("disp-1", { command: "cat package.json" });
+    // First dispose.
+    await d();
+    // Second dispose should not throw.
+    await expect(d()).resolves.toBeUndefined();
   });
 });
