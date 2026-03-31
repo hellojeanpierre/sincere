@@ -1,5 +1,8 @@
 # Learnings
 
+## 2026-03-31 — A persistent bash session eliminates ~40% of agent tool call token waste from state re-acquisition
+The Operator's exec tool spawned a fresh sh -c per call, forcing the agent to re-read policy files, redefine helper functions, and re-query data on every invocation. Claude Code and Codex solve this identically: one persistent shell process per session, commands written to stdin with sentinel-framed output capture. Renaming exec → bash aligns with the API tool type (bash_20250124) and gives the model stronger priors on shell idioms. Implication: Constrain the environment (persistent process), don't instruct the reasoning (prompt-level caching hints).
+
 ## 2026-03-31 — Tool-level truncation outperforms context-layer compaction for agent reasoning
 
 When truncation happens silently in transformContext, the agent cannot reason about it — the JSONL manifest destruction at age 0 was a direct consequence. Moving truncation to the tool boundary (matching Claude Code's read/exec tool descriptions) makes the constraint part of the tool contract: the agent sees it in the description, can plan around it (e.g., grep instead of cat), and the preview + disk-persist pointer is explicit, not surprising. Silent post-hoc compaction defeats upstream tool design intent. Implication: constrain the environment at the boundary the agent can see.
