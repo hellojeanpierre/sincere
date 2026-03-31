@@ -1,4 +1,4 @@
-import { readFileSync, globSync } from "fs";
+import { readFileSync, globSync, existsSync, unlinkSync, symlinkSync, mkdirSync } from "fs";
 import { resolve, basename, relative, dirname } from "path";
 import { writeFile, mkdir } from "fs/promises";
 import { Agent } from "@mariozechner/pi-agent-core";
@@ -13,7 +13,7 @@ import { resolveConfig } from "./lib/config.ts";
 
 // Microcompaction: persist oversized tool results to disk, keep a 2k preview
 // inline so the Operator can decide whether to read the full output.
-export function makeTransformContext(sessionDir: string) {
+export function makeTransformContext(sessionDir: string, hintDir: string) {
   let dirReady = false;
 
   return async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
@@ -27,7 +27,8 @@ export function makeTransformContext(sessionDir: string) {
       if (totalLen > 10_000 && trMsg.toolCallId) {
         const joined = texts.map(b => b.text).join("\n");
         const safeId = trMsg.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_");
-        const path = `${sessionDir}/${safeId}.txt`;
+        const writePath = `${sessionDir}/${safeId}.txt`;
+        const hintPath = `${hintDir}/${safeId}.txt`;
         const nonText = trMsg.content.filter(b => b.type !== "text");
         const preview = joined.slice(0, 2_000);
         try {
@@ -35,12 +36,12 @@ export function makeTransformContext(sessionDir: string) {
             await mkdir(sessionDir, { recursive: true });
             dirReady = true;
           }
-          await writeFile(path, joined);
-          logger.info({ toolCallId: trMsg.toolCallId, toolName: trMsg.toolName, chars: totalLen, path }, "microcompaction persisted");
+          await writeFile(writePath, joined);
+          logger.info({ toolCallId: trMsg.toolCallId, toolName: trMsg.toolName, chars: totalLen, path: writePath }, "microcompaction persisted");
           return {
             ...trMsg,
             content: [
-              { type: "text" as const, text: preview + `\n\n[Full output persisted to ${path} — use read tool to access]` },
+              { type: "text" as const, text: preview + `\n\n[Full output persisted to ${hintPath} — use read tool to access]` },
               ...nonText,
             ],
           };
@@ -114,16 +115,23 @@ export interface AgentOptions {
   thinkingLevel?: "off" | "low" | "medium" | "high";
 }
 
-export function createAgent(opts: AgentOptions, workItemId?: string): Agent {
+export function createAgent(opts: AgentOptions): Agent {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY not set");
   }
 
   const srcDir = dirname(opts.promptPath);
-  const sessionDir = workItemId
-    ? resolve(srcDir, "..", "data/sessions", workItemId.replace(/[^a-zA-Z0-9_-]/g, "_"), "tool-results")
-    : resolve(srcDir, "..", "data/tool-results");
+  const sessionsBase = resolve(srcDir, "..", "data/sessions");
+  const sessionId = new Date().toISOString().replaceAll(":", "-");
+  const sessionDir = resolve(sessionsBase, sessionId, "tool-results");
+  const hintDir = "data/sessions/latest/tool-results";
+
+  // Create/update the latest symlink (relative target so it works from the sessions dir)
+  mkdirSync(sessionsBase, { recursive: true });
+  const latestLink = resolve(sessionsBase, "latest");
+  if (existsSync(latestLink)) unlinkSync(latestLink);
+  symlinkSync(sessionId, latestLink);
 
   const systemPrompt = loadSystemPrompt(opts.promptPath);
   const model = getModel("anthropic", opts.model);
@@ -132,7 +140,7 @@ export function createAgent(opts: AgentOptions, workItemId?: string): Agent {
   return new Agent({
     streamFn: streamSimple,
     getApiKey: () => apiKey,
-    transformContext: makeTransformContext(sessionDir),
+    transformContext: makeTransformContext(sessionDir, hintDir),
     initialState: {
       systemPrompt,
       model,
@@ -142,13 +150,13 @@ export function createAgent(opts: AgentOptions, workItemId?: string): Agent {
   });
 }
 
-export function createSessionHandler(createAgentFn: (workItemId: string) => Agent) {
+export function createSessionHandler(createAgentFn: () => Agent) {
   const store = new Map<string, AgentMessage[]>();
 
   const handler: Handler = async (body, workItemId) => {
     logger.info({ workItemId }, "handler start");
     const saved = store.get(workItemId) ?? [];
-    const agent = createAgentFn(workItemId);
+    const agent = createAgentFn();
 
     if (saved.length > 0) {
       agent.replaceMessages(saved);
