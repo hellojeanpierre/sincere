@@ -1,6 +1,5 @@
 import { resolve } from "path";
 import { createAgent } from "../src/agent.ts";
-import { execTool } from "../src/tools/exec.ts";
 import { logger } from "../src/lib/logger.ts";
 import { subscribeTrace } from "../src/lib/trace.ts";
 
@@ -16,7 +15,6 @@ async function runOperator() {
 const agent = createAgent({
   promptPath: resolve(import.meta.dirname, "../src/operator.md"),
   model: process.env.MODEL || "claude-sonnet-4-6",
-  tools: [execTool],
   thinkingLevel: "high",
 });
 
