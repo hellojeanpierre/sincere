@@ -37,6 +37,16 @@ function toolResult(toolName: string, text: string, opts?: { isError?: boolean; 
   };
 }
 
+// Append enough turns after a target message to push it into the stale zone
+// (before freshBoundary). FRESH_WINDOW_TURNS = 4, so we need 5 assistant turns.
+function stalePadding(): AgentMessage[] {
+  const pad: AgentMessage[] = [];
+  for (let i = 0; i < 5; i++) {
+    pad.push(userMsg(`pad ${i}`), assistantMsg(`pad ${i}`));
+  }
+  return pad;
+}
+
 describe("transformContext", () => {
   describe("microcompaction", () => {
     test("results under 10k pass through unchanged", async () => {
@@ -59,6 +69,7 @@ describe("transformContext", () => {
       const messages: AgentMessage[] = [
         userMsg("go"),
         toolResult("read", "x".repeat(11_000), { extraContent: [imageBlock] }),
+        ...stalePadding(),
       ];
 
       const result = await transformContext(messages);
@@ -75,6 +86,7 @@ describe("transformContext", () => {
       const messages: AgentMessage[] = [
         userMsg("go"),
         toolResult("read", fullText),
+        ...stalePadding(),
       ];
 
       const result = await transformContext(messages);
@@ -95,6 +107,7 @@ describe("transformContext", () => {
       const messages: AgentMessage[] = [
         userMsg("go"),
         toolResult("read", fullText, { toolCallId: callId }),
+        ...stalePadding(),
       ];
 
       await transformContext(messages);
@@ -110,6 +123,7 @@ describe("transformContext", () => {
       const messages: AgentMessage[] = [
         userMsg("go"),
         toolResult("exec", "z".repeat(15_000)),
+        ...stalePadding(),
       ];
 
       const result = await failCtx(messages);
@@ -125,12 +139,118 @@ describe("transformContext", () => {
     });
   });
 
+  describe("age-based freshness", () => {
+    test("fresh large results pass through unchanged", async () => {
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        assistantMsg("calling tool"),
+        toolResult("exec", "x".repeat(12_000)),
+      ];
+      const result = await transformContext(messages);
+      const tr = result[2];
+      if (tr.role === "toolResult") {
+        const text = tr.content[0];
+        if (text.type === "text") {
+          expect(text.text).toBe("x".repeat(12_000));
+        }
+      }
+    });
+
+    test("stale large results are microcompacted", async () => {
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        assistantMsg("calling tool"),
+        toolResult("exec", "x".repeat(12_000)),
+        ...stalePadding(),
+      ];
+      const result = await transformContext(messages);
+      const tr = result[2];
+      if (tr.role === "toolResult") {
+        const text = tr.content[0];
+        if (text.type === "text") {
+          expect(text.text).toContain("[Full output persisted to");
+          expect(text.text.length).toBeLessThan(2_200);
+        }
+      }
+    });
+
+    test("stale small results pass through unchanged", async () => {
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        assistantMsg("calling tool"),
+        toolResult("exec", "x".repeat(5_000)),
+        ...stalePadding(),
+      ];
+      const result = await transformContext(messages);
+      const tr = result[2];
+      if (tr.role === "toolResult") {
+        const text = tr.content[0];
+        if (text.type === "text") {
+          expect(text.text).toBe("x".repeat(5_000));
+        }
+      }
+    });
+
+    test("boundary: first turn stale, last four fresh", async () => {
+      const messages: AgentMessage[] = [
+        // Turn 1 (stale — before the 4th-from-end assistant msg)
+        userMsg("t1"), assistantMsg("a1"), toolResult("exec", "A".repeat(12_000)),
+        // Turns 2-5 (fresh window)
+        userMsg("t2"), assistantMsg("a2"), toolResult("exec", "B".repeat(12_000)),
+        userMsg("t3"), assistantMsg("a3"), toolResult("exec", "C".repeat(12_000)),
+        userMsg("t4"), assistantMsg("a4"), toolResult("exec", "D".repeat(12_000)),
+        userMsg("t5"), assistantMsg("a5"), toolResult("exec", "E".repeat(12_000)),
+      ];
+      const result = await transformContext(messages);
+
+      // Turn 1 result (idx 2) — stale, compacted
+      const t1 = result[2];
+      if (t1.role === "toolResult") {
+        const text = t1.content[0];
+        if (text.type === "text") {
+          expect(text.text).toContain("[Full output persisted to");
+        }
+      }
+
+      // Turns 2-5 results — fresh, pass through
+      for (const idx of [5, 8, 11, 14]) {
+        const tr = result[idx];
+        if (tr.role === "toolResult") {
+          const text = tr.content[0];
+          if (text.type === "text") {
+            expect(text.text.length).toBe(12_000);
+          }
+        }
+      }
+    });
+
+    test("short conversations never compact", async () => {
+      // Only 3 assistant turns — all fresh
+      const messages: AgentMessage[] = [
+        userMsg("t1"), assistantMsg("a1"), toolResult("exec", "x".repeat(20_000)),
+        userMsg("t2"), assistantMsg("a2"), toolResult("exec", "y".repeat(20_000)),
+        userMsg("t3"), assistantMsg("a3"), toolResult("exec", "z".repeat(20_000)),
+      ];
+      const result = await transformContext(messages);
+      for (const idx of [2, 5, 8]) {
+        const tr = result[idx];
+        if (tr.role === "toolResult") {
+          const text = tr.content[0];
+          if (text.type === "text") {
+            expect(text.text.length).toBe(20_000);
+          }
+        }
+      }
+    });
+  });
+
   describe("error passthrough", () => {
     test("never compacts error results regardless of size", async () => {
       const bigError = "E".repeat(15_000);
       const messages: AgentMessage[] = [
         userMsg("go"),
         toolResult("exec", bigError, { isError: true }),
+        ...stalePadding(),
       ];
 
       const result = await transformContext(messages);
