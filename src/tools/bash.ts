@@ -326,6 +326,7 @@ class BashSession {
       } finally {
         this.stdoutDone = true;
         this.dead = true;
+        this.resetOccurred = true;
         // Null proc so ensureStarted() re-spawns after unexpected process death.
         if (this.proc === proc) this.proc = null;
       }
@@ -418,7 +419,9 @@ class BashSession {
         // implementation. Trade-off: simple vs. sentinel-framing stderr separately.
         await Bun.sleep(STDERR_FLUSH_DELAY_MS);
         const stderr = this.stderrStr.slice(stderrMark);
-        this.stderrStr = ""; // Reset; any bytes arriving after the delay are accepted loss.
+        // Trim only the consumed region. Late-arriving stderr may bleed into
+        // the next command's window — acceptable vs. silent loss from a full clear.
+        this.stderrStr = this.stderrStr.slice(stderrMark + stderr.length);
 
         return { stdout, stderr, exitCode, timedOut: false, reset: wasReset };
       }

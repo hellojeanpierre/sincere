@@ -348,17 +348,20 @@ describe("bash tool", () => {
   // --- Persistent session tests ---
 
   test("sequential commands share shell state", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "bash-state-"));
+    const marker = join(stateDir, "pid.txt");
     const { tool: t, dispose: d } = bashTool(tmpDir);
     try {
       // Write bash's PID (via python's os.getppid()) to a temp file in command 1.
       // Re-read and verify it matches in command 2. Only passes if both commands
       // run in the same bash process — separate sessions have different bash PIDs.
-      await t.execute("state-1", { command: `python3 -c "import os; open('/tmp/_bash_session_test', 'w').write(str(os.getppid()))"` });
-      const result = await t.execute("state-2", { command: `python3 -c "import os; saved = open('/tmp/_bash_session_test').read(); cur = str(os.getppid()); print('ok' if saved == cur else 'mismatch: ' + saved + ' vs ' + cur)"` });
+      await t.execute("state-1", { command: `python3 -c "import os; open('${marker}', 'w').write(str(os.getppid()))"` });
+      const result = await t.execute("state-2", { command: `python3 -c "import os; saved = open('${marker}').read(); cur = str(os.getppid()); print('ok' if saved == cur else 'mismatch: ' + saved + ' vs ' + cur)"` });
       expect(result.content[0].text).toContain("ok");
       expect(result.details).not.toBeNull();
     } finally {
       await d();
+      rmSync(stateDir, { recursive: true, force: true });
     }
   });
 
@@ -366,15 +369,23 @@ describe("bash tool", () => {
     // Use a 1s timeout so the test doesn't take 30s.
     const { tool: t, dispose: d } = bashTool(tmpDir, 1_000);
     try {
+      // Set shell state before the timeout so we can verify it's gone after respawn.
+      await t.execute("setup", { command: `python3 -c "import os; os.environ['STATE_CHECK'] = 'alive'"` });
+
       // Send a command that prints then hangs — partial output must survive the timeout.
       const result = await t.execute("hang", { command: `python3 -u -c "import time; print('partial'); time.sleep(60)"` });
       expect(result.details).toBeNull();
       expect(result.content[0].text).toContain("Timed out");
       expect(result.content[0].text).toContain("partial");
+
       // Session respawns on next call; reset notice surfaces on the first result.
-      const after = await t.execute("after", { command: "cat package.json" });
+      const after = await t.execute("after", { command: `python3 -c "print('respawned')"` });
       expect(after.content[0].text).toContain("Shell session was reset");
       expect(after.details).not.toBeNull();
+
+      // Prove state was actually lost — STATE_CHECK should be gone in the new shell.
+      const stateCheck = await t.execute("verify", { command: `python3 -c "import os; print(os.environ.get('STATE_CHECK', 'empty'))"` });
+      expect(stateCheck.content[0].text.trim()).toBe("empty");
     } finally {
       await d();
     }
@@ -383,7 +394,7 @@ describe("bash tool", () => {
   test("dispose kills process cleanly and is idempotent", async () => {
     const { tool: t, dispose: d } = bashTool(tmpDir);
     // Start the session.
-    await t.execute("disp-1", { command: "cat package.json" });
+    await t.execute("disp-1", { command: `python3 -c "print('started')"` });
     // First dispose.
     await d();
     // Second dispose should not throw.
