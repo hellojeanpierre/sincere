@@ -60,7 +60,7 @@ function skipStream(): Response {
 }
 
 function investigateStream(): Response {
-  const agent = createAgent({
+  const { agent, dispose } = createAgent({
     promptPath: PROMPT_PATH,
     model: "claude-sonnet-4-6",
     thinkingLevel: "high",
@@ -114,6 +114,7 @@ function investigateStream(): Response {
         clearInterval(keepalive);
         unsub();
         unsubTrace();
+        await dispose();
         controller.close();
       }
     },

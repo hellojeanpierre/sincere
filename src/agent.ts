@@ -139,7 +139,7 @@ export interface AgentOptions {
   thinkingLevel?: "off" | "low" | "medium" | "high";
 }
 
-export function createAgent(opts: AgentOptions): Agent {
+export function createAgent(opts: AgentOptions): { agent: Agent; dispose: () => Promise<void> } {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY not set");
@@ -162,7 +162,7 @@ export function createAgent(opts: AgentOptions): Agent {
   const bash = bashTool(sessionDir);
   const tools: AgentTool<any>[] = [readTool, bash.tool, ...(opts.tools ?? []).filter(t => t.name !== "bash")];
 
-  return new Agent({
+  const agent = new Agent({
     streamFn: streamSimple,
     getApiKey: () => apiKey,
     transformContext: makeTransformContext(sessionDir, hintDir, bash.injectEnv),
@@ -173,15 +173,17 @@ export function createAgent(opts: AgentOptions): Agent {
       thinkingLevel: opts.thinkingLevel ?? "high",
     },
   });
+
+  return { agent, dispose: bash.dispose };
 }
 
-export function createSessionHandler(createAgentFn: () => Agent) {
+export function createSessionHandler(createAgentFn: () => { agent: Agent; dispose: () => Promise<void> }) {
   const store = new Map<string, AgentMessage[]>();
 
   const handler: Handler = async (body, workItemId) => {
     logger.info({ workItemId }, "handler start");
     const saved = store.get(workItemId) ?? [];
-    const agent = createAgentFn();
+    const { agent, dispose } = createAgentFn();
 
     if (saved.length > 0) {
       agent.replaceMessages(saved);
@@ -198,6 +200,8 @@ export function createSessionHandler(createAgentFn: () => Agent) {
     } catch (err) {
       logger.error({ workItemId, err }, "handler failed, session not updated");
       throw err;
+    } finally {
+      await dispose();
     }
   };
 
