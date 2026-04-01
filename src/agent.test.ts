@@ -247,11 +247,11 @@ describe("transformContext", () => {
     });
   });
 
-  describe("injectEnv integration", () => {
-    test("microcompaction calls injectEnv with absolute writePath", async () => {
-      const calls: [string, string][] = [];
-      const injectEnv = (key: string, value: string) => { calls.push([key, value]); };
-      const ctx = makeTransformContext(TEST_DIR, TEST_HINT_DIR, injectEnv);
+  describe("setLastResult integration", () => {
+    test("microcompaction calls setLastResult with absolute writePath", async () => {
+      const calls: string[] = [];
+      const setLastResult = (path: string) => { calls.push(path); };
+      const ctx = makeTransformContext(TEST_DIR, TEST_HINT_DIR, setLastResult);
 
       const callId = "tc_inject_" + Date.now();
       const messages: AgentMessage[] = [
@@ -263,14 +263,13 @@ describe("transformContext", () => {
       await ctx(messages);
 
       expect(calls.length).toBe(1);
-      expect(calls[0][0]).toBe("LAST_RESULT");
-      expect(calls[0][1]).toBe(`${TEST_DIR}/${callId}.txt`);
+      expect(calls[0]).toBe(`${TEST_DIR}/${callId}.txt`);
     });
 
-    test("injectEnv not called for small results", async () => {
-      const calls: [string, string][] = [];
-      const injectEnv = (key: string, value: string) => { calls.push([key, value]); };
-      const ctx = makeTransformContext(TEST_DIR, TEST_HINT_DIR, injectEnv);
+    test("setLastResult not called for small results", async () => {
+      const calls: string[] = [];
+      const setLastResult = (path: string) => { calls.push(path); };
+      const ctx = makeTransformContext(TEST_DIR, TEST_HINT_DIR, setLastResult);
 
       const messages: AgentMessage[] = [
         userMsg("go"),
@@ -282,10 +281,10 @@ describe("transformContext", () => {
       expect(calls.length).toBe(0);
     });
 
-    test("injectEnv not called when persistence fails", async () => {
-      const calls: [string, string][] = [];
-      const injectEnv = (key: string, value: string) => { calls.push([key, value]); };
-      const ctx = makeTransformContext("/dev/null/impossible/path", TEST_HINT_DIR, injectEnv);
+    test("setLastResult not called when persistence fails", async () => {
+      const calls: string[] = [];
+      const setLastResult = (path: string) => { calls.push(path); };
+      const ctx = makeTransformContext("/dev/null/impossible/path", TEST_HINT_DIR, setLastResult);
 
       const messages: AgentMessage[] = [
         userMsg("go"),

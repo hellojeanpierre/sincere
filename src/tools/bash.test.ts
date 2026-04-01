@@ -441,40 +441,58 @@ describe("bash tool", () => {
     await expect(d()).resolves.toBeUndefined();
   });
 
-  // --- injectEnv tests ---
+  // --- setLastResult tests ---
 
-  test("injectEnv makes variable visible in next execute call", async () => {
-    // Run an initial command to ensure the session is alive
+  test("setLastResult makes $LAST_RESULT visible in the next execute call", async () => {
+    // Start the session, then set LAST_RESULT. The session lock serializes
+    // the export before the subsequent execute — no sleep needed.
     await tool.execute("test", { command: "cat /dev/null" });
-    // Inject a variable
-    bash.injectEnv("TEST_INJECT_VAR", "/tmp/test-result.txt");
-    // Small delay to let fire-and-forget export complete
-    await new Promise(r => setTimeout(r, 100));
-    // Next command should see it
+    bash.setLastResult("/tmp/test-result.txt");
     const result = await tool.execute("test", {
-      command: `python3 -c "import os; print(os.environ.get('TEST_INJECT_VAR', 'MISSING'))"`,
+      command: `python3 -c "import os; print(os.environ.get('LAST_RESULT', 'MISSING'))"`,
     });
     expect(result.content[0].text).toContain("/tmp/test-result.txt");
   });
 
-  test("injectEnv shell-escapes values with single quotes", async () => {
+  test("setLastResult shell-escapes paths with single quotes", async () => {
     await tool.execute("test", { command: "cat /dev/null" });
-    bash.injectEnv("TEST_QUOTE_VAR", "it's a test");
-    await new Promise(r => setTimeout(r, 100));
+    bash.setLastResult("/tmp/it's a path/result.txt");
     const result = await tool.execute("test", {
-      command: `python3 -c "import os; print(os.environ.get('TEST_QUOTE_VAR', 'MISSING'))"`,
+      command: `python3 -c "import os; print(os.environ.get('LAST_RESULT', 'MISSING'))"`,
     });
-    expect(result.content[0].text).toContain("it's a test");
+    expect(result.content[0].text).toContain("/tmp/it's a path/result.txt");
   });
 
-  test("injectEnv after dispose is a silent no-op", async () => {
-    const tmp2 = mkdtempSync(join(tmpdir(), "bash-inject-"));
+  test("setLastResult after dispose is a silent no-op", async () => {
+    const tmp2 = mkdtempSync(join(tmpdir(), "bash-lr-"));
     const bash2 = bashTool(tmp2);
-    // Run a command to start the session
     await bash2.tool.execute("test", { command: "cat /dev/null" });
     await bash2.dispose();
     // Should not throw
-    bash2.injectEnv("DEAD_VAR", "value");
+    bash2.setLastResult("/some/path.txt");
     rmSync(tmp2, { recursive: true, force: true });
+  });
+
+  test("$LAST_RESULT is absent after session death and respawn", async () => {
+    const tmp3 = mkdtempSync(join(tmpdir(), "bash-lr-death-"));
+    const bash3 = bashTool(tmp3);
+    try {
+      // Start session and inject LAST_RESULT
+      await bash3.tool.execute("test", { command: "cat /dev/null" });
+      bash3.setLastResult("/tmp/some-result.txt");
+      // Kill the session before the export runs (or has any effect)
+      await bash3.dispose();
+      // Next execute respawns a fresh shell — LAST_RESULT must not carry over.
+      // The reset notice ("Shell session was reset...") is prepended by the first
+      // post-respawn command; account for it with toContain rather than toBe.
+      const result = await bash3.tool.execute("test", {
+        command: `python3 -c "import os; print(os.environ.get('LAST_RESULT', 'MISSING'))"`,
+      });
+      expect(result.content[0].text).toContain("MISSING");
+      expect(result.content[0].text).not.toContain("/tmp/some-result.txt");
+    } finally {
+      await bash3.dispose();
+      rmSync(tmp3, { recursive: true, force: true });
+    }
   });
 });

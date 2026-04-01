@@ -476,7 +476,7 @@ class BashSession {
 export interface BashToolResult {
   tool: AgentTool<typeof bashSchema>;
   dispose: () => Promise<void>;
-  injectEnv: (key: string, value: string) => void;
+  setLastResult: (path: string) => void;
 }
 
 export function bashTool(sessionDir: string, timeoutMs = COMMAND_TIMEOUT_MS): BashToolResult {
@@ -568,9 +568,15 @@ export function bashTool(sessionDir: string, timeoutMs = COMMAND_TIMEOUT_MS): Ba
   return {
     tool,
     dispose: () => session.kill(),
-    injectEnv(key: string, value: string) {
+    // Best-effort: sets $LAST_RESULT in the live shell so the agent's next
+    // bash call can reference the persisted file directly. Ordering is
+    // guaranteed by the session lock — session.run() chains synchronously
+    // onto the lock, so the export always serializes before the next
+    // tool.execute() call. Silent no-op if the session is dead; the
+    // truncated preview already contains the path as a fallback.
+    setLastResult(path: string) {
       if (!session.alive) return;
-      session.run(`export ${key}=${shellEscape(value)}`, 5_000).catch(() => {});
+      session.run(`export LAST_RESULT=${shellEscape(path)}`, 5_000).catch(() => {});
     },
   };
 }

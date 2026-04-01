@@ -17,7 +17,7 @@ import { resolveConfig } from "./lib/config.ts";
 // turns) pass through unchanged — bash owns the size gate for those.
 const FRESH_WINDOW_TURNS = 4;
 
-export function makeTransformContext(sessionDir: string, hintDir: string, injectEnv?: (key: string, value: string) => void) {
+export function makeTransformContext(sessionDir: string, hintDir: string, setLastResult?: (path: string) => void) {
   let dirReady = false;
 
   return async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
@@ -60,7 +60,7 @@ export function makeTransformContext(sessionDir: string, hintDir: string, inject
             dirReady = true;
           }
           await writeFile(writePath, joined);
-          injectEnv?.("LAST_RESULT", writePath);
+          setLastResult?.(writePath);
           logger.info({ toolCallId: trMsg.toolCallId, toolName: trMsg.toolName, chars: totalLen, path: writePath }, "microcompaction persisted");
           return {
             ...trMsg,
@@ -165,7 +165,7 @@ export function createAgent(opts: AgentOptions): { agent: Agent; dispose: () => 
   const agent = new Agent({
     streamFn: streamSimple,
     getApiKey: () => apiKey,
-    transformContext: makeTransformContext(sessionDir, hintDir, bash.injectEnv),
+    transformContext: makeTransformContext(sessionDir, hintDir, bash.setLastResult),
     initialState: {
       systemPrompt,
       model,
