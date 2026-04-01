@@ -133,7 +133,7 @@
         if (!headerMatch) {
           // Doesn't match expected format — keep as raw entry
           if (/\S/.test(trimmed)) {
-            findings.push({ id: findings.length + 1, title: trimmed.split('\n')[0], subtitle: '', impact: '', cohort: '', rootCause: '', outcome: '' });
+            findings.push({ id: findings.length + 1, title: trimmed.split('\n')[0], cohort: '', outcome: '', rootCause: '' });
           }
           continue;
         }
@@ -148,16 +148,53 @@
           const m = body.match(re);
           return m ? m[1].trim() : '';
         };
-        const outcome = field('Outcome');
-        const cohort = field('Cohort');
-        const impactMatch = outcome.match(/([\d.]+)\s*pts?\b/i);
-        const impact = impactMatch ? impactMatch[1] + ' pts' : '';
-        const ticketsMatch = outcome.match(/([\d,]+)\s*tickets/i);
-        const tickets = ticketsMatch ? ticketsMatch[1] + ' tickets' : '';
-        const subtitle = tickets ? tickets + ' last 30 days' : '';
-        findings.push({ id, title, subtitle, impact, cohort, rootCause: field('Root cause', true), outcome });
+        findings.push({ id, title, cohort: field('Cohort'), outcome: field('Outcome'), rootCause: field('Root cause', true) });
       }
       return findings;
+    }
+
+    function deactivateGradient(el) {
+      el.classList.remove('gradient-border');
+      Object.assign(el.style, { background: 'none', border: '1px solid #3a2d28', borderRadius: '1rem' });
+      el.querySelector(':scope > div').style.borderRadius = 'calc(1rem - 1px)';
+    }
+
+    const CHECKMARK_HTML = `
+      <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+      </svg>
+      <span class="text-emerald-400">Complete</span>`;
+
+    const AGENT_CARD_HTML = `
+      <div class="gradient-border">
+        <div class="bg-card p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <p class="text-xs uppercase tracking-wider text-stone-500">Agent: Historical Analysis</p>
+            <span class="agent-status flex items-center gap-2 text-xs text-stone-500"></span>
+          </div>
+          <pre class="agent-reasoning text-sm text-stone-400 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto scrollbar-thin"></pre>
+        </div>
+      </div>`;
+
+    function createAgentCard(timelineRoot, insertBefore) {
+      timelineRoot.querySelectorAll('.gradient-border').forEach(deactivateGradient);
+      const entry = document.createElement('div');
+      entry.className = 'relative z-10 w-full max-w-md mt-8';
+      entry.innerHTML = AGENT_CARD_HTML;
+      timelineRoot.insertBefore(entry, insertBefore);
+      return entry;
+    }
+
+    function renderAgentComplete(agentCard, findingsText) {
+      const statusEl = agentCard.querySelector('.agent-status');
+      const reasoningEl = agentCard.querySelector('.agent-reasoning');
+      statusEl.innerHTML = CHECKMARK_HTML;
+      const findings = parseFindings(findingsText);
+      if (findings.length) {
+        reasoningEl.textContent = `${findings.length} findings identified.`;
+        reasoningEl.classList.remove('max-h-96', 'overflow-y-auto');
+        renderFindingsCard(findings, agentCard.parentElement, agentCard.nextSibling);
+      }
     }
 
     function renderFindingsCard(findings, timelineRoot, insertBefore) {
@@ -172,17 +209,10 @@
         </div>`;
       timelineRoot.insertBefore(entry, insertBefore);
 
-      // Deactivate gradient on agent card above
       const prev = entry.previousElementSibling;
       if (prev) {
         const gb = prev.querySelector('.gradient-border');
-        if (gb) {
-          gb.classList.remove('gradient-border');
-          gb.style.background = 'none';
-          gb.style.border = '1px solid #3a2d28';
-          gb.style.borderRadius = '1rem';
-          gb.querySelector(':scope > div').style.borderRadius = 'calc(1rem - 1px)';
-        }
+        if (gb) deactivateGradient(gb);
       }
 
       const list = entry.querySelector('#findings-list');
@@ -191,12 +221,14 @@
         card.className = 'finding-card p-3 rounded-lg bg-stone-900/60 border border-stone-700/50 cursor-pointer transition-all duration-200 hover:border-accent/50';
         card.style.animationDelay = `${i * 120}ms`;
         card.dataset.findingId = f.id;
+        const impact = f.outcome.match(/([\d.]+)\s*pts?/i)?.[1];
+        const tickets = f.outcome.match(/([\d,]+)\s*tickets/i)?.[1];
         card.innerHTML = `
           <div class="flex items-start justify-between gap-3 mb-1">
             <p class="text-sm font-medium text-stone-200">${esc(f.title)}</p>
-            ${f.impact ? `<span class="shrink-0 text-xs font-medium text-accent">${esc(f.impact)}</span>` : ''}
+            ${impact ? `<span class="shrink-0 text-xs font-medium text-accent">${impact} pts</span>` : ''}
           </div>
-          ${f.subtitle ? `<p class="text-xs text-stone-400">${esc(f.subtitle)}</p>` : ''}
+          ${tickets ? `<p class="text-xs text-stone-400">${tickets} tickets last 30 days</p>` : ''}
           <div class="root-cause border-t border-stone-700/40">
             <div>
               <p class="text-xs text-stone-400 pt-2"><span class="text-stone-300">Root cause:</span> ${esc(f.rootCause)}</p>
@@ -232,44 +264,20 @@
       btn.disabled = true;
       btn.classList.add('opacity-50', 'pointer-events-none');
 
-      // Insert agent card into timeline before the button
       const btnContainer = btn.parentElement;
       const timelineRoot = btnContainer.parentElement;
-
-      // Deactivate gradient border on previous cards
-      timelineRoot.querySelectorAll('.gradient-border').forEach((el) => {
-        el.classList.remove('gradient-border');
-        el.style.background = 'none';
-        el.style.border = '1px solid #3a2d28';
-        el.style.borderRadius = '1rem';
-        el.querySelector(':scope > div').style.borderRadius = 'calc(1rem - 1px)';
-      });
-
-      const agentEntry = document.createElement('div');
-      agentEntry.className = 'relative z-10 w-full max-w-md mt-8';
-      agentEntry.innerHTML = `
-        <div class="gradient-border">
-          <div class="bg-card p-6 space-y-4">
-            <div class="flex items-center justify-between">
-              <p class="text-xs uppercase tracking-wider text-stone-500">Agent: Historical Analysis</p>
-              <span id="agent-status" class="flex items-center gap-2 text-xs text-stone-500">
-                <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                </svg>
-                <span id="agent-label">Connecting...</span>
-              </span>
-            </div>
-            <pre id="agent-reasoning" class="text-sm text-stone-400 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto scrollbar-thin"></pre>
-          </div>
-        </div>
-      `;
-      timelineRoot.insertBefore(agentEntry, btnContainer);
+      const agentEntry = createAgentCard(timelineRoot, btnContainer);
       btnContainer.classList.add('hidden');
 
-      const reasoningEl = document.getElementById('agent-reasoning');
+      const statusEl = agentEntry.querySelector('.agent-status');
+      const reasoningEl = agentEntry.querySelector('.agent-reasoning');
+      statusEl.innerHTML = `
+        <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        <span id="agent-label">Connecting...</span>`;
       const labelEl = document.getElementById('agent-label');
-      const statusEl = document.getElementById('agent-status');
       let fullText = '';
 
       const skipMode = btn.dataset.skipMode === 'true';
@@ -336,20 +344,7 @@
       }
 
       function markComplete() {
-        statusEl.innerHTML = `
-          <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-          </svg>
-          <span class="text-emerald-400">Complete</span>`;
-        const findings = parseFindings(fullText);
-        if (findings.length) {
-          // Collapse the agent card to a compact summary
-          reasoningEl.textContent = `${findings.length} findings identified.`;
-          reasoningEl.classList.remove('max-h-96', 'overflow-y-auto');
-          // Insert findings as a separate card below
-          const agentCard = reasoningEl.closest('.relative.z-10');
-          renderFindingsCard(findings, agentCard.parentElement, agentCard.nextSibling);
-        }
+        renderAgentComplete(agentEntry, fullText);
       }
 
       function markError(msg) {
@@ -371,48 +366,15 @@
         fetch('/api/investigate?skip=true', { method: 'POST' })
           .then((res) => { if (!res.ok) throw new Error(); btn.click(); })
           .catch(() => {
-            // Server not running — load fixture client-side
             btn.disabled = true;
             btn.classList.add('opacity-50', 'pointer-events-none');
             const btnContainer = btn.parentElement;
             const timelineRoot = btnContainer.parentElement;
-            timelineRoot.querySelectorAll('.gradient-border').forEach((el) => {
-              el.classList.remove('gradient-border');
-              el.style.background = 'none';
-              el.style.border = '1px solid #3a2d28';
-              el.style.borderRadius = '1rem';
-              el.querySelector(':scope > div').style.borderRadius = 'calc(1rem - 1px)';
-            });
-            const agentEntry = document.createElement('div');
-            agentEntry.className = 'relative z-10 w-full max-w-md mt-8';
-            agentEntry.innerHTML = `
-              <div class="gradient-border">
-                <div class="bg-card p-6 space-y-4">
-                  <div class="flex items-center justify-between">
-                    <p class="text-xs uppercase tracking-wider text-stone-500">Agent: Historical Analysis</p>
-                    <span id="agent-status-skip" class="flex items-center gap-2 text-xs text-stone-500"></span>
-                  </div>
-                  <div id="agent-findings-skip" class="text-sm text-stone-400 leading-relaxed max-h-96 overflow-y-auto"></div>
-                </div>
-              </div>`;
-            timelineRoot.insertBefore(agentEntry, btnContainer);
+            const agentCard = createAgentCard(timelineRoot, btnContainer);
             btnContainer.classList.add('hidden');
-
-            const fixtureText = `Finding 1 \u2014 Technical troubleshooting macro applied to Trust & Safety and Merchant tickets\n\n**Cohort:** spam_scam and shopping_merchant tickets \u2014 tickets 4800097, 4800075, 4800090\n**Outcome:** 0/3 resolved (all on HOLD). 9.4 pts of metric impact.\n**Root cause:** All three tickets received the identical 34-word response \u2014 the app-crash troubleshooting macro from SOP-TECH-001. None of these tickets are technical issues.\n\n### Finding 2 \u2014 Unauthorized charge tickets deflected to FAQ/help center without investigation\n\n**Cohort:** ads_billing / unauthorized_charge tickets \u2014 4800094, 4800102\n**Outcome:** 0/2 resolved (both OPEN). 6.3 pts of metric impact.\n**Root cause:** Both agents responded with generic FAQ deflections instead of following SOP-ADS-005, which requires verifying active campaigns, checking for unauthorized account access, and escalating to Ads T2.\n\n### Finding 3 \u2014 Response template submitted with placeholder variables unpopulated\n\n**Cohort:** content_moderation / board_removed \u2014 ticket 4800099\n**Outcome:** 0/1 resolved (OPEN). 3.1 pts of metric impact.\n**Root cause:** Agent sent a template with three unfilled variables \u2014 {root_cause}, {team}, and {internal_id}. The customer received no actionable information, no escalation was recorded, and the ticket has remained OPEN.`;
-            const findings = parseFindings(fixtureText);
-            const container = document.getElementById('agent-findings-skip');
-            const status = document.getElementById('agent-status-skip');
-            if (findings.length) {
-              container.textContent = `${findings.length} findings identified.`;
-              renderFindingsCard(findings, agentEntry.parentElement, agentEntry.nextSibling);
-            } else {
-              container.textContent = fixtureText;
-            }
-            status.innerHTML = `
-              <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-              </svg>
-              <span class="text-emerald-400">Complete</span>`;
+            fetch('sample_findings.txt')
+              .then(r => r.text())
+              .then(text => renderAgentComplete(agentCard, text));
           });
       }
     });
