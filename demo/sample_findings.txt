@@ -1,23 +1,38 @@
-## Finding 1 — BPO agents skip verification on content policy appeals
+### Finding 1 — Technical troubleshooting macro applied to Trust & Safety and Merchant tickets
 
-Cohort: Content policy appeal tickets handled by BPO agents
-Outcome: Resolution rate 17% below baseline (340 tickets, 1.1pts of metric impact)
-Root cause: Agents skip the verification step before responding — the current SOP omits it entirely, so even compliant agents cannot follow it.
+**Cohort:** spam_scam and shopping_merchant tickets — tickets 4800097, 4800075, 4800090
+**Outcome:** 0/3 resolved (all on HOLD). 9.4 pts of metric impact.
+**Root cause:** All three tickets received the identical 34-word response — *"Thanks for reaching out. We understand this is frustrating. Please try clearing your cache and reinstalling the app. If the issue persists, let us know."* — the app-crash troubleshooting macro from SOP-TECH-001. None of these tickets are technical issues:
 
-## Finding 2 — Miscategorized billing tickets routed to wrong queue
+| Ticket | Issue | Required SOP | What macro requires |
+|--------|-------|-------------|---------------------|
+| 4800097 | spam_report | SOP-SPAM-001: review in PinQueue, flag content, apply "Report Received — Under Review" | Cache clear / reinstall |
+| 4800075 | catalog_feed_error | SOP-MERCH-001: check merchant admin tool, diagnose specific feed error code | Cache clear / reinstall |
+| 4800090 | phishing_link | SOP-SPAM-003: flag URL in PinQueue, apply "Security Report — Received," advise password change | Cache clear / reinstall |
 
-Cohort: Billing dispute tickets initially categorized as general inquiry
-Outcome: 42% of these tickets require re-routing, adding 2.3 days average resolution time (185 tickets, 0.6pts of metric impact)
-Root cause: The intake form lacks a "billing dispute" category — agents select "general inquiry" as the closest match, triggering incorrect queue assignment.
+The technical troubleshooting macro puts tickets on **HOLD** — waiting for the customer to confirm that clearing the cache fixed it. Because the fix is inapplicable, the customer cannot confirm, and the tickets remain on HOLD indefinitely unless manually retrieved. Ticket 4800090 (phishing_link) shows a 2-minute handle time, below the general guidelines' 3-minute QA flag threshold, consistent with the macro being applied without reading the ticket. Agents span two BPO partners (partner_b × 2, partner_c × 1) and two tenure levels (new × 1, experienced × 2), ruling out a single-cohort explanation.
 
-## Finding 3 — Premature closure on multi-issue tickets
+No resolved ticket in the dataset contains this response pattern. There are no counterexamples.
 
-Cohort: Tickets with 3+ distinct issues reported in the initial message
-Outcome: 31% reopen rate vs 8% baseline (127 tickets, 0.4pts of metric impact)
-Root cause: Agents resolve the first issue mentioned and close the ticket without addressing subsequent issues — the resolution checklist only prompts for a single resolution summary.
+---
 
-## Finding 4 — Escalation avoidance during peak hours
+### Finding 2 — Unauthorized charge tickets deflected to FAQ/help center without investigation
 
-Cohort: Tickets handled between 2–6 PM EST by agents with <6 months tenure
-Outcome: Escalation rate 60% below expected, with 28% of these tickets eventually escalated anyway after 3+ customer replies (94 tickets, 0.3pts of metric impact)
-Root cause: Junior agents attempt to resolve complex tickets themselves during peak hours to meet handle-time targets, delaying necessary escalations by an average of 1.8 days.
+**Cohort:** ads_billing / unauthorized_charge tickets — 4800094, 4800102
+**Outcome:** 0/2 resolved (both OPEN). 6.3 pts of metric impact.
+**Root cause:** Both agents responded with generic FAQ deflections instead of following SOP-ADS-005, which opens with: *"This is always a high-priority case. Check the billing record immediately."* The SOP then requires verifying active campaigns, checking for unauthorized account access, and escalating to Ads T2.
+
+- **4800094** (agent_005, mid, partner_a): *"For your issue, please visit our help center at help.pinterest.com for detailed guidance on this topic."* — 5-minute handle time; tagged `high_value_advertiser`, which additionally triggers the cross-cutting 9.2 rule requiring immediate T2 escalation.
+- **4800102** (agent_014, new, partner_a): *"Provided a link to the Pinterest Ads billing FAQ page. Suggested they review their campaign settings."* — 3-minute handle time; FAQ advice is irrelevant to an unauthorized charge.
+
+Neither ticket was advanced to PENDING or SOLVED — both remain OPEN. The same generic help center redirect appears in ticket **4800086** (account_recovery, solved) where a different agent (agent_019, partner_c) used the identical response text but *did* explicitly mark the ticket SOLVED (confirmed in the event log: OPEN → SOLVED). This shows the response text alone does not mechanically prevent resolution — the 4800094/4800102 agents compounded the wrong response by also failing to close the ticket. Both failure dimensions are observable and independent.
+
+---
+
+### Finding 3 — Response template submitted with placeholder variables unpopulated
+
+**Cohort:** content_moderation / board_removed — ticket 4800099
+**Outcome:** 0/1 resolved (OPEN). 3.1 pts of metric impact.
+**Root cause:** Agent_014 (new, partner_c) sent the following verbatim to the customer: *"Thank you for the details. I investigated and found that {root_cause}. I've escalated this to our {team} team with ticket #{internal_id} for resolution."* Three template variables — `{root_cause}`, `{team}`, and `{internal_id}` — were left unformatted. The customer received no actionable information, no escalation was recorded in the event log, and the ticket has remained OPEN since January 22, 2026.
+
+For comparison, ticket 4800050 (also board_removed, no dedicated SOP exists for this subcategory) was handled by a different agent (agent_000, partner_a) who wrote a specific response identifying the copyright detection trigger, restored the board, and marked it closed. The existence of a resolved board_removed ticket confirms this issue type is resolvable at T1; the failure is isolated to the unfilled template.

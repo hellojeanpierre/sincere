@@ -246,6 +246,56 @@ describe("transformContext", () => {
       expect(text.text).toBe(bigError);
     });
   });
+
+  describe("setLastResult integration", () => {
+    test("microcompaction calls setLastResult with absolute writePath", async () => {
+      const calls: string[] = [];
+      const setLastResult = (path: string) => { calls.push(path); };
+      const ctx = makeTransformContext(TEST_DIR, TEST_HINT_DIR, setLastResult);
+
+      const callId = "tc_inject_" + Date.now();
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("bash", "x".repeat(12_000), { toolCallId: callId }),
+        ...stalePadding(),
+      ];
+
+      await ctx(messages);
+
+      expect(calls.length).toBe(1);
+      expect(calls[0]).toBe(`${TEST_DIR}/${callId}.txt`);
+    });
+
+    test("setLastResult not called for small results", async () => {
+      const calls: string[] = [];
+      const setLastResult = (path: string) => { calls.push(path); };
+      const ctx = makeTransformContext(TEST_DIR, TEST_HINT_DIR, setLastResult);
+
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("bash", "small output"),
+        ...stalePadding(),
+      ];
+
+      await ctx(messages);
+      expect(calls.length).toBe(0);
+    });
+
+    test("setLastResult not called when persistence fails", async () => {
+      const calls: string[] = [];
+      const setLastResult = (path: string) => { calls.push(path); };
+      const ctx = makeTransformContext("/dev/null/impossible/path", TEST_HINT_DIR, setLastResult);
+
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        toolResult("bash", "x".repeat(12_000)),
+        ...stalePadding(),
+      ];
+
+      await ctx(messages);
+      expect(calls.length).toBe(0);
+    });
+  });
 });
 
 describe("loadSystemPrompt", () => {

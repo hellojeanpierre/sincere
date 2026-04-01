@@ -251,6 +251,10 @@ const COMMAND_TIMEOUT_MS = 30_000;
 const STDERR_FLUSH_DELAY_MS = 50;
 const POLL_INTERVAL_MS = 100;
 
+function shellEscape(value: string): string {
+  return "'" + value.replace(/'/g, "'\\''") + "'";
+}
+
 interface ShellResult {
   stdout: string;
   stderr: string;
@@ -293,6 +297,10 @@ class BashSession {
   // even when run() throws, so a subsequent kill() or run() is not blocked.
   private advance(p: Promise<unknown>): void {
     this.lock = p.then(() => {}, () => {});
+  }
+
+  get alive(): boolean {
+    return this.proc !== null && !this.dead;
   }
 
   private ensureStarted() {
@@ -465,7 +473,13 @@ class BashSession {
   }
 }
 
-export function bashTool(sessionDir: string, timeoutMs = COMMAND_TIMEOUT_MS): { tool: AgentTool<typeof bashSchema>; dispose: () => Promise<void> } {
+export interface BashToolResult {
+  tool: AgentTool<typeof bashSchema>;
+  dispose: () => Promise<void>;
+  setLastResult: (path: string) => void;
+}
+
+export function bashTool(sessionDir: string, timeoutMs = COMMAND_TIMEOUT_MS): BashToolResult {
   let dirReady = false;
   const session = new BashSession();
 
@@ -551,5 +565,18 @@ export function bashTool(sessionDir: string, timeoutMs = COMMAND_TIMEOUT_MS): { 
     },
   };
 
-  return { tool, dispose: () => session.kill() };
+  return {
+    tool,
+    dispose: () => session.kill(),
+    // Best-effort: sets $LAST_RESULT in the live shell so the agent's next
+    // bash call can reference the persisted file directly. Ordering is
+    // guaranteed by the session lock — session.run() chains synchronously
+    // onto the lock, so the export always serializes before the next
+    // tool.execute() call. Silent no-op if the session is dead; the
+    // truncated preview already contains the path as a fallback.
+    setLastResult(path: string) {
+      if (!session.alive) return;
+      session.run(`export LAST_RESULT=${shellEscape(path)}`, 5_000).catch(() => {});
+    },
+  };
 }

@@ -125,11 +125,11 @@
     function parseFindings(text) {
       const findings = [];
       // Split on ## Finding headers, keeping the delimiter
-      const parts = text.split(/(?=^## Finding\s)/m);
+      const parts = text.split(/(?=^#{0,3}\s*Finding\s+\d)/m);
       for (const part of parts) {
         const trimmed = part.trim();
         if (!trimmed) continue;
-        const headerMatch = trimmed.match(/^## Finding\s+(\d+)\s*[—–-]\s*(.+)/m);
+        const headerMatch = trimmed.match(/^#{0,3}\s*Finding\s+(\d+)\s*[—–-]\s*(.+)/m);
         if (!headerMatch) {
           // Doesn't match expected format — keep as raw entry
           if (/\S/.test(trimmed)) {
@@ -141,9 +141,10 @@
         const title = headerMatch[2].trim();
         const body = trimmed.slice(headerMatch[0].length);
         const field = (label, greedy) => {
+          const pat = '\\*{0,2}' + label + ':\\*{0,2}\\s*';
           const re = greedy
-            ? new RegExp(label + ':\\s*(.+)', 's')
-            : new RegExp(label + ':\\s*(.+?)(?=\\n(?:Cohort|Outcome|Root cause):|$)', 's');
+            ? new RegExp(pat + '(.+)', 's')
+            : new RegExp(pat + '(.+?)(?=\\n\\*{0,2}(?:Cohort|Outcome|Root cause)\\*{0,2}:|$)', 's');
           const m = body.match(re);
           return m ? m[1].trim() : '';
         };
@@ -397,7 +398,7 @@
             timelineRoot.insertBefore(agentEntry, btnContainer);
             btnContainer.classList.add('hidden');
 
-            const fixtureText = `## Finding 1 \u2014 BPO agents skip verification on content policy appeals\n\nCohort: Content policy appeal tickets handled by BPO agents\nOutcome: Resolution rate 17% below baseline (340 tickets, 1.1pts of metric impact)\nRoot cause: Agents skip the verification step before responding \u2014 the current SOP omits it entirely, so even compliant agents cannot follow it.\n\n## Finding 2 \u2014 Miscategorized billing tickets routed to wrong queue\n\nCohort: Billing dispute tickets initially categorized as general inquiry\nOutcome: 42% of these tickets require re-routing, adding 2.3 days average resolution time (185 tickets, 0.6pts of metric impact)\nRoot cause: The intake form lacks a \u201cbilling dispute\u201d category \u2014 agents select \u201cgeneral inquiry\u201d as the closest match, triggering incorrect queue assignment.\n\n## Finding 3 \u2014 Premature closure on multi-issue tickets\n\nCohort: Tickets with 3+ distinct issues reported in the initial message\nOutcome: 31% reopen rate vs 8% baseline (127 tickets, 0.4pts of metric impact)\nRoot cause: Agents resolve the first issue mentioned and close the ticket without addressing subsequent issues \u2014 the resolution checklist only prompts for a single resolution summary.\n\n## Finding 4 \u2014 Escalation avoidance during peak hours\n\nCohort: Tickets handled between 2\u20136 PM EST by agents with <6 months tenure\nOutcome: Escalation rate 60% below expected, with 28% of these tickets eventually escalated anyway after 3+ customer replies (94 tickets, 0.3pts of metric impact)\nRoot cause: Junior agents attempt to resolve complex tickets themselves during peak hours to meet handle-time targets, delaying necessary escalations by an average of 1.8 days.`;
+            const fixtureText = `Finding 1 \u2014 Technical troubleshooting macro applied to Trust & Safety and Merchant tickets\n\n**Cohort:** spam_scam and shopping_merchant tickets \u2014 tickets 4800097, 4800075, 4800090\n**Outcome:** 0/3 resolved (all on HOLD). 9.4 pts of metric impact.\n**Root cause:** All three tickets received the identical 34-word response \u2014 the app-crash troubleshooting macro from SOP-TECH-001. None of these tickets are technical issues.\n\n### Finding 2 \u2014 Unauthorized charge tickets deflected to FAQ/help center without investigation\n\n**Cohort:** ads_billing / unauthorized_charge tickets \u2014 4800094, 4800102\n**Outcome:** 0/2 resolved (both OPEN). 6.3 pts of metric impact.\n**Root cause:** Both agents responded with generic FAQ deflections instead of following SOP-ADS-005, which requires verifying active campaigns, checking for unauthorized account access, and escalating to Ads T2.\n\n### Finding 3 \u2014 Response template submitted with placeholder variables unpopulated\n\n**Cohort:** content_moderation / board_removed \u2014 ticket 4800099\n**Outcome:** 0/1 resolved (OPEN). 3.1 pts of metric impact.\n**Root cause:** Agent sent a template with three unfilled variables \u2014 {root_cause}, {team}, and {internal_id}. The customer received no actionable information, no escalation was recorded, and the ticket has remained OPEN.`;
             const findings = parseFindings(fixtureText);
             const container = document.getElementById('agent-findings-skip');
             const status = document.getElementById('agent-status-skip');
