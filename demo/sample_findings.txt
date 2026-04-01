@@ -1,1 +1,23 @@
-Paste your real findings here.
+## Finding 1 — BPO agents skip verification on content policy appeals
+
+Cohort: Content policy appeal tickets handled by BPO agents
+Outcome: Resolution rate 17% below baseline (340 tickets, 1.1pts of metric impact)
+Root cause: Agents skip the verification step before responding — the current SOP omits it entirely, so even compliant agents cannot follow it.
+
+## Finding 2 — Miscategorized billing tickets routed to wrong queue
+
+Cohort: Billing dispute tickets initially categorized as general inquiry
+Outcome: 42% of these tickets require re-routing, adding 2.3 days average resolution time (185 tickets, 0.6pts of metric impact)
+Root cause: The intake form lacks a "billing dispute" category — agents select "general inquiry" as the closest match, triggering incorrect queue assignment.
+
+## Finding 3 — Premature closure on multi-issue tickets
+
+Cohort: Tickets with 3+ distinct issues reported in the initial message
+Outcome: 31% reopen rate vs 8% baseline (127 tickets, 0.4pts of metric impact)
+Root cause: Agents resolve the first issue mentioned and close the ticket without addressing subsequent issues — the resolution checklist only prompts for a single resolution summary.
+
+## Finding 4 — Escalation avoidance during peak hours
+
+Cohort: Tickets handled between 2–6 PM EST by agents with <6 months tenure
+Outcome: Escalation rate 60% below expected, with 28% of these tickets eventually escalated anyway after 3+ customer replies (94 tickets, 0.3pts of metric impact)
+Root cause: Junior agents attempt to resolve complex tickets themselves during peak hours to meet handle-time targets, delaying necessary escalations by an average of 1.8 days.
