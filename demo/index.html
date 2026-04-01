@@ -26,9 +26,10 @@
       inset: 0;
       z-index: 0;
       pointer-events: none;
+      border: none;
       background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
       background-repeat: repeat;
-      background-size: 256px 256px;
+      background-size: 512px 512px;
       opacity: 0.14;
     }
     body > * { position: relative; z-index: 1; }
@@ -61,9 +62,10 @@
     .root-cause {
       display: grid;
       grid-template-rows: 0fr;
-      transition: grid-template-rows 0.25s ease, margin-top 0.25s ease, padding-top 0.25s ease;
+      transition: grid-template-rows 0.25s ease, margin-top 0.25s ease, padding-top 0.25s ease, border-color 0.25s ease;
       margin-top: 0;
       padding-top: 0;
+      border-top: 1px solid transparent;
     }
     .root-cause > div {
       overflow: hidden;
@@ -72,6 +74,7 @@
       grid-template-rows: 1fr;
       margin-top: 0.5rem;
       padding-top: 0.5rem;
+      border-top-color: rgba(120, 113, 108, 0.4);
     }
   </style>
 </head>
@@ -89,17 +92,17 @@
           <div class="bg-card p-6 space-y-4">
             <!-- header row -->
             <div>
-              <p class="text-xs uppercase tracking-wider text-stone-500 mb-1">Customer Satisfaction</p>
+              <p class="text-xs uppercase tracking-wider text-stone-500 mb-1">Resolution Rate</p>
               <div class="flex items-baseline gap-3">
-                <span class="text-4xl font-bold text-stone-100">39%</span>
+                <span class="text-4xl font-bold text-stone-100">65.6%</span>
                 <span class="text-sm text-stone-500">target 85%</span>
               </div>
             </div>
 
             <!-- description -->
             <p class="text-sm text-stone-400 leading-relaxed">
-              Customer Satisfaction Score measures how satisfied customers are with Pinterest
-              through a survey asking customers to rate their experience.
+              Resolution Rate measures how often support tickets are fully resolved
+              before closing — a direct signal of whether customers are leaving with their problem solved.
             </p>
           </div>
         </div>
@@ -130,13 +133,7 @@
         const trimmed = part.trim();
         if (!trimmed) continue;
         const headerMatch = trimmed.match(/^#{0,3}\s*Finding\s+(\d+)\s*[—–-]\s*(.+)/m);
-        if (!headerMatch) {
-          // Doesn't match expected format — keep as raw entry
-          if (/\S/.test(trimmed)) {
-            findings.push({ id: findings.length + 1, title: trimmed.split('\n')[0], cohort: '', outcome: '', rootCause: '' });
-          }
-          continue;
-        }
+        if (!headerMatch) continue;
         const id = parseInt(headerMatch[1], 10);
         const title = headerMatch[2].trim();
         const body = trimmed.slice(headerMatch[0].length);
@@ -205,6 +202,12 @@
           <div class="bg-card p-6 space-y-3">
             <p class="text-xs uppercase tracking-wider text-stone-500 mb-1">Findings</p>
             <div id="findings-list" class="space-y-3"></div>
+            <button id="btn-assign" class="w-full mt-1 py-2.5 rounded-full text-sm font-medium transition-colors bg-accent/30 text-stone-500 cursor-default flex items-center justify-center gap-2" disabled>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v13m0 0l-4-4m4 4l4-4M4 20h16"/>
+              </svg>
+              Assign Agent
+            </button>
           </div>
         </div>`;
       timelineRoot.insertBefore(entry, insertBefore);
@@ -222,14 +225,14 @@
         card.style.animationDelay = `${i * 120}ms`;
         card.dataset.findingId = f.id;
         const impact = f.outcome.match(/([\d.]+)\s*pts?/i)?.[1];
-        const tickets = f.outcome.match(/([\d,]+)\s*tickets/i)?.[1];
+        const tickets = f.cohort.match(/[—–-]\s*(\d+)\s*tickets?/i)?.[1];
         card.innerHTML = `
           <div class="flex items-start justify-between gap-3 mb-1">
             <p class="text-sm font-medium text-stone-200">${esc(f.title)}</p>
             ${impact ? `<span class="shrink-0 text-xs font-medium text-accent">${impact} pts</span>` : ''}
           </div>
-          ${tickets ? `<p class="text-xs text-stone-400">${tickets} tickets last 30 days</p>` : ''}
-          <div class="root-cause border-t border-stone-700/40">
+          ${tickets ? `<p class="text-xs text-stone-400">${tickets} ticket${parseInt(tickets) === 1 ? '' : 's'}</p>` : ''}
+          <div class="root-cause">
             <div>
               <p class="text-xs text-stone-400 pt-2"><span class="text-stone-300">Root cause:</span> ${esc(f.rootCause)}</p>
               ${f.cohort ? `<p class="text-xs text-stone-400 mt-1"><span class="text-stone-300">Cohort:</span> ${esc(f.cohort)}</p>` : ''}
@@ -248,8 +251,100 @@
             rc.classList.add('open');
             card.classList.add('border-accent', 'bg-stone-800/80', 'shadow-lg', 'shadow-accent/10', 'scale-[1.02]');
           }
+          // Update assign button state
+          const anySelected = !!list.querySelector('.border-accent');
+          const assignBtn = entry.querySelector('#btn-assign');
+          if (anySelected) {
+            assignBtn.disabled = false;
+            assignBtn.classList.remove('bg-accent/30', 'text-stone-500', 'cursor-default');
+            assignBtn.classList.add('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+          } else {
+            assignBtn.disabled = true;
+            assignBtn.classList.add('bg-accent/30', 'text-stone-500', 'cursor-default');
+            assignBtn.classList.remove('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+          }
         });
         list.appendChild(card);
+      });
+
+      const assignBtn = entry.querySelector('#btn-assign');
+      assignBtn.addEventListener('click', () => {
+        assignBtn.disabled = true;
+        assignBtn.classList.add('bg-accent/30', 'text-stone-500', 'cursor-default');
+        assignBtn.classList.remove('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+        renderPermissionsCard(timelineRoot, insertBefore);
+      });
+    }
+
+    function renderPermissionsCard(timelineRoot, insertBefore) {
+      const entry = document.createElement('div');
+      entry.className = 'relative z-10 w-full max-w-md mt-8';
+      entry.innerHTML = `
+        <div class="gradient-border">
+          <div class="bg-card p-6 space-y-4">
+            <p class="text-xs uppercase tracking-wider text-stone-500">Agent permissions</p>
+            <div class="space-y-3">
+              <div class="flex items-center gap-3 p-3 rounded-lg bg-stone-900/60 border border-stone-700/50 cursor-pointer transition-all duration-200 hover:border-accent/50 perm-option" data-perm="reroute">
+                <span class="w-4 h-4 rounded-full border-2 border-stone-600 flex-shrink-0 flex items-center justify-center perm-circle transition-colors">
+                  <span class="w-2 h-2 rounded-full bg-accent hidden perm-dot"></span>
+                </span>
+                <svg class="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 3M21 7.5H7.5"/>
+                </svg>
+                <span><span class="text-sm font-medium text-stone-200">Re-route</span> <span class="text-sm text-stone-500">Move ticket to a different queue</span></span>
+              </div>
+              <div class="flex items-center gap-3 p-3 rounded-lg bg-stone-900/60 border border-stone-700/50 cursor-pointer transition-all duration-200 hover:border-accent/50 perm-option" data-perm="guidance">
+                <span class="w-4 h-4 rounded-full border-2 border-stone-600 flex-shrink-0 flex items-center justify-center perm-circle transition-colors">
+                  <span class="w-2 h-2 rounded-full bg-accent hidden perm-dot"></span>
+                </span>
+                <svg class="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+                </svg>
+                <span><span class="text-sm font-medium text-stone-200">Guidance</span> <span class="text-sm text-stone-500">Add a private note for the agent</span></span>
+              </div>
+            </div>
+            <button id="btn-deploy" class="w-full py-2.5 rounded-full text-sm font-medium transition-colors bg-accent/30 text-stone-500 cursor-default" disabled>
+              Select at least one permission
+            </button>
+          </div>
+        </div>`;
+      timelineRoot.insertBefore(entry, insertBefore);
+
+      // Deactivate previous gradient border
+      const prev = entry.previousElementSibling;
+      if (prev) {
+        const gb = prev.querySelector('.gradient-border');
+        if (gb) deactivateGradient(gb);
+      }
+
+      const deployBtn = entry.querySelector('#btn-deploy');
+      const options = entry.querySelectorAll('.perm-option');
+      const selected = new Set();
+
+      options.forEach(opt => {
+        opt.addEventListener('click', () => {
+          const perm = opt.dataset.perm;
+          if (selected.has(perm)) {
+            selected.delete(perm);
+            opt.classList.remove('border-accent/40', 'bg-accent/5');
+            opt.querySelector('.perm-dot').classList.add('hidden');
+          } else {
+            selected.add(perm);
+            opt.classList.add('border-accent/40', 'bg-accent/5');
+            opt.querySelector('.perm-dot').classList.remove('hidden');
+          }
+          if (selected.size > 0) {
+            deployBtn.disabled = false;
+            deployBtn.textContent = 'Deploy Agent';
+            deployBtn.classList.remove('bg-accent/30', 'text-stone-500', 'cursor-default');
+            deployBtn.classList.add('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+          } else {
+            deployBtn.disabled = true;
+            deployBtn.textContent = 'Select at least one permission';
+            deployBtn.classList.add('bg-accent/30', 'text-stone-500', 'cursor-default');
+            deployBtn.classList.remove('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+          }
+        });
       });
     }
 
@@ -343,7 +438,10 @@
         }
       }
 
+      let completed = false;
       function markComplete() {
+        if (completed) return;
+        completed = true;
         renderAgentComplete(agentEntry, fullText);
       }
 
@@ -361,20 +459,29 @@
         const btn = document.getElementById('btn-investigate');
         if (btn.disabled) return;
 
-        // Try server first, fall back to client-side fetch of the fixture
-        btn.dataset.skipMode = 'true';
-        fetch('/api/investigate?skip=true', { method: 'POST' })
-          .then((res) => { if (!res.ok) throw new Error(); btn.click(); })
+        // If served from a server, use the skip endpoint via the main handler
+        if (location.protocol !== 'file:') {
+          btn.dataset.skipMode = 'true';
+          btn.click();
+          return;
+        }
+
+        // file:// fallback: load fixture directly
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'pointer-events-none');
+        const btnContainer = btn.parentElement;
+        const timelineRoot = btnContainer.parentElement;
+        const agentCard = createAgentCard(timelineRoot, btnContainer);
+        btnContainer.classList.add('hidden');
+
+        // Resolve sample_findings.txt relative to the current file
+        const base = location.href.replace(/\/[^/]*$/, '/');
+        fetch(base + 'sample_findings.txt')
+          .then(r => { if (!r.ok) throw new Error(); return r.text(); })
+          .then(text => renderAgentComplete(agentCard, text))
           .catch(() => {
-            btn.disabled = true;
-            btn.classList.add('opacity-50', 'pointer-events-none');
-            const btnContainer = btn.parentElement;
-            const timelineRoot = btnContainer.parentElement;
-            const agentCard = createAgentCard(timelineRoot, btnContainer);
-            btnContainer.classList.add('hidden');
-            fetch('sample_findings.txt')
-              .then(r => r.text())
-              .then(text => renderAgentComplete(agentCard, text));
+            const s = agentCard.querySelector('.agent-status');
+            s.innerHTML = '<span class="text-red-400">Start the demo server to use Shift+S</span>';
           });
       }
     });
