@@ -202,6 +202,12 @@
           <div class="bg-card p-6 space-y-3">
             <p class="text-xs uppercase tracking-wider text-stone-500 mb-1">Findings</p>
             <div id="findings-list" class="space-y-3"></div>
+            <button id="btn-assign" class="w-full mt-1 py-2.5 rounded-full text-sm font-medium transition-colors bg-accent/30 text-stone-500 cursor-default flex items-center justify-center gap-2" disabled>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v13m0 0l-4-4m4 4l4-4M4 20h16"/>
+              </svg>
+              Assign Agent
+            </button>
           </div>
         </div>`;
       timelineRoot.insertBefore(entry, insertBefore);
@@ -213,8 +219,7 @@
       }
 
       const list = entry.querySelector('#findings-list');
-      // Render permissions card immediately; it returns a callback to sync deploy button state
-      const updateDeploy = renderPermissionsCard(timelineRoot, insertBefore, list);
+      const assignBtn = entry.querySelector('#btn-assign');
 
       findings.forEach((f, i) => {
         const card = document.createElement('div');
@@ -248,9 +253,28 @@
             rc.classList.add('open');
             card.classList.add('border-accent', 'bg-stone-800/80', 'shadow-lg', 'shadow-accent/10', 'scale-[1.02]');
           }
-          updateDeploy();
+          // Update assign button (skip if already used)
+          if (assignBtn.dataset.used) return;
+          const anySelected = !!list.querySelector('.border-accent');
+          if (anySelected) {
+            assignBtn.disabled = false;
+            assignBtn.classList.remove('bg-accent/30', 'text-stone-500', 'cursor-default');
+            assignBtn.classList.add('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+          } else {
+            assignBtn.disabled = true;
+            assignBtn.classList.add('bg-accent/30', 'text-stone-500', 'cursor-default');
+            assignBtn.classList.remove('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+          }
         });
         list.appendChild(card);
+      });
+
+      assignBtn.addEventListener('click', () => {
+        assignBtn.dataset.used = 'true';
+        assignBtn.disabled = true;
+        assignBtn.classList.add('bg-accent/30', 'text-stone-500', 'cursor-default');
+        assignBtn.classList.remove('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+        renderPermissionsCard(timelineRoot, insertBefore, list);
       });
     }
 
