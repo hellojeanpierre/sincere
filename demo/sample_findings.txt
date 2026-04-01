@@ -1,38 +1,51 @@
-### Finding 1 — Technical troubleshooting macro applied to Trust & Safety and Merchant tickets
-
-**Cohort:** spam_scam and shopping_merchant tickets — tickets 4800097, 4800075, 4800090
-**Outcome:** 0/3 resolved (all on HOLD). 9.4 pts of metric impact.
-**Root cause:** All three tickets received the identical 34-word response — *"Thanks for reaching out. We understand this is frustrating. Please try clearing your cache and reinstalling the app. If the issue persists, let us know."* — the app-crash troubleshooting macro from SOP-TECH-001. None of these tickets are technical issues:
-
-| Ticket | Issue | Required SOP | What macro requires |
-|--------|-------|-------------|---------------------|
-| 4800097 | spam_report | SOP-SPAM-001: review in PinQueue, flag content, apply "Report Received — Under Review" | Cache clear / reinstall |
-| 4800075 | catalog_feed_error | SOP-MERCH-001: check merchant admin tool, diagnose specific feed error code | Cache clear / reinstall |
-| 4800090 | phishing_link | SOP-SPAM-003: flag URL in PinQueue, apply "Security Report — Received," advise password change | Cache clear / reinstall |
-
-The technical troubleshooting macro puts tickets on **HOLD** — waiting for the customer to confirm that clearing the cache fixed it. Because the fix is inapplicable, the customer cannot confirm, and the tickets remain on HOLD indefinitely unless manually retrieved. Ticket 4800090 (phishing_link) shows a 2-minute handle time, below the general guidelines' 3-minute QA flag threshold, consistent with the macro being applied without reading the ticket. Agents span two BPO partners (partner_b × 2, partner_c × 1) and two tenure levels (new × 1, experienced × 2), ruling out a single-cohort explanation.
-
-No resolved ticket in the dataset contains this response pattern. There are no counterexamples.
+Here are the findings. The dataset contains 32 tickets with a **65.6% resolution rate** (21 resolved out of 32), leaving an 11-ticket, 34.4-point gap.
 
 ---
 
-### Finding 2 — Unauthorized charge tickets deflected to FAQ/help center without investigation
+## Finding 1 — Generic "clear cache" macro applied to non-technical issue types
 
-**Cohort:** ads_billing / unauthorized_charge tickets — 4800094, 4800102
-**Outcome:** 0/2 resolved (both OPEN). 6.3 pts of metric impact.
-**Root cause:** Both agents responded with generic FAQ deflections instead of following SOP-ADS-005, which opens with: *"This is always a high-priority case. Check the billing record immediately."* The SOP then requires verifying active campaigns, checking for unauthorized account access, and escalating to Ads T2.
+**Cohort:** Tickets where agents applied a boilerplate "clear your cache and reinstall the app" response to issues that have nothing to do with technical troubleshooting (spam reporting, catalog feed errors, phishing links) — 3 tickets, Partner B and Partner C
 
-- **4800094** (agent_005, mid, partner_a): *"For your issue, please visit our help center at help.pinterest.com for detailed guidance on this topic."* — 5-minute handle time; tagged `high_value_advertiser`, which additionally triggers the cross-cutting 9.2 rule requiring immediate T2 escalation.
-- **4800102** (agent_014, new, partner_a): *"Provided a link to the Pinterest Ads billing FAQ page. Suggested they review their campaign settings."* — 3-minute handle time; FAQ advice is irrelevant to an unauthorized charge.
+**Outcome:** 0% resolution for this cohort — 9.4pts of metric impact (3 of 32 tickets stuck on hold)
 
-Neither ticket was advanced to PENDING or SOLVED — both remain OPEN. The same generic help center redirect appears in ticket **4800086** (account_recovery, solved) where a different agent (agent_019, partner_c) used the identical response text but *did* explicitly mark the ticket SOLVED (confirmed in the event log: OPEN → SOLVED). This shows the response text alone does not mechanically prevent resolution — the 4800094/4800102 agents compounded the wrong response by also failing to close the ticket. Both failure dimensions are observable and independent.
+**Root cause:** Agents on Partners B and C are applying a generic technical-troubleshooting macro (likely a default "first response" macro) to specialized queues where it is irrelevant. Ticket 4800097 (spam_report), 4800075 (catalog_feed_error), and 4800090 (phishing_link) all received the identical response verbatim. The policy docs (SOP-MERCH-001, general guidelines §0.2) explicitly state: "If the macro does not address the customer's stated problem, do not apply it." These agents did the opposite — they applied a macro and put the ticket on hold with no investigation. Agent_013 (3 months tenure, Partner B) and agent_022 (13 months, Partner C) both did this, suggesting a training gap rather than an isolated incident. Notably, ticket 4800090 was a high-value advertiser phishing report that was correctly escalated to T2 but still received the wrong macro, meaning even the escalation workflow broke down.
 
 ---
 
-### Finding 3 — Response template submitted with placeholder variables unpopulated
+## Finding 2 — Unauthorized-charge tickets deflected to help center instead of escalated per SOP-ADS-005
 
-**Cohort:** content_moderation / board_removed — ticket 4800099
-**Outcome:** 0/1 resolved (OPEN). 3.1 pts of metric impact.
-**Root cause:** Agent_014 (new, partner_c) sent the following verbatim to the customer: *"Thank you for the details. I investigated and found that {root_cause}. I've escalated this to our {team} team with ticket #{internal_id} for resolution."* Three template variables — `{root_cause}`, `{team}`, and `{internal_id}` — were left unformatted. The customer received no actionable information, no escalation was recorded in the event log, and the ticket has remained OPEN since January 22, 2026.
+**Cohort:** All `unauthorized_charge` tickets (subcategory) — 2 tickets, both Partner A, both T1 agents with ≤6 months tenure
 
-For comparison, ticket 4800050 (also board_removed, no dedicated SOP exists for this subcategory) was handled by a different agent (agent_000, partner_a) who wrote a specific response identifying the copyright detection trigger, restored the board, and marked it closed. The existence of a resolved board_removed ticket confirms this issue type is resolvable at T1; the failure is isolated to the unfilled template.
+**Outcome:** 0% resolution for this subcategory — 6.3pts of metric impact (2 of 32 tickets open)
+
+**Root cause:** Both unauthorized-charge tickets (4800094 and 4800102) were handled by Partner A agents who sent the customer to a self-service help center or FAQ page instead of investigating the billing record and escalating to Ads T2 + T&S T2 as required by SOP-ADS-005. The policy is unambiguous: "This is always a high-priority case. Check the billing record immediately." and calls for escalation if no legitimate campaign matches the charge. Agent_005 (6mo tenure) sent ticket 4800094 — a 100k+ advertiser — to help.pinterest.com with zero investigation, and agent_014 (2mo tenure) did the same on 4800102 by linking the Ads billing FAQ. Both tickets also breached the 24-hour high-priority SLA (46h and 69h first reply respectively). This points to a Partner A onboarding gap: new/mid-tenure agents are not trained on the mandatory escalation path for unauthorized charges.
+
+---
+
+## Finding 3 — Ads billing tickets for high-spend advertisers stuck at T1 without escalation
+
+**Cohort:** Ads billing tickets tagged `high_value_advertiser` or with `monthly_ad_spend_tier = 100k_plus` that were not escalated — 3 tickets across Partners A and B
+
+**Outcome:** 2 of 3 unresolved — 6.3pts of metric impact
+
+**Root cause:** Per SOP-ADS-002, advertisers with 100k+ monthly spend must "always escalate to Ads T2 regardless of suspension reason," and general guidelines §0.4 lists this spend tier as a mandatory escalation trigger. Yet tickets 4800094 (unauthorized_charge, Partner A), 4800054 (ad_rejected, Partner B), and 4800045 (ad_review_delay, Partner B) all remained at tier_1 without escalation. Ticket 4800054 had an urgent-priority ad rejection for a high-value advertiser and sat for 70 hours before first reply — nearly 3x the SLA — while the agent attempted a T1-level fix instead of escalating. The 100k+ escalation rule is a cross-cutting policy that applies regardless of subcategory, but agents are treating it as optional. Only 1 of 4 high-value advertiser tickets in the dataset was actually escalated (4800090), and that one still got a wrong macro.
+
+---
+
+## Finding 4 — Content moderation appeals left open with vague or incorrect diagnoses
+
+**Cohort:** `board_removed` and `pin_removed` tickets in the content moderation queue — 4 tickets total (3 unresolved)
+
+**Outcome:** 25% resolution (1 of 4) — 9.4pts of metric impact
+
+**Root cause:** Two distinct failures converge here. First, ticket 4800099 (board_removed, Partner C, agent_014 at 4mo tenure) received a generic "platform update affected your settings" response that does not match any content moderation SOP — the policy requires looking up enforcement history in PinQueue and identifying whether enforcement was automated or manual (SOP-MOD-001). The agent fabricated a diagnosis instead of following procedure. Second, ticket 4800036 (pin_removed, Partner A) is correctly handled — the agent identified the false positive and escalated for review — but remains in pending status waiting on the customer after 4 replies, which is a legitimate pending state. Ticket 4800026 (deindexed_content) sits pending at Partner B after the agent identified the issue but has had no follow-through for resolution. The pattern: agents outside Partner A's content moderation specialists lack training on PinQueue-based investigation workflows and substitute generic responses.
+
+---
+
+## Finding 5 — Ad account suspension not escalated despite single-reply dead end
+
+**Cohort:** `ad_account_suspended` ticket at Partner C — 1 ticket
+
+**Outcome:** 0% resolution — 3.1pts of metric impact
+
+**Root cause:** Ticket 4800027 is an ad account suspension handled by agent_022 (Partner C, 13mo tenure) who identified the billing root cause (declined payment method) and confirmed the customer updated their payment info, but then set the ticket to pending with only 1 reply and no escalation. Per SOP-ADS-002, account suspensions — especially when the underlying cause is resolved — should progress toward reinstatement, which requires Ads T2 action. The agent diagnosed correctly but had no authority or knowledge of how to reinstate, and instead of escalating, left the ticket in limbo. First reply took 50 hours (breaching the 24h high-priority SLA). This is the same agent (agent_022) who applied the "clear cache" macro to a catalog feed error in Finding 1, suggesting a systemic performance issue with this agent.
