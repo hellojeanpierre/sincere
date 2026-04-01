@@ -50,6 +50,29 @@
     .gradient-border > div {
       border-radius: calc(1rem - 1px);
     }
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateX(-12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .finding-card {
+      opacity: 0;
+      animation: slide-in 0.3s ease-out forwards;
+    }
+    .root-cause {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.25s ease, margin-top 0.25s ease, padding-top 0.25s ease;
+      margin-top: 0;
+      padding-top: 0;
+    }
+    .root-cause > div {
+      overflow: hidden;
+    }
+    .root-cause.open {
+      grid-template-rows: 1fr;
+      margin-top: 0.5rem;
+      padding-top: 0.5rem;
+    }
   </style>
 </head>
 <body class="bg-surface text-stone-200 min-h-screen antialiased">
@@ -99,49 +122,162 @@
   </div>
 
   <script>
+    function parseFindings(text) {
+      const findings = [];
+      // Split on ## Finding headers, keeping the delimiter
+      const parts = text.split(/(?=^#{0,3}\s*Finding\s+\d)/m);
+      for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        const headerMatch = trimmed.match(/^#{0,3}\s*Finding\s+(\d+)\s*[—–-]\s*(.+)/m);
+        if (!headerMatch) {
+          // Doesn't match expected format — keep as raw entry
+          if (/\S/.test(trimmed)) {
+            findings.push({ id: findings.length + 1, title: trimmed.split('\n')[0], cohort: '', outcome: '', rootCause: '' });
+          }
+          continue;
+        }
+        const id = parseInt(headerMatch[1], 10);
+        const title = headerMatch[2].trim();
+        const body = trimmed.slice(headerMatch[0].length);
+        const field = (label, greedy) => {
+          const pat = '\\*{0,2}' + label + ':\\*{0,2}\\s*';
+          const re = greedy
+            ? new RegExp(pat + '(.+)', 's')
+            : new RegExp(pat + '(.+?)(?=\\n\\*{0,2}(?:Cohort|Outcome|Root cause)\\*{0,2}:|$)', 's');
+          const m = body.match(re);
+          return m ? m[1].trim() : '';
+        };
+        findings.push({ id, title, cohort: field('Cohort'), outcome: field('Outcome'), rootCause: field('Root cause', true) });
+      }
+      return findings;
+    }
+
+    function deactivateGradient(el) {
+      el.classList.remove('gradient-border');
+      Object.assign(el.style, { background: 'none', border: '1px solid #3a2d28', borderRadius: '1rem' });
+      el.querySelector(':scope > div').style.borderRadius = 'calc(1rem - 1px)';
+    }
+
+    const CHECKMARK_HTML = `
+      <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+      </svg>
+      <span class="text-emerald-400">Complete</span>`;
+
+    const AGENT_CARD_HTML = `
+      <div class="gradient-border">
+        <div class="bg-card p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <p class="text-xs uppercase tracking-wider text-stone-500">Agent: Historical Analysis</p>
+            <span class="agent-status flex items-center gap-2 text-xs text-stone-500"></span>
+          </div>
+          <pre class="agent-reasoning text-sm text-stone-400 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto scrollbar-thin"></pre>
+        </div>
+      </div>`;
+
+    function createAgentCard(timelineRoot, insertBefore) {
+      timelineRoot.querySelectorAll('.gradient-border').forEach(deactivateGradient);
+      const entry = document.createElement('div');
+      entry.className = 'relative z-10 w-full max-w-md mt-8';
+      entry.innerHTML = AGENT_CARD_HTML;
+      timelineRoot.insertBefore(entry, insertBefore);
+      return entry;
+    }
+
+    function renderAgentComplete(agentCard, findingsText) {
+      const statusEl = agentCard.querySelector('.agent-status');
+      const reasoningEl = agentCard.querySelector('.agent-reasoning');
+      statusEl.innerHTML = CHECKMARK_HTML;
+      const findings = parseFindings(findingsText);
+      if (findings.length) {
+        reasoningEl.textContent = `${findings.length} findings identified.`;
+        reasoningEl.classList.remove('max-h-96', 'overflow-y-auto');
+        renderFindingsCard(findings, agentCard.parentElement, agentCard.nextSibling);
+      }
+    }
+
+    function renderFindingsCard(findings, timelineRoot, insertBefore) {
+      const entry = document.createElement('div');
+      entry.className = 'relative z-10 w-full max-w-md mt-8';
+      entry.innerHTML = `
+        <div class="gradient-border">
+          <div class="bg-card p-6 space-y-3">
+            <p class="text-xs uppercase tracking-wider text-stone-500 mb-1">Findings</p>
+            <div id="findings-list" class="space-y-3"></div>
+          </div>
+        </div>`;
+      timelineRoot.insertBefore(entry, insertBefore);
+
+      const prev = entry.previousElementSibling;
+      if (prev) {
+        const gb = prev.querySelector('.gradient-border');
+        if (gb) deactivateGradient(gb);
+      }
+
+      const list = entry.querySelector('#findings-list');
+      findings.forEach((f, i) => {
+        const card = document.createElement('div');
+        card.className = 'finding-card p-3 rounded-lg bg-stone-900/60 border border-stone-700/50 cursor-pointer transition-all duration-200 hover:border-accent/50';
+        card.style.animationDelay = `${i * 120}ms`;
+        card.dataset.findingId = f.id;
+        const impact = f.outcome.match(/([\d.]+)\s*pts?/i)?.[1];
+        const tickets = f.outcome.match(/([\d,]+)\s*tickets/i)?.[1];
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-3 mb-1">
+            <p class="text-sm font-medium text-stone-200">${esc(f.title)}</p>
+            ${impact ? `<span class="shrink-0 text-xs font-medium text-accent">${impact} pts</span>` : ''}
+          </div>
+          ${tickets ? `<p class="text-xs text-stone-400">${tickets} tickets last 30 days</p>` : ''}
+          <div class="root-cause border-t border-stone-700/40">
+            <div>
+              <p class="text-xs text-stone-400 pt-2"><span class="text-stone-300">Root cause:</span> ${esc(f.rootCause)}</p>
+              ${f.cohort ? `<p class="text-xs text-stone-400 mt-1"><span class="text-stone-300">Cohort:</span> ${esc(f.cohort)}</p>` : ''}
+              ${f.outcome ? `<p class="text-xs text-stone-400 mt-1"><span class="text-stone-300">Outcome:</span> ${esc(f.outcome)}</p>` : ''}
+            </div>
+          </div>`;
+        card.addEventListener('click', () => {
+          const rc = card.querySelector('.root-cause');
+          const isOpen = rc.classList.contains('open');
+          // Collapse all siblings first
+          list.querySelectorAll('.root-cause').forEach(el => el.classList.remove('open'));
+          list.querySelectorAll('[data-finding-id]').forEach(el => {
+            el.classList.remove('border-accent', 'bg-stone-800/80', 'shadow-lg', 'shadow-accent/10', 'scale-[1.02]');
+          });
+          if (!isOpen) {
+            rc.classList.add('open');
+            card.classList.add('border-accent', 'bg-stone-800/80', 'shadow-lg', 'shadow-accent/10', 'scale-[1.02]');
+          }
+        });
+        list.appendChild(card);
+      });
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
     document.getElementById('btn-investigate').addEventListener('click', () => {
       const btn = document.getElementById('btn-investigate');
       btn.disabled = true;
       btn.classList.add('opacity-50', 'pointer-events-none');
 
-      // Insert agent card into timeline before the button
       const btnContainer = btn.parentElement;
       const timelineRoot = btnContainer.parentElement;
-
-      // Deactivate gradient border on previous cards
-      timelineRoot.querySelectorAll('.gradient-border').forEach((el) => {
-        el.classList.remove('gradient-border');
-        el.style.background = 'none';
-        el.style.border = '1px solid #3a2d28';
-        el.style.borderRadius = '1rem';
-        el.querySelector(':scope > div').style.borderRadius = 'calc(1rem - 1px)';
-      });
-
-      const agentEntry = document.createElement('div');
-      agentEntry.className = 'relative z-10 w-full max-w-md mt-8';
-      agentEntry.innerHTML = `
-        <div class="gradient-border">
-          <div class="bg-card p-6 space-y-4">
-            <div class="flex items-center justify-between">
-              <p class="text-xs uppercase tracking-wider text-stone-500">Agent: Historical Analysis</p>
-              <span id="agent-status" class="flex items-center gap-2 text-xs text-stone-500">
-                <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                </svg>
-                <span id="agent-label">Connecting...</span>
-              </span>
-            </div>
-            <pre id="agent-reasoning" class="text-sm text-stone-400 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto scrollbar-thin"></pre>
-          </div>
-        </div>
-      `;
-      timelineRoot.insertBefore(agentEntry, btnContainer);
+      const agentEntry = createAgentCard(timelineRoot, btnContainer);
       btnContainer.classList.add('hidden');
 
-      const reasoningEl = document.getElementById('agent-reasoning');
+      const statusEl = agentEntry.querySelector('.agent-status');
+      const reasoningEl = agentEntry.querySelector('.agent-reasoning');
+      statusEl.innerHTML = `
+        <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        <span id="agent-label">Connecting...</span>`;
       const labelEl = document.getElementById('agent-label');
-      const statusEl = document.getElementById('agent-status');
       let fullText = '';
 
       const skipMode = btn.dataset.skipMode === 'true';
@@ -208,11 +344,7 @@
       }
 
       function markComplete() {
-        statusEl.innerHTML = `
-          <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-          </svg>
-          <span class="text-emerald-400">Complete</span>`;
+        renderAgentComplete(agentEntry, fullText);
       }
 
       function markError(msg) {
@@ -228,8 +360,22 @@
       if (e.shiftKey && e.key === 'S') {
         const btn = document.getElementById('btn-investigate');
         if (btn.disabled) return;
+
+        // Try server first, fall back to client-side fetch of the fixture
         btn.dataset.skipMode = 'true';
-        btn.click();
+        fetch('/api/investigate?skip=true', { method: 'POST' })
+          .then((res) => { if (!res.ok) throw new Error(); btn.click(); })
+          .catch(() => {
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'pointer-events-none');
+            const btnContainer = btn.parentElement;
+            const timelineRoot = btnContainer.parentElement;
+            const agentCard = createAgentCard(timelineRoot, btnContainer);
+            btnContainer.classList.add('hidden');
+            fetch('sample_findings.txt')
+              .then(r => r.text())
+              .then(text => renderAgentComplete(agentCard, text));
+          });
       }
     });
   </script>

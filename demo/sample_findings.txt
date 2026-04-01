@@ -1,4 +1,4 @@
-Finding 1 — Technical troubleshooting macro applied to Trust & Safety and Merchant tickets
+### Finding 1 — Technical troubleshooting macro applied to Trust & Safety and Merchant tickets
 
 **Cohort:** spam_scam and shopping_merchant tickets — tickets 4800097, 4800075, 4800090
 **Outcome:** 0/3 resolved (all on HOLD). 9.4 pts of metric impact.
