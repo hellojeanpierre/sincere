@@ -190,36 +190,40 @@
       if (findings.length) {
         reasoningEl.textContent = `${findings.length} findings identified.`;
         reasoningEl.classList.remove('max-h-96', 'overflow-y-auto');
-        renderFindingsCard(findings, agentCard.parentElement, agentCard.nextSibling);
+        appendFindingsToCard(findings, agentCard);
       }
     }
 
-    function renderFindingsCard(findings, timelineRoot, insertBefore) {
-      const entry = document.createElement('div');
-      entry.className = 'relative z-10 w-full max-w-md mt-8';
-      entry.innerHTML = `
-        <div class="gradient-border">
-          <div class="bg-card p-6 space-y-3">
-            <p class="text-xs uppercase tracking-wider text-stone-500 mb-1">Findings</p>
-            <div id="findings-list" class="space-y-3"></div>
-            <button id="btn-assign" class="w-full mt-1 py-2.5 rounded-full text-sm font-medium transition-colors bg-accent/30 text-stone-500 cursor-default flex items-center justify-center gap-2" disabled>
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v13m0 0l-4-4m4 4l4-4M4 20h16"/>
-              </svg>
-              Assign Agent
-            </button>
-          </div>
-        </div>`;
-      timelineRoot.insertBefore(entry, insertBefore);
+    function collapseAndRemove(el) {
+      el.style.maxHeight = el.offsetHeight + 'px';
+      el.style.overflow = 'hidden';
+      el.getBoundingClientRect(); // force layout
+      el.style.transition = 'opacity 0.25s ease, max-height 0.35s ease 0.05s, margin-top 0.35s ease 0.05s, padding 0.35s ease 0.05s';
+      el.style.opacity = '0';
+      el.style.maxHeight = '0';
+      el.style.marginTop = '0';
+      el.style.padding = '0';
+      setTimeout(() => el.remove(), 400);
+    }
 
-      const prev = entry.previousElementSibling;
-      if (prev) {
-        const gb = prev.querySelector('.gradient-border');
-        if (gb) deactivateGradient(gb);
-      }
+    function appendFindingsToCard(findings, agentCard) {
+      const innerDiv = agentCard.querySelector('.bg-card');
 
-      const list = entry.querySelector('#findings-list');
-      const assignBtn = entry.querySelector('#btn-assign');
+      const listWrap = document.createElement('div');
+      listWrap.id = 'findings-list';
+      listWrap.className = 'space-y-3';
+      innerDiv.appendChild(listWrap);
+
+      const assignBtn = document.createElement('button');
+      assignBtn.id = 'btn-assign';
+      assignBtn.className = 'w-full mt-1 py-2.5 rounded-full text-sm font-medium transition-colors bg-accent/30 text-stone-500 cursor-default flex items-center justify-center gap-2';
+      assignBtn.disabled = true;
+      assignBtn.innerHTML = `
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v13m0 0l-4-4m4 4l4-4M4 20h16"/>
+        </svg>
+        Assign Agent`;
+      innerDiv.appendChild(assignBtn);
 
       findings.forEach((f, i) => {
         const card = document.createElement('div');
@@ -244,18 +248,16 @@
         card.addEventListener('click', () => {
           const rc = card.querySelector('.root-cause');
           const isOpen = rc.classList.contains('open');
-          // Collapse all siblings first
-          list.querySelectorAll('.root-cause').forEach(el => el.classList.remove('open'));
-          list.querySelectorAll('[data-finding-id]').forEach(el => {
+          listWrap.querySelectorAll('.root-cause').forEach(el => el.classList.remove('open'));
+          listWrap.querySelectorAll('[data-finding-id]').forEach(el => {
             el.classList.remove('border-accent', 'bg-stone-800/80', 'shadow-lg', 'shadow-accent/10', 'scale-[1.02]');
           });
           if (!isOpen) {
             rc.classList.add('open');
             card.classList.add('border-accent', 'bg-stone-800/80', 'shadow-lg', 'shadow-accent/10', 'scale-[1.02]');
           }
-          // Update assign button (skip if already used)
           if (assignBtn.dataset.used) return;
-          const anySelected = !!list.querySelector('.border-accent');
+          const anySelected = !!listWrap.querySelector('.border-accent');
           if (anySelected) {
             assignBtn.disabled = false;
             assignBtn.classList.remove('bg-accent/30', 'text-stone-500', 'cursor-default');
@@ -266,76 +268,69 @@
             assignBtn.classList.remove('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
           }
         });
-        list.appendChild(card);
+        listWrap.appendChild(card);
       });
 
       assignBtn.addEventListener('click', () => {
+        if (assignBtn.disabled || assignBtn.dataset.used) return;
         assignBtn.dataset.used = 'true';
-        assignBtn.disabled = true;
-        assignBtn.classList.add('bg-accent/30', 'text-stone-500', 'cursor-default');
-        assignBtn.classList.remove('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
-        renderPermissionsCard(timelineRoot, insertBefore, list);
+
+        // Fade out the "Complete" status
+        const statusEl = agentCard.querySelector('.agent-status');
+        statusEl.style.transition = 'opacity 0.3s ease';
+        statusEl.style.opacity = '0';
+        setTimeout(() => { statusEl.style.display = 'none'; }, 300);
+
+        const allCards = [...listWrap.querySelectorAll('[data-finding-id]')];
+        const selectedCard = listWrap.querySelector('.border-accent');
+        allCards.forEach(card => {
+          if (card !== selectedCard) collapseAndRemove(card);
+        });
+
+        setTimeout(() => {
+          assignBtn.remove();
+          appendPermissionsToCard(innerDiv, agentCard);
+        }, 450);
       });
     }
 
-    function renderPermissionsCard(timelineRoot, insertBefore, findingsList) {
-      const entry = document.createElement('div');
-      entry.className = 'relative z-10 w-full max-w-md mt-8';
-      entry.innerHTML = `
-        <div class="gradient-border">
-          <div class="bg-card p-6 space-y-4">
-            <p class="text-xs uppercase tracking-wider text-stone-500">Agent permissions</p>
-            <div class="space-y-3">
-              <div class="flex items-center gap-3 p-3 rounded-lg bg-stone-900/60 border border-stone-700/50 cursor-pointer transition-all duration-200 hover:border-accent/50 perm-option" data-perm="reroute">
-                <span class="w-4 h-4 rounded-full border-2 border-stone-600 flex-shrink-0 flex items-center justify-center perm-circle transition-colors">
-                  <span class="w-2 h-2 rounded-full bg-accent hidden perm-dot"></span>
-                </span>
-                <svg class="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 3M21 7.5H7.5"/>
-                </svg>
-                <span><span class="text-sm font-medium text-stone-200">Re-route</span> <span class="text-sm text-stone-500">Move ticket to a different queue</span></span>
-              </div>
-              <div class="flex items-center gap-3 p-3 rounded-lg bg-stone-900/60 border border-stone-700/50 cursor-pointer transition-all duration-200 hover:border-accent/50 perm-option" data-perm="guidance">
-                <span class="w-4 h-4 rounded-full border-2 border-stone-600 flex-shrink-0 flex items-center justify-center perm-circle transition-colors">
-                  <span class="w-2 h-2 rounded-full bg-accent hidden perm-dot"></span>
-                </span>
-                <svg class="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
-                </svg>
-                <span><span class="text-sm font-medium text-stone-200">Guidance</span> <span class="text-sm text-stone-500">Add a private note for the agent</span></span>
-              </div>
-            </div>
-            <button id="btn-deploy" class="w-full py-2.5 rounded-full text-sm font-medium transition-colors bg-accent/30 text-stone-500 cursor-default" disabled>
-              Select at least one permission
-            </button>
+    function appendPermissionsToCard(innerDiv, agentCard) {
+      const permsDiv = document.createElement('div');
+      permsDiv.className = 'space-y-3 pt-4 border-t border-stone-700/40';
+      permsDiv.innerHTML = `
+        <p class="text-xs uppercase tracking-wider text-stone-500 finding-card" style="animation-delay:0ms">Agent permissions</p>
+        <div class="space-y-3">
+          <div class="flex items-center gap-3 p-3 rounded-lg bg-stone-900/60 border border-stone-700/50 cursor-pointer transition-all duration-200 hover:border-accent/50 perm-option finding-card" data-perm="reroute" style="animation-delay:120ms">
+            <span class="w-4 h-4 rounded-full border-2 border-stone-600 flex-shrink-0 flex items-center justify-center perm-circle transition-colors">
+              <span class="w-2 h-2 rounded-full bg-accent hidden perm-dot"></span>
+            </span>
+            <svg class="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 3M21 7.5H7.5"/>
+            </svg>
+            <span><span class="text-sm font-medium text-stone-200">Re-route</span> <span class="text-sm text-stone-500">Move ticket to a different queue</span></span>
           </div>
-        </div>`;
-      timelineRoot.insertBefore(entry, insertBefore);
+          <div class="flex items-center gap-3 p-3 rounded-lg bg-stone-900/60 border border-stone-700/50 cursor-pointer transition-all duration-200 hover:border-accent/50 perm-option finding-card" data-perm="guidance" style="animation-delay:240ms">
+            <span class="w-4 h-4 rounded-full border-2 border-stone-600 flex-shrink-0 flex items-center justify-center perm-circle transition-colors">
+              <span class="w-2 h-2 rounded-full bg-accent hidden perm-dot"></span>
+            </span>
+            <svg class="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+            </svg>
+            <span><span class="text-sm font-medium text-stone-200">Guidance</span> <span class="text-sm text-stone-500">Add a private note for the agent</span></span>
+          </div>
+        </div>
+        <button id="btn-deploy" class="w-full py-2.5 rounded-full text-sm font-medium transition-colors bg-accent/30 text-stone-500 cursor-default flex items-center justify-center gap-2 finding-card" style="animation-delay:360ms" disabled>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5"/>
+          </svg>
+          <span id="deploy-label">Select at least one permission</span>
+        </button>`;
+      innerDiv.appendChild(permsDiv);
 
-      // Deactivate previous gradient border
-      const prev = entry.previousElementSibling;
-      if (prev) {
-        const gb = prev.querySelector('.gradient-border');
-        if (gb) deactivateGradient(gb);
-      }
-
-      const deployBtn = entry.querySelector('#btn-deploy');
-      const options = entry.querySelectorAll('.perm-option');
+      const deployBtn = permsDiv.querySelector('#btn-deploy');
+      const deployLabel = permsDiv.querySelector('#deploy-label');
+      const options = permsDiv.querySelectorAll('.perm-option');
       const selected = new Set();
-
-      function updateDeploy() {
-        const findingSelected = findingsList ? !!findingsList.querySelector('.border-accent') : true;
-        const canDeploy = selected.size > 0 && findingSelected;
-        deployBtn.disabled = !canDeploy;
-        deployBtn.textContent = 'Deploy Agent';
-        if (canDeploy) {
-          deployBtn.classList.remove('bg-accent/30', 'text-stone-500', 'cursor-default');
-          deployBtn.classList.add('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
-        } else {
-          deployBtn.classList.add('bg-accent/30', 'text-stone-500', 'cursor-default');
-          deployBtn.classList.remove('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
-        }
-      }
 
       options.forEach(opt => {
         opt.addEventListener('click', () => {
@@ -349,11 +344,134 @@
             opt.classList.add('border-accent/40', 'bg-accent/5');
             opt.querySelector('.perm-dot').classList.remove('hidden');
           }
-          updateDeploy();
+          const canDeploy = selected.size > 0;
+          deployBtn.disabled = !canDeploy;
+          deployLabel.textContent = canDeploy ? 'Deploy Agent' : 'Select at least one permission';
+          if (canDeploy) {
+            deployBtn.classList.remove('bg-accent/30', 'text-stone-500', 'cursor-default');
+            deployBtn.classList.add('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+          } else {
+            deployBtn.classList.add('bg-accent/30', 'text-stone-500', 'cursor-default');
+            deployBtn.classList.remove('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+          }
         });
       });
 
-      return updateDeploy;
+      deployBtn.addEventListener('click', () => {
+        if (deployBtn.disabled || deployBtn.dataset.used) return;
+        deployBtn.dataset.used = 'true';
+
+        // Collapse the selected finding accordion
+        const selectedFinding = innerDiv.querySelector('[data-finding-id]');
+        if (selectedFinding) {
+          selectedFinding.querySelector('.root-cause')?.classList.remove('open');
+        }
+
+        // Deactivate gradient on the agent card — it's no longer the active card
+        const gb = agentCard.querySelector('.gradient-border');
+        if (gb) deactivateGradient(gb);
+
+        // Collapse permissions section
+        collapseAndRemove(permsDiv);
+
+        // Append live monitoring status inside the agent card
+        setTimeout(() => {
+          const liveStatus = document.createElement('div');
+          liveStatus.className = 'finding-card flex items-center justify-center gap-2 py-1 text-xs text-emerald-400';
+          liveStatus.style.animationDelay = '0ms';
+          liveStatus.innerHTML = `
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Live monitoring for incoming tickets`;
+          innerDiv.appendChild(liveStatus);
+
+          // Append live ticket stream as a new timeline card
+          const timelineRoot = agentCard.parentElement;
+          const insertBefore = agentCard.nextSibling;
+          renderLiveTicketStream(timelineRoot, insertBefore);
+        }, 420);
+      });
+    }
+
+    const FAKE_TICKETS = [
+      { id: 'TK-4901', subject: "Can't access account after email change", resolveAfter: 1400 },
+      { id: 'TK-4902', subject: "Invoice shows wrong billing amount", resolveAfter: 1100 },
+      { id: 'TK-4903', subject: "Password reset not working — stuck on confirmation step", resolveAfter: 1800, match: true,
+        reasoning: "Ticket describes being locked out immediately after completing a password reset. Matches monitored root cause: session token invalidation following reset flow. Agent_031 applied the generic reset macro without investigating the session state. Confidence: 91%.",
+        action: "Routed to Escalation Desk" },
+      { id: 'TK-4904', subject: "How do I export my billing history?", resolveAfter: 900 },
+      { id: 'TK-4905', subject: "API rate limit — need higher quota", resolveAfter: 1200 },
+    ];
+
+    function renderLiveTicketStream(timelineRoot, insertBefore) {
+      const entry = document.createElement('div');
+      entry.className = 'relative z-10 w-full max-w-md mt-8';
+      entry.innerHTML = `
+        <div class="gradient-border">
+          <div class="bg-card p-6 space-y-3">
+            <div class="flex items-center justify-between">
+              <p class="text-xs uppercase tracking-wider text-stone-500">Live Ticket Stream</p>
+            </div>
+            <div id="ticket-stream-list" class="space-y-2"></div>
+          </div>
+        </div>`;
+      timelineRoot.insertBefore(entry, insertBefore);
+
+      const list = entry.querySelector('#ticket-stream-list');
+      let cumDelay = 500;
+      FAKE_TICKETS.forEach(ticket => {
+        cumDelay += Math.floor(Math.random() * 600) + 500;
+        setTimeout(() => appendTicketRow(list, ticket), cumDelay);
+      });
+    }
+
+    const SPINNER_HTML = `
+      <svg class="w-4 h-4 text-stone-500 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>`;
+
+    function appendTicketRow(list, ticket) {
+      const row = document.createElement('div');
+      row.className = 'finding-card rounded-lg border overflow-hidden ' +
+        (ticket.match ? 'bg-accent/5 border-accent/30' : 'bg-stone-900/60 border-stone-700/50');
+      row.style.animationDelay = '0ms';
+      row.innerHTML = `
+        <div class="flex items-center justify-between p-3">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xs font-mono text-stone-500 shrink-0">${esc(ticket.id)}</span>
+            <span class="text-sm text-stone-300 truncate">${esc(ticket.subject)}</span>
+          </div>
+          <div class="ticket-status ml-3 shrink-0">${SPINNER_HTML}</div>
+        </div>`;
+      list.appendChild(row);
+
+      setTimeout(() => {
+        const statusEl = row.querySelector('.ticket-status');
+        if (ticket.match) {
+          statusEl.innerHTML = `
+            <svg class="w-4 h-4 text-accent" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+            </svg>`;
+          const details = document.createElement('div');
+          details.className = 'finding-card px-3 pb-3 space-y-1.5 border-t border-accent/20';
+          details.style.animationDelay = '0ms';
+          details.innerHTML = `
+            <p class="text-xs font-medium text-accent pt-2 flex items-center gap-1.5">
+              <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374L10.05 3.378c.866-1.5 3.032-1.5 3.898 0L21.303 16.126z"/>
+              </svg>
+              Root cause match detected
+            </p>
+            <p class="text-xs text-stone-400 leading-relaxed">${esc(ticket.reasoning)}</p>
+            <p class="text-xs font-medium text-accent">→ Action taken: ${esc(ticket.action)}</p>`;
+          row.appendChild(details);
+        } else {
+          statusEl.innerHTML = `
+            <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+            </svg>`;
+        }
+      }, ticket.resolveAfter);
     }
 
     function esc(s) {
@@ -382,6 +500,16 @@
         <span id="agent-label">Connecting...</span>`;
       const labelEl = document.getElementById('agent-label');
       let fullText = '';
+
+      // On file:// there's no server — load fixture directly
+      if (location.protocol === 'file:') {
+        const base = location.href.replace(/\/[^/]*$/, '/');
+        fetch(base + 'sample_findings.txt')
+          .then(r => { if (!r.ok) throw new Error(); return r.text(); })
+          .then(text => renderAgentComplete(agentEntry, text))
+          .catch(() => markError('Could not load sample_findings.txt'));
+        return;
+      }
 
       const skipMode = btn.dataset.skipMode === 'true';
       const investigateUrl = skipMode ? '/api/investigate?skip=true' : '/api/investigate';
