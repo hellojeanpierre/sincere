@@ -5,9 +5,10 @@ import { tmpdir } from "os";
 import { bashTool } from "./bash.ts";
 
 const tmpDir = mkdtempSync(join(tmpdir(), "bash-test-"));
-const { tool, dispose } = bashTool(tmpDir);
+const bash = bashTool(tmpDir);
+const { tool } = bash;
 afterAll(async () => {
-  await dispose();
+  await bash.dispose();
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -438,5 +439,60 @@ describe("bash tool", () => {
     await d();
     // Second dispose should not throw.
     await expect(d()).resolves.toBeUndefined();
+  });
+
+  // --- setLastResult tests ---
+
+  test("setLastResult makes $LAST_RESULT visible in the next execute call", async () => {
+    // Start the session, then set LAST_RESULT. The session lock serializes
+    // the export before the subsequent execute — no sleep needed.
+    await tool.execute("test", { command: "cat /dev/null" });
+    bash.setLastResult("/tmp/test-result.txt");
+    const result = await tool.execute("test", {
+      command: `python3 -c "import os; print(os.environ.get('LAST_RESULT', 'MISSING'))"`,
+    });
+    expect(result.content[0].text).toContain("/tmp/test-result.txt");
+  });
+
+  test("setLastResult shell-escapes paths with single quotes", async () => {
+    await tool.execute("test", { command: "cat /dev/null" });
+    bash.setLastResult("/tmp/it's a path/result.txt");
+    const result = await tool.execute("test", {
+      command: `python3 -c "import os; print(os.environ.get('LAST_RESULT', 'MISSING'))"`,
+    });
+    expect(result.content[0].text).toContain("/tmp/it's a path/result.txt");
+  });
+
+  test("setLastResult after dispose is a silent no-op", async () => {
+    const tmp2 = mkdtempSync(join(tmpdir(), "bash-lr-"));
+    const bash2 = bashTool(tmp2);
+    await bash2.tool.execute("test", { command: "cat /dev/null" });
+    await bash2.dispose();
+    // Should not throw
+    bash2.setLastResult("/some/path.txt");
+    rmSync(tmp2, { recursive: true, force: true });
+  });
+
+  test("$LAST_RESULT is absent after session death and respawn", async () => {
+    const tmp3 = mkdtempSync(join(tmpdir(), "bash-lr-death-"));
+    const bash3 = bashTool(tmp3);
+    try {
+      // Start session and inject LAST_RESULT
+      await bash3.tool.execute("test", { command: "cat /dev/null" });
+      bash3.setLastResult("/tmp/some-result.txt");
+      // Kill the session before the export runs (or has any effect)
+      await bash3.dispose();
+      // Next execute respawns a fresh shell — LAST_RESULT must not carry over.
+      // The reset notice ("Shell session was reset...") is prepended by the first
+      // post-respawn command; account for it with toContain rather than toBe.
+      const result = await bash3.tool.execute("test", {
+        command: `python3 -c "import os; print(os.environ.get('LAST_RESULT', 'MISSING'))"`,
+      });
+      expect(result.content[0].text).toContain("MISSING");
+      expect(result.content[0].text).not.toContain("/tmp/some-result.txt");
+    } finally {
+      await bash3.dispose();
+      rmSync(tmp3, { recursive: true, force: true });
+    }
   });
 });

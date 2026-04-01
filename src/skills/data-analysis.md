@@ -13,6 +13,8 @@ Aggregate to find patterns, then read the full content of individual records to 
 
 Fields you never inspect cannot produce findings. Verify the field inventory of the dataset programmatically — including nested and metadata fields that won't surface in a typical aggregation query.
 
+When `$LAST_RESULT` is set, it points to the file containing the full output of the previous large tool result. Reference it directly instead of re-running the query. `$LAST_RESULT` may be absent after a shell reset — in that case, the file path is still visible in the truncated output above.
+
 ## Investigation framework
 
 Write Python scripts that load the dataset and compute aggregates.
