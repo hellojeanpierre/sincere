@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sincere — Timeline</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -76,6 +77,22 @@
       padding-top: 0.5rem;
       border-top-color: rgba(120, 113, 108, 0.4);
     }
+    /* Markdown prose inside finding cards */
+    .md-prose { line-height: 1.5; }
+    .md-prose p { margin: 0.25rem 0; }
+    .md-prose strong { color: #e7e5e4; font-weight: 600; }
+    .md-prose em { color: #d6d3d1; }
+    .md-prose ul, .md-prose ol { margin: 0.25rem 0 0.25rem 1.25rem; }
+    .md-prose li { margin: 0.1rem 0; }
+    .md-prose code { background: rgba(255,255,255,0.06); padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.7rem; }
+    .md-prose table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 0.75rem; }
+    .md-prose th { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid rgba(120,113,108,0.5); color: #d6d3d1; font-weight: 600; }
+    .md-prose td { padding: 0.25rem 0.5rem; border-bottom: 1px solid rgba(120,113,108,0.2); color: #a8a29e; }
+    .md-prose tr:last-child td { border-bottom: none; }
+    .md-prose blockquote { border-left: 2px solid #d4856a; padding-left: 0.75rem; margin: 0.25rem 0; color: #a8a29e; }
+    .md-prose h1, .md-prose h2, .md-prose h3, .md-prose h4 { color: #e7e5e4; font-weight: 600; margin: 0.4rem 0 0.2rem; }
+    .md-prose h3 { font-size: 0.8rem; }
+    .md-prose h4 { font-size: 0.75rem; }
   </style>
 </head>
 <body class="bg-surface text-stone-200 min-h-screen antialiased">
@@ -240,9 +257,9 @@
           ${tickets ? `<p class="text-xs text-stone-400">${tickets} ticket${parseInt(tickets) === 1 ? '' : 's'}</p>` : ''}
           <div class="root-cause">
             <div>
-              <p class="text-xs text-stone-400 pt-2"><span class="text-stone-300">Root cause:</span> ${esc(f.rootCause)}</p>
-              ${f.cohort ? `<p class="text-xs text-stone-400 mt-1"><span class="text-stone-300">Cohort:</span> ${esc(f.cohort)}</p>` : ''}
-              ${f.outcome ? `<p class="text-xs text-stone-400 mt-1"><span class="text-stone-300">Outcome:</span> ${esc(f.outcome)}</p>` : ''}
+              <div class="text-xs text-stone-400 pt-2"><span class="text-stone-300 font-medium">Root cause:</span><div class="md-prose mt-1">${md(f.rootCause)}</div></div>
+              ${f.cohort ? `<div class="text-xs text-stone-400 mt-2"><span class="text-stone-300 font-medium">Cohort:</span><div class="md-prose mt-1">${md(f.cohort)}</div></div>` : ''}
+              ${f.outcome ? `<div class="text-xs text-stone-400 mt-2"><span class="text-stone-300 font-medium">Outcome:</span><div class="md-prose mt-1">${md(f.outcome)}</div></div>` : ''}
             </div>
           </div>`;
         card.addEventListener('click', () => {
@@ -511,6 +528,11 @@
       const d = document.createElement('div');
       d.textContent = s;
       return d.innerHTML;
+    }
+
+    function md(s) {
+      if (!s) return '';
+      return marked.parse(s, { breaks: true });
     }
 
     // Track in-flight investigation so Shift+S can interrupt it
