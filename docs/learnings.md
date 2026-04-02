@@ -1,5 +1,9 @@
 # Learnings
 
+## 2026-04-02 — Grounding failure mode reduced re-narration by 43pp and fixed a factual error in finding evidence
+
+Adding a one-line failure mode ("if a value matters enough to cite, it matters enough to verify") to the data-analysis skill shifted thinking-token allocation from 26/60/14 (new/re-eval/tool-replaceable) to 46/17/4 on the 32-ticket benchmark. The agent ran targeted verification queries instead of reconstructing data from memory. The biggest win was indirect: grounding drove a full policy read that discovered SOP-ADS-005, which the previous trace missed due to truncation — fixing a factually wrong finding. Implication: Evidentiary standards can shift model behavior from thinking-as-memory to thinking-as-reasoning without prescribing workflow steps.
+
 ## 2026-04-02 — The most important tool result for synthesis is typically the most distant
 
 R3 (non-solved ticket dump, line 522) contained the densest per-ticket metadata and was the single most-referenced result during cohort formation — but by T7 (line 1653) it was 1,100 lines away. This is structural, not accidental: profiling and data-dump steps run early in investigation workflows, producing the broad results that later synthesis depends on. Every subsequent targeted query pushes the broad result further away. The benchmark avoided this by running fresh extraction scripts in Phase 2 that produced compact, nearby results for the reasoning that consumed them. Implication: Investigation workflows have an inherent context-distance problem where early broad results decay in accessibility precisely when they're needed most for synthesis.
