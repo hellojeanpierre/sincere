@@ -473,6 +473,27 @@ describe("bash tool", () => {
     rmSync(tmp2, { recursive: true, force: true });
   });
 
+  test("trailing newline in command does not kill the session", async () => {
+    const { tool: t, dispose: d } = bashTool(tmpDir);
+    try {
+      const result = await t.execute("trailing-nl", {
+        command: `python3 -c "print('hello')\n"`,
+      });
+      expect(result.details).not.toBeNull();
+      expect(result.details!.exitCode).toBe(0);
+      expect(result.content[0].text.trim()).toBe("hello");
+      // Session must still be alive — run a follow-up command.
+      const after = await t.execute("trailing-nl-2", {
+        command: `python3 -c "print('still alive')"`,
+      });
+      expect(after.details).not.toBeNull();
+      expect(after.details!.exitCode).toBe(0);
+      expect(after.content[0].text.trim()).toBe("still alive");
+    } finally {
+      await d();
+    }
+  });
+
   test("$LAST_RESULT is absent after session death and respawn", async () => {
     const tmp3 = mkdtempSync(join(tmpdir(), "bash-lr-death-"));
     const bash3 = bashTool(tmp3);
