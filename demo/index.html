@@ -357,12 +357,17 @@
         });
       });
 
-      deployBtn.addEventListener('click', () => {
+      deployBtn.addEventListener('click', (e) => {
         if (deployBtn.disabled || deployBtn.dataset.used) return;
         deployBtn.dataset.used = 'true';
 
-        // Collapse the selected finding accordion
+        // Extract the selected finding's full root cause text
         const selectedFinding = innerDiv.querySelector('[data-finding-id]');
+        const findingText = selectedFinding
+          ? selectedFinding.querySelector('.root-cause')?.textContent?.trim() || ''
+          : '';
+
+        // Collapse the selected finding accordion
         if (selectedFinding) {
           selectedFinding.querySelector('.root-cause')?.classList.remove('open');
         }
@@ -373,6 +378,8 @@
 
         // Collapse permissions section
         collapseAndRemove(permsDiv);
+
+        const skipObserver = e.shiftKey || deployBtn.dataset.skipMode === 'true';
 
         // Append live monitoring status inside the agent card
         setTimeout(() => {
@@ -387,22 +394,12 @@
           // Append live ticket stream as a new timeline card
           const timelineRoot = agentCard.parentElement;
           const insertBefore = agentCard.nextSibling;
-          renderLiveTicketStream(timelineRoot, insertBefore);
+          startObserverStream(timelineRoot, insertBefore, findingText, skipObserver);
         }, 420);
       });
     }
 
-    const FAKE_TICKETS = [
-      { id: 'TK-4901', subject: "Can't access account after email change", resolveAfter: 1400 },
-      { id: 'TK-4902', subject: "Invoice shows wrong billing amount", resolveAfter: 1100 },
-      { id: 'TK-4903', subject: "Password reset not working — stuck on confirmation step", resolveAfter: 1800, match: true,
-        reasoning: "Ticket describes being locked out immediately after completing a password reset. Matches monitored root cause: session token invalidation following reset flow. Agent_031 applied the generic reset macro without investigating the session state. Confidence: 91%.",
-        action: "Routed to Escalation Desk" },
-      { id: 'TK-4904', subject: "How do I export my billing history?", resolveAfter: 900 },
-      { id: 'TK-4905', subject: "API rate limit — need higher quota", resolveAfter: 1200 },
-    ];
-
-    function renderLiveTicketStream(timelineRoot, insertBefore) {
+    function startObserverStream(timelineRoot, insertBefore, findingText, skip) {
       const entry = document.createElement('div');
       entry.className = 'relative z-10 w-full max-w-md mt-8';
       entry.innerHTML = `
@@ -417,11 +414,45 @@
       timelineRoot.insertBefore(entry, insertBefore);
 
       const list = entry.querySelector('#ticket-stream-list');
-      let cumDelay = 500;
-      FAKE_TICKETS.forEach(ticket => {
-        cumDelay += Math.floor(Math.random() * 600) + 500;
-        setTimeout(() => appendTicketRow(list, ticket), cumDelay);
+      const pendingRows = new Map(); // ticketId → row element
+
+      const payload = { type: 'observer', finding: findingText || undefined, skip: skip || undefined };
+      fetch('/api/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then(res => {
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function pump() {
+          reader.read().then(({ done, value }) => {
+            if (done) return;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              try { handleObserverEvent(JSON.parse(line.slice(6))); } catch {}
+            }
+            pump();
+          });
+        }
+        pump();
       });
+
+      function handleObserverEvent(ev) {
+        if (ev.type === 'ticket') {
+          const row = appendTicketRow(list, { id: ev.id, subject: ev.subject });
+          pendingRows.set(ev.id, row);
+        } else if (ev.type === 'verdict') {
+          const row = pendingRows.get(ev.ticketId);
+          if (row) resolveTicketRow(row, ev);
+          pendingRows.delete(ev.ticketId);
+        }
+      }
     }
 
     const SPINNER_HTML = `
@@ -432,8 +463,7 @@
 
     function appendTicketRow(list, ticket) {
       const row = document.createElement('div');
-      row.className = 'finding-card rounded-lg border overflow-hidden ' +
-        (ticket.match ? 'bg-accent/5 border-accent/30' : 'bg-stone-900/60 border-stone-700/50');
+      row.className = 'finding-card rounded-lg border overflow-hidden bg-stone-900/60 border-stone-700/50';
       row.style.animationDelay = '0ms';
       row.innerHTML = `
         <div class="flex items-center justify-between p-3">
@@ -444,34 +474,37 @@
           <div class="ticket-status ml-3 shrink-0">${SPINNER_HTML}</div>
         </div>`;
       list.appendChild(row);
+      return row;
+    }
 
-      setTimeout(() => {
-        const statusEl = row.querySelector('.ticket-status');
-        if (ticket.match) {
-          statusEl.innerHTML = `
-            <svg class="w-4 h-4 text-accent" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
-            </svg>`;
-          const details = document.createElement('div');
-          details.className = 'finding-card px-3 pb-3 space-y-1.5 border-t border-accent/20';
-          details.style.animationDelay = '0ms';
-          details.innerHTML = `
-            <p class="text-xs font-medium text-accent pt-2 flex items-center gap-1.5">
-              <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374L10.05 3.378c.866-1.5 3.032-1.5 3.898 0L21.303 16.126z"/>
-              </svg>
-              Root cause match detected
-            </p>
-            <p class="text-xs text-stone-400 leading-relaxed">${esc(ticket.reasoning)}</p>
-            <p class="text-xs font-medium text-accent">→ Action taken: ${esc(ticket.action)}</p>`;
-          row.appendChild(details);
-        } else {
-          statusEl.innerHTML = `
-            <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-            </svg>`;
-        }
-      }, ticket.resolveAfter);
+    function resolveTicketRow(row, verdict) {
+      const statusEl = row.querySelector('.ticket-status');
+      if (verdict.match) {
+        row.classList.remove('bg-stone-900/60', 'border-stone-700/50');
+        row.classList.add('bg-accent/5', 'border-accent/30');
+        statusEl.innerHTML = `
+          <svg class="w-4 h-4 text-accent" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+          </svg>`;
+        const details = document.createElement('div');
+        details.className = 'finding-card px-3 pb-3 space-y-1.5 border-t border-accent/20';
+        details.style.animationDelay = '0ms';
+        details.innerHTML = `
+          <p class="text-xs font-medium text-accent pt-2 flex items-center gap-1.5">
+            <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374L10.05 3.378c.866-1.5 3.032-1.5 3.898 0L21.303 16.126z"/>
+            </svg>
+            Root cause match detected
+          </p>
+          <p class="text-xs text-stone-400 leading-relaxed">${esc(verdict.reasoning)}</p>
+          <p class="text-xs font-medium text-accent">→ Action taken: ${esc(verdict.action)}</p>`;
+        row.appendChild(details);
+      } else {
+        statusEl.innerHTML = `
+          <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+          </svg>`;
+      }
     }
 
     function esc(s) {
@@ -515,10 +548,14 @@
       }
 
       const skipMode = btn.dataset.skipMode === 'true';
-      const investigateUrl = skipMode ? '/api/investigate?skip=true' : '/api/investigate';
       const abortController = new AbortController();
       activeInvestigation = { agentEntry, abort: abortController };
-      fetch(investigateUrl, { method: 'POST', signal: abortController.signal }).then((res) => {
+      fetch('/api/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'operator', skip: skipMode || undefined }),
+        signal: abortController.signal,
+      }).then((res) => {
         if (!res.ok || !res.body) { markError('Connection failed'); return; }
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -597,6 +634,15 @@
     });
 
     document.addEventListener('keydown', (e) => {
+      if (e.shiftKey && e.key === 'D') {
+        // Set skip mode on the deploy button so observer uses canned output
+        const deployBtn = document.getElementById('btn-deploy');
+        if (deployBtn && !deployBtn.disabled && !deployBtn.dataset.used) {
+          deployBtn.dataset.skipMode = 'true';
+          deployBtn.click();
+        }
+        return;
+      }
       if (e.shiftKey && e.key === 'S') {
         // Mid-investigation: cancel the stream and show fixture results
         if (activeInvestigation) {
