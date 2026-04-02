@@ -480,6 +480,9 @@
       return d.innerHTML;
     }
 
+    // Track in-flight investigation so Shift+S can interrupt it
+    let activeInvestigation = null;
+
     document.getElementById('btn-investigate').addEventListener('click', () => {
       const btn = document.getElementById('btn-investigate');
       btn.disabled = true;
@@ -513,7 +516,9 @@
 
       const skipMode = btn.dataset.skipMode === 'true';
       const investigateUrl = skipMode ? '/api/investigate?skip=true' : '/api/investigate';
-      fetch(investigateUrl, { method: 'POST' }).then((res) => {
+      const abortController = new AbortController();
+      activeInvestigation = { agentEntry, abort: abortController };
+      fetch(investigateUrl, { method: 'POST', signal: abortController.signal }).then((res) => {
         if (!res.ok || !res.body) { markError('Connection failed'); return; }
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -578,6 +583,7 @@
       function markComplete() {
         if (completed) return;
         completed = true;
+        activeInvestigation = null;
         renderAgentComplete(agentEntry, fullText);
       }
 
@@ -592,6 +598,18 @@
 
     document.addEventListener('keydown', (e) => {
       if (e.shiftKey && e.key === 'S') {
+        // Mid-investigation: cancel the stream and show fixture results
+        if (activeInvestigation) {
+          const { agentEntry, abort } = activeInvestigation;
+          activeInvestigation = null;
+          abort.abort();
+          fetch('/sample_findings.txt')
+            .then(r => { if (!r.ok) throw new Error(); return r.text(); })
+            .then(text => renderAgentComplete(agentEntry, text))
+            .catch(() => {});
+          return;
+        }
+
         const btn = document.getElementById('btn-investigate');
         if (btn.disabled) return;
 
