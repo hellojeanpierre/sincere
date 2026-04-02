@@ -13,8 +13,6 @@ Aggregate to find patterns, then read the full content of individual records to 
 
 Fields you never inspect cannot produce findings. Verify the field inventory of the dataset programmatically — including nested and metadata fields that won't surface in a typical aggregation query.
 
-When `$LAST_RESULT` is set, it points to the file containing the full output of the previous large tool result. Reference it directly instead of re-running the query. `$LAST_RESULT` may be absent after a shell reset — in that case, the file path is still visible in the truncated output above.
-
 ## Investigation framework
 
 Write Python scripts that load the dataset and compute aggregates.
@@ -35,3 +33,5 @@ Write Python scripts that load the dataset and compute aggregates.
 - Collapsing distinct patterns into a single finding, losing the specificity that makes each actionable.
 - Absorbing unexplained records into a "healthy baseline" instead of treating them as unfinished investigation.
 - Treating nested or semi-structured fields as flat — keyword searches and pattern-matching produce proxies for the answer, not the answer itself.
+- Grounding a finding in recalled data instead of current query output — if a value matters enough to cite, it matters enough to verify.
+
