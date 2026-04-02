@@ -213,5 +213,8 @@ export function createSessionHandler(createAgentFn: () => { agent: Agent; dispos
       const saved = store.get(workItemId);
       return saved ? [...saved] : undefined;
     },
+    clear() {
+      store.clear();
+    },
   };
 }

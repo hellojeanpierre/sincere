@@ -212,10 +212,14 @@ function parseVerdict(
 }
 
 function observeStream(findingText: string): Response {
+  // loadSystemPrompt resolves {{rootCauses}} from graph.json, so the observer
+  // sees the full root cause library AND the appended finding. If we want
+  // narrowed focus later, replace {{rootCauses}} with just the finding instead
+  // of appending.
   const basePrompt = loadSystemPrompt(OBSERVER_PROMPT_PATH);
   const systemPrompt = `${basePrompt}\n\n## Monitoring directive\n\n${findingText}`;
 
-  const { handler, sessions } = createSessionHandler(
+  const { handler, sessions, clear } = createSessionHandler(
     () => createAgent({
       systemPrompt,
       model: "claude-sonnet-4-6",
@@ -253,6 +257,8 @@ function observeStream(findingText: string): Response {
             send({ type: "ticket", id: ticketId, subject });
           }
 
+          // lane.enqueue() returns a promise that resolves after handler()
+          // completes (not just after queuing) — sessions() reads are safe.
           await lane.enqueue(ticketId, line);
 
           if (lastEventIdx.get(ticketId) === i) {
@@ -265,6 +271,7 @@ function observeStream(findingText: string): Response {
         send({ type: "error", message: err instanceof Error ? err.message : String(err) });
       } finally {
         clearInterval(keepalive);
+        clear();
         controller.close();
       }
     },
