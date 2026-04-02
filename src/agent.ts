@@ -132,12 +132,14 @@ export function loadSystemPrompt(promptPath: string): string {
   return prompt + skillIndex;
 }
 
-export interface AgentOptions {
-  promptPath: string;
+export type AgentOptions = {
   model: string;
   tools?: AgentTool<any>[];
   thinkingLevel?: "off" | "low" | "medium" | "high";
-}
+} & (
+  | { promptPath: string; systemPrompt?: undefined }
+  | { systemPrompt: string; promptPath?: undefined }
+);
 
 export function createAgent(opts: AgentOptions): { agent: Agent; dispose: () => Promise<void> } {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -145,7 +147,7 @@ export function createAgent(opts: AgentOptions): { agent: Agent; dispose: () => 
     throw new Error("ANTHROPIC_API_KEY not set");
   }
 
-  const srcDir = dirname(opts.promptPath);
+  const srcDir = opts.promptPath ? dirname(opts.promptPath) : resolve(import.meta.dirname);
   const sessionsBase = resolve(srcDir, "..", "data/sessions");
   const sessionId = new Date().toISOString().replaceAll(":", "-");
   const sessionDir = resolve(sessionsBase, sessionId, "tool-results");
@@ -157,7 +159,7 @@ export function createAgent(opts: AgentOptions): { agent: Agent; dispose: () => 
   try { unlinkSync(latestLink); } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
   symlinkSync(sessionId, latestLink);
 
-  const systemPrompt = loadSystemPrompt(opts.promptPath);
+  const systemPrompt = opts.systemPrompt ?? loadSystemPrompt(opts.promptPath!);
   const model = getModel("anthropic", opts.model);
   const bash = bashTool(sessionDir);
   const tools: AgentTool<any>[] = [readTool, bash.tool, ...(opts.tools ?? []).filter(t => t.name !== "bash")];

@@ -1,16 +1,43 @@
 import { join } from "path";
-import { createAgent } from "../src/agent.ts";
+import { createAgent, createSessionHandler, loadSystemPrompt } from "../src/agent.ts";
+import { createLane } from "../src/lane.ts";
 import { subscribeTrace } from "../src/lib/trace.ts";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
+import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 const DATA_PATH = join(import.meta.dir, "../data/pintest-v2/smoke-tickets/smoke_tickets.jsonl");
 const OPERATOR_PROMPT_PATH = join(import.meta.dir, "../src/operator.md");
 const OBSERVER_PROMPT_PATH = join(import.meta.dir, "../src/observer.md");
 const SAMPLE_FINDINGS_PATH = join(import.meta.dir, "sample_findings.txt");
+const EVENTS_PATH = join(import.meta.dir, "../data/pintest-v2/smoke-tickets/smoke_events.jsonl");
 const STATIC_DIR = import.meta.dir;
 
 // Count tickets at startup (UI needs the count, agent reads the file itself)
 const ticketCount = (await Bun.file(DATA_PATH).text()).trim().split("\n").length;
+
+// Load and filter Zendesk events for the observer stream.
+const RELEVANT_TYPES = new Set([
+  "zen:event-type:ticket.created",
+  "zen:event-type:ticket.status_changed",
+  "zen:event-type:ticket.agent_assignment_changed",
+  "zen:event-type:ticket.group_assignment_changed",
+]);
+const MAX_OBSERVE_TICKETS = 8;
+
+const smokeEvents: { line: string; ticketId: string; subject: string }[] = [];
+{
+  const seen = new Set<string>();
+  for (const line of (await Bun.file(EVENTS_PATH).text()).trim().split("\n")) {
+    const evt = JSON.parse(line);
+    if (!RELEVANT_TYPES.has(evt.type)) continue;
+    const ticketId = String(evt.detail.id);
+    if (!seen.has(ticketId)) {
+      if (seen.size >= MAX_OBSERVE_TICKETS) continue;
+      seen.add(ticketId);
+    }
+    smokeEvents.push({ line, ticketId, subject: evt.detail.subject });
+  }
+}
 
 const FAKE_OBSERVER_OUTPUT = [
   { delay: 800, event: { type: "ticket", id: "TK-4901", subject: "Can't access account after email change" } },
@@ -162,13 +189,47 @@ function skipObserveStream(): Response {
   });
 }
 
-function observeStream(findingText: string): Response {
-  const { agent, dispose } = createAgent({
-    promptPath: OBSERVER_PROMPT_PATH,
-    model: "claude-sonnet-4-6",
-  });
+function parseVerdict(
+  ticketId: string,
+  messages: AgentMessage[] | undefined,
+): { ticketId: string; match: boolean; reasoning?: string } {
+  if (!messages) return { ticketId, match: false };
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== "assistant") continue;
+    const text = (msg as AssistantMessage).content
+      .filter((b): b is { type: "text"; text: string } => b.type === "text")
+      .map((b) => b.text)
+      .join("\n")
+      .trim();
+    if (!text) continue;
+    if (/^hold\b/i.test(text)) {
+      return { ticketId, match: true, reasoning: text };
+    }
+    return { ticketId, match: false };
+  }
+  return { ticketId, match: false };
+}
 
-  const unsubTrace = subscribeTrace(agent, "demo-observer");
+function observeStream(findingText: string): Response {
+  const basePrompt = loadSystemPrompt(OBSERVER_PROMPT_PATH);
+  const systemPrompt = `${basePrompt}\n\n## Monitoring directive\n\n${findingText}`;
+
+  const { handler, sessions } = createSessionHandler(
+    () => createAgent({
+      systemPrompt,
+      model: "claude-sonnet-4-6",
+      tools: [],
+      thinkingLevel: "off",
+    }),
+  );
+  const lane = createLane(handler);
+
+  // Pre-compute last event index per ticket for verdict timing.
+  const lastEventIdx = new Map<string, number>();
+  for (let i = 0; i < smokeEvents.length; i++) {
+    lastEventIdx.set(smokeEvents[i].ticketId, i);
+  }
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -181,30 +242,22 @@ function observeStream(findingText: string): Response {
         controller.enqueue(encoder.encode(": keepalive\n\n"));
       }, 5000);
 
-      // Feed tickets one at a time and stream verdicts back
-      const unsub = agent.subscribe((e) => {
-        if (e.type === "message_end" && "role" in e.message && e.message.role === "assistant") {
-          const msg = e.message as AssistantMessage;
-          for (const block of msg.content) {
-            if (block.type === "text") {
-              send({ type: "reasoning_delta", text: block.text });
-            }
-          }
-        }
-      });
+      const announced = new Set<string>();
 
       try {
-        // Prime the observer with the root cause pattern
-        await agent.prompt(
-          `Monitor incoming cases for this root cause pattern:\n\n${findingText}`,
-        );
+        for (let i = 0; i < smokeEvents.length; i++) {
+          const { line, ticketId, subject } = smokeEvents[i];
 
-        // Feed each fake ticket
-        for (const ticket of FAKE_TICKETS_JSONL) {
-          send({ type: "ticket", id: ticket.id, subject: ticket.subject });
-          const ticketText = `New ticket ${ticket.id}: "${ticket.subject}"\n\n` +
-            ticket.messages.map((m) => `${m.role}: ${m.text}`).join("\n");
-          await agent.prompt(ticketText);
+          if (!announced.has(ticketId)) {
+            announced.add(ticketId);
+            send({ type: "ticket", id: ticketId, subject });
+          }
+
+          await lane.enqueue(ticketId, line);
+
+          if (lastEventIdx.get(ticketId) === i) {
+            send({ type: "verdict", ...parseVerdict(ticketId, sessions(ticketId)) });
+          }
         }
 
         send({ type: "done" });
@@ -212,9 +265,6 @@ function observeStream(findingText: string): Response {
         send({ type: "error", message: err instanceof Error ? err.message : String(err) });
       } finally {
         clearInterval(keepalive);
-        unsub();
-        unsubTrace();
-        await dispose();
         controller.close();
       }
     },
