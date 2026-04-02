@@ -1,6 +1,20 @@
 # Learnings
 
+## 2026-04-02 — The most important tool result for synthesis is typically the most distant
+
+R3 (non-solved ticket dump, line 522) contained the densest per-ticket metadata and was the single most-referenced result during cohort formation — but by T7 (line 1653) it was 1,100 lines away. This is structural, not accidental: profiling and data-dump steps run early in investigation workflows, producing the broad results that later synthesis depends on. Every subsequent targeted query pushes the broad result further away. The benchmark avoided this by running fresh extraction scripts in Phase 2 that produced compact, nearby results for the reasoning that consumed them. Implication: Investigation workflows have an inherent context-distance problem where early broad results decay in accessibility precisely when they're needed most for synthesis.
+
+## 2026-04-02 — Benchmark analytical steps can introduce errors that later steps silently correct 
+
+The benchmark's deep-dive script filtered status != 'solved', capturing 13 tickets including 2 with status closed (4800017, 4800050) whose event trails show SOLVED → CLOSED transitions. This inflated the unsolved count from 11 to 13, producing the 59.4% (19/32) headline number. The findings doc reports 65.6% (21/32), meaning a later deduplication or metric-impact step corrected the error without flagging it. The Operator avoided this bug entirely — it correctly treated closed as resolved in its reasoning. Implication: Benchmark numbers from intermediate steps should not be treated as ground truth. Always trace which step produced the final number
+
+## 2026-04-02 — Falsification checks improve finding quality but miscalibrate promotion thresholds
+
+The Operator detected the benchmark's F3 (100k+ stuck at T1), F4 (content moderation), and F5 (ad account suspension) patterns in its thinking trace but chose not to promote them. F4 rejection was correct — three different failure mechanisms grouped by category label, not mechanism. F5 was folded into F1 as a compounding signal. F3 was suppressed because one 100k+ ticket was resolved (1/4 = counterexample). The benchmark promoted all three without falsification, including F4 which mixes a closed ticket with heterogeneous failures. Quality-adjusted, the finding gap is 1, not 2 — and the Operator produced a novel finding (ad_rejected misdiagnosis) the benchmark missed.
+Implication: The gap is in cohort formation scope (early termination on residuals), not detection or falsification logic.
+
 ## 2026-03-31 — A persistent bash session eliminates ~40% of agent tool call token waste from state re-acquisition
+
 The Operator's exec tool spawned a fresh sh -c per call, forcing the agent to re-read policy files, redefine helper functions, and re-query data on every invocation. Claude Code and Codex solve this identically: one persistent shell process per session, commands written to stdin with sentinel-framed output capture. Renaming exec → bash aligns with the API tool type (bash_20250124) and gives the model stronger priors on shell idioms. Implication: Constrain the environment (persistent process), don't instruct the reasoning (prompt-level caching hints).
 
 ## 2026-03-31 — Tool-level truncation outperforms context-layer compaction for agent reasoning
