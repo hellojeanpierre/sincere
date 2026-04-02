@@ -408,7 +408,7 @@ class BashSession {
 
     // Write command framed with sentinel. The ; is load-bearing: it ensures
     // echo runs regardless of command exit code. Using && would make $? always 0.
-    const frame = `${command}; echo "${this.sentinel}$?"\n`;
+    const frame = `${command}\necho "${this.sentinel}$?"\n`;
     try {
       this.proc!.stdin.write(frame);
       this.proc!.stdin.flush();
