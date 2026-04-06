@@ -77,6 +77,13 @@
       padding-top: 0.5rem;
       border-top-color: rgba(120, 113, 108, 0.4);
     }
+    /* Per-event reasoning crossfade */
+    .event-content {
+      transition: opacity 0.15s ease;
+    }
+    .event-content.fading {
+      opacity: 0;
+    }
     /* Markdown prose inside finding cards */
     .md-prose { line-height: 1.5; }
     .md-prose p { margin: 0.25rem 0; }
@@ -461,10 +468,37 @@
         pump();
       });
 
+      function updateEventReasoning(row, label, reasoning) {
+        const area = row.querySelector('.ticket-event-area');
+        const content = area.querySelector('.event-content');
+        const labelEl = area.querySelector('.event-label');
+        const reasoningEl = area.querySelector('.event-reasoning');
+
+        if (area.style.display === 'none') {
+          // First event — show with fade in
+          labelEl.textContent = label;
+          reasoningEl.textContent = reasoning;
+          area.style.display = '';
+          content.classList.add('fading');
+          requestAnimationFrame(() => content.classList.remove('fading'));
+        } else {
+          // Crossfade: fade out, swap, fade in
+          content.classList.add('fading');
+          setTimeout(() => {
+            labelEl.textContent = label;
+            reasoningEl.textContent = reasoning;
+            content.classList.remove('fading');
+          }, 150);
+        }
+      }
+
       function handleObserverEvent(ev) {
         if (ev.type === 'ticket') {
           const row = appendTicketRow(list, { id: ev.id, subject: ev.subject });
           pendingRows.set(ev.id, row);
+        } else if (ev.type === 'event_reasoning') {
+          const row = pendingRows.get(ev.ticketId);
+          if (row) updateEventReasoning(row, ev.label, ev.reasoning);
         } else if (ev.type === 'verdict') {
           const row = pendingRows.get(ev.ticketId);
           if (row) resolveTicketRow(row, ev);
@@ -490,6 +524,12 @@
             <span class="text-sm text-stone-300 truncate">${esc(ticket.subject)}</span>
           </div>
           <div class="ticket-status ml-3 shrink-0">${SPINNER_HTML}</div>
+        </div>
+        <div class="ticket-event-area" style="display:none">
+          <div class="event-content px-3 pb-3">
+            <span class="event-label text-[11px] font-mono text-stone-500"></span>
+            <p class="event-reasoning text-xs text-stone-400 mt-1 leading-relaxed"></p>
+          </div>
         </div>`;
       list.appendChild(row);
       return row;
@@ -497,6 +537,8 @@
 
     function resolveTicketRow(row, verdict) {
       const statusEl = row.querySelector('.ticket-status');
+      const area = row.querySelector('.ticket-event-area');
+
       if (verdict.match) {
         row.classList.remove('bg-stone-900/60', 'border-stone-700/50');
         row.classList.add('bg-accent/5', 'border-accent/30');
@@ -504,20 +546,32 @@
           <svg class="w-4 h-4 text-accent" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
           </svg>`;
-        const details = document.createElement('div');
-        details.className = 'finding-card px-3 pb-3 space-y-1.5 border-t border-accent/20';
-        details.style.animationDelay = '0ms';
-        details.innerHTML = `
-          <p class="text-xs font-medium text-accent pt-2 flex items-center gap-1.5">
-            <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374L10.05 3.378c.866-1.5 3.032-1.5 3.898 0L21.303 16.126z"/>
-            </svg>
-            Root cause match detected
-          </p>
-          <p class="text-xs text-stone-400 leading-relaxed">${esc(verdict.reasoning)}</p>
-          <p class="text-xs font-medium text-accent">→ Action taken: ${esc(verdict.action)}</p>`;
-        row.appendChild(details);
+
+        // Crossfade the event area into the permanent match display
+        if (area) {
+          const content = area.querySelector('.event-content');
+          content.classList.add('fading');
+          setTimeout(() => {
+            content.className = 'event-content px-3 pb-3 space-y-1.5 border-t border-accent/20';
+            content.innerHTML = `
+              <p class="text-xs font-medium text-accent pt-2 flex items-center gap-1.5">
+                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374L10.05 3.378c.866-1.5 3.032-1.5 3.898 0L21.303 16.126z"/>
+                </svg>
+                Root cause match detected
+              </p>
+              <p class="text-xs text-stone-400 leading-relaxed">${esc(verdict.reasoning)}</p>
+              <p class="text-xs font-medium text-accent">→ Action taken: ${esc(verdict.action)}</p>`;
+            content.classList.remove('fading');
+          }, 150);
+        }
       } else {
+        // Fade out the event area, then remove it — collapse to just header + check
+        if (area) {
+          const content = area.querySelector('.event-content');
+          content.classList.add('fading');
+          setTimeout(() => area.remove(), 150);
+        }
         statusEl.innerHTML = `
           <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
