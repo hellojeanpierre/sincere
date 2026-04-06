@@ -384,9 +384,10 @@
           ? selectedFinding.querySelector('.root-cause')?.textContent?.trim() || ''
           : '';
 
-        // Collapse the selected finding accordion
+        // Collapse the selected finding accordion and remove highlight
         if (selectedFinding) {
           selectedFinding.querySelector('.root-cause')?.classList.remove('open');
+          selectedFinding.classList.remove('border-accent', 'bg-stone-800/80', 'shadow-lg', 'shadow-accent/10', 'scale-[1.02]');
         }
 
         // Deactivate gradient on the agent card — it's no longer the active card
