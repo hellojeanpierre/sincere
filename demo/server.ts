@@ -256,7 +256,7 @@ function parseVerdict(
       .join("\n")
       .trim();
     if (!text) continue;
-    if (/^hold\b/i.test(text)) {
+    if (/^\*{0,2}hold\b/im.test(text)) {
       return { ticketId, match: true, reasoning: text };
     }
     return { ticketId, match: false };
