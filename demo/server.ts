@@ -22,20 +22,27 @@ const RELEVANT_TYPES = new Set([
   "zen:event-type:ticket.agent_assignment_changed",
   "zen:event-type:ticket.group_assignment_changed",
 ]);
-const MAX_OBSERVE_TICKETS = 8;
+const OBSERVE_TICKET_IDS = [
+  "4800003", "4800060", "4800031", "4800072",
+  "4800094", "4800063", "4800045", "4800020",
+];
+const OBSERVE_TICKET_SET = new Set(OBSERVE_TICKET_IDS);
 
 const smokeEvents: { line: string; ticketId: string; subject: string }[] = [];
 {
-  const seen = new Set<string>();
+  // Index all matching events by ticket ID, then emit in the hardcoded order.
+  const byTicket = new Map<string, { line: string; ticketId: string; subject: string }[]>();
   for (const line of (await Bun.file(EVENTS_PATH).text()).trim().split("\n")) {
     const evt = JSON.parse(line);
     if (!RELEVANT_TYPES.has(evt.type)) continue;
     const ticketId = String(evt.detail.id);
-    if (!seen.has(ticketId)) {
-      if (seen.size >= MAX_OBSERVE_TICKETS) continue;
-      seen.add(ticketId);
-    }
-    smokeEvents.push({ line, ticketId, subject: evt.detail.subject });
+    if (!OBSERVE_TICKET_SET.has(ticketId)) continue;
+    if (!byTicket.has(ticketId)) byTicket.set(ticketId, []);
+    byTicket.get(ticketId)!.push({ line, ticketId, subject: evt.detail.subject });
+  }
+  for (const id of OBSERVE_TICKET_IDS) {
+    const events = byTicket.get(id);
+    if (events) smokeEvents.push(...events);
   }
 }
 
