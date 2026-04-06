@@ -477,7 +477,7 @@
         if (area.style.display === 'none') {
           // First event — show with fade in
           labelEl.textContent = label;
-          reasoningEl.textContent = reasoning;
+          reasoningEl.innerHTML = md(reasoning);
           area.style.display = '';
           content.classList.add('fading');
           requestAnimationFrame(() => content.classList.remove('fading'));
@@ -486,7 +486,7 @@
           content.classList.add('fading');
           setTimeout(() => {
             labelEl.textContent = label;
-            reasoningEl.textContent = reasoning;
+            reasoningEl.innerHTML = md(reasoning);
             content.classList.remove('fading');
           }, 150);
         }
@@ -528,7 +528,7 @@
         <div class="ticket-event-area" style="display:none">
           <div class="event-content px-3 pb-3">
             <span class="event-label text-[11px] font-mono text-stone-500"></span>
-            <p class="event-reasoning text-xs text-stone-400 mt-1 leading-relaxed"></p>
+            <div class="event-reasoning md-prose text-sm text-stone-400 mt-1 leading-relaxed"></div>
           </div>
         </div>`;
       list.appendChild(row);
@@ -560,7 +560,7 @@
                 </svg>
                 Root cause match detected
               </p>
-              <p class="text-xs text-stone-400 leading-relaxed">${esc(verdict.reasoning)}</p>
+              <div class="md-prose text-sm text-stone-400 leading-relaxed">${md(verdict.reasoning)}</div>
               <p class="text-xs font-medium text-accent">→ Action taken: ${esc(verdict.action)}</p>`;
             content.classList.remove('fading');
           }, 150);
