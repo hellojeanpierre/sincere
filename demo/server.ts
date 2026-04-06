@@ -275,7 +275,7 @@ function observeStream(findingText: string): Response {
   const { handler, sessions, clear } = createSessionHandler(
     () => createAgent({
       systemPrompt,
-      model: "claude-sonnet-4-6",
+      model: "claude-haiku-4-5-20251001",
       tools: [],
       thinkingLevel: "off",
     }),
