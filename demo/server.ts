@@ -271,9 +271,12 @@ function observeStream(findingText: string): Response {
   // sees an empty ## Root causes section. Inject the finding there so the
   // observer recognises it as the root cause it should match against.
   const basePrompt = loadSystemPrompt(OBSERVER_PROMPT_PATH);
+  // Redact 7-digit ticket IDs so the observer pattern-matches on described
+  // behavior, not on literal IDs that happen to appear in root cause text.
+  const redacted = findingText.replace(/\b\d{7}\b/g, "[REDACTED]");
   const systemPrompt = basePrompt.replace(
     /## Root causes\n\n*/,
-    `## Root causes\n\n- ${findingText}\n\n`,
+    `## Root causes\n\n- ${redacted}\n\n`,
   );
 
   const { handler, sessions, clear } = createSessionHandler(
