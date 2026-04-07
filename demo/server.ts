@@ -270,7 +270,7 @@ function observeStream(findingText: string): Response {
   // narrowed focus later, replace {{rootCauses}} with just the finding instead
   // of appending.
   const basePrompt = loadSystemPrompt(OBSERVER_PROMPT_PATH);
-  const systemPrompt = `${basePrompt}\n\n## Monitoring directive\n\n${findingText}`;
+  const systemPrompt = `${basePrompt}\n\n## Monitoring root cause\n\n${findingText}`;
 
   const { handler, sessions, clear } = createSessionHandler(
     () => createAgent({
