@@ -267,12 +267,14 @@ function parseVerdict(
 }
 
 function observeStream(findingText: string): Response {
-  // loadSystemPrompt resolves {{rootCauses}} from graph.json, so the observer
-  // sees the full root cause library AND the appended finding. If we want
-  // narrowed focus later, replace {{rootCauses}} with just the finding instead
-  // of appending.
+  // graph.json is empty, so {{rootCauses}} resolves to blank — the observer
+  // sees an empty ## Root causes section. Inject the finding there so the
+  // observer recognises it as the root cause it should match against.
   const basePrompt = loadSystemPrompt(OBSERVER_PROMPT_PATH);
-  const systemPrompt = `${basePrompt}\n\n## Monitoring root cause\n\n${findingText}`;
+  const systemPrompt = basePrompt.replace(
+    /## Root causes\n\n*/,
+    `## Root causes\n\n- ${findingText}\n\n`,
+  );
 
   const { handler, sessions, clear } = createSessionHandler(
     () => createAgent({
