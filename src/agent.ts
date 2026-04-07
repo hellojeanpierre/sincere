@@ -3,14 +3,69 @@ import { resolve, basename, relative, dirname } from "path";
 import { writeFile, mkdir } from "fs/promises";
 import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
-import type { AgentTool, AgentMessage } from "@mariozechner/pi-agent-core";
-import type { TextContent, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { AgentTool, AgentMessage, AgentEvent } from "@mariozechner/pi-agent-core";
+import type { AssistantMessage, ImageContent, TextContent, ToolResultMessage } from "@mariozechner/pi-ai";
 import type { Handler } from "./lane.ts";
 import { intake } from "./intake.ts";
-import { logger } from "./lib/logger.ts";
+import { logger, traceEvent } from "./lib/logger.ts";
 import { readTool } from "./tools/read.ts";
 import { bashTool } from "./tools/bash.ts";
 import { resolveConfig } from "./lib/config.ts";
+
+// ── Agent trace adapter ─────────────────────────────────────────────
+// Maps pi-agent-core runtime events to the ALS-scoped trace sink.
+// No-op when no sink is active (traceEvent returns early).
+
+function extractUserText(content: string | (TextContent | ImageContent)[]): string {
+  if (typeof content === "string") return content;
+  return content
+    .filter((b): b is TextContent => b.type === "text")
+    .map((b) => b.text)
+    .join("\n");
+}
+
+function traceAssistantMessage(msg: AssistantMessage): void {
+  for (const block of msg.content) {
+    if (block.type === "thinking") {
+      traceEvent("reasoning", { text: block.redacted ? "[redacted]" : (block.thinking || "") });
+    } else if (block.type === "text") {
+      traceEvent("message", { text: block.text });
+    }
+  }
+  if (msg.stopReason === "error") {
+    traceEvent("error", { message: msg.errorMessage ?? "unknown" });
+  }
+}
+
+function forwardAgentTrace(e: AgentEvent): void {
+  switch (e.type) {
+    case "agent_start":
+      traceEvent("agent_start", {});
+      break;
+    case "agent_end":
+      traceEvent("agent_end", {});
+      break;
+    case "tool_execution_start":
+      traceEvent("tool_call", { tool: e.toolName, args: e.args });
+      break;
+    case "tool_execution_end":
+      traceEvent("tool_result", { tool: e.toolName, isError: e.isError });
+      break;
+    case "message_end": {
+      const msg = e.message;
+      if (!("role" in msg)) break;
+      switch (msg.role) {
+        case "assistant":
+          traceAssistantMessage(msg);
+          break;
+        case "user":
+          traceEvent("user_message", { text: extractUserText(msg.content) });
+          break;
+      }
+      break;
+    }
+  }
+}
 
 // Microcompaction: persist oversized stale tool results to disk, keep a 2k
 // preview inline. Fresh results (within the last FRESH_WINDOW_TURNS assistant
@@ -175,6 +230,8 @@ export function createAgent(opts: AgentOptions): { agent: Agent; dispose: () => 
       thinkingLevel: opts.thinkingLevel ?? "high",
     },
   });
+
+  agent.subscribe(forwardAgentTrace);
 
   return { agent, dispose: bash.dispose };
 }
