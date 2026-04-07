@@ -26,5 +26,5 @@ Return valid JSON only:
   "summary": "<one short sentence>"
 }
 
-## Root causes:
+## Root causes
 {{rootCauses}}
