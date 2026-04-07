@@ -1,4 +1,5 @@
 import { join } from "path";
+import { mkdirSync } from "node:fs";
 import { createAgent, createSessionHandler, loadSystemPrompt } from "../src/agent.ts";
 import { createLane } from "../src/lane.ts";
 import { subscribeTrace } from "../src/lib/trace.ts";
@@ -10,6 +11,7 @@ const OPERATOR_PROMPT_PATH = join(import.meta.dir, "../src/operator.md");
 const OBSERVER_PROMPT_PATH = join(import.meta.dir, "../src/observer.md");
 const SAMPLE_FINDINGS_PATH = join(import.meta.dir, "sample_findings.txt");
 const EVENTS_PATH = join(import.meta.dir, "../data/pintest-v2/smoke-tickets/smoke_events.jsonl");
+const TRACES_DIR = join(import.meta.dir, "../data/traces");
 const STATIC_DIR = import.meta.dir;
 
 // Count tickets at startup (UI needs the count, agent reads the file itself)
@@ -270,7 +272,7 @@ function observeStream(findingText: string): Response {
   // narrowed focus later, replace {{rootCauses}} with just the finding instead
   // of appending.
   const basePrompt = loadSystemPrompt(OBSERVER_PROMPT_PATH);
-  const systemPrompt = `${basePrompt}\n\n## Monitoring directive\n\n${findingText}`;
+  const systemPrompt = `${basePrompt}\n\n## Monitoring root cause\n\n${findingText}`;
 
   const { handler, sessions, clear } = createSessionHandler(
     () => createAgent({
@@ -288,11 +290,16 @@ function observeStream(findingText: string): Response {
     lastEventIdx.set(smokeEvents[i].ticketId, i);
   }
 
+  mkdirSync(TRACES_DIR, { recursive: true });
+  const traceWriter = Bun.file(join(TRACES_DIR, `observer-${Date.now()}.jsonl`)).writer();
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: Record<string, unknown>) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        const json = JSON.stringify(data);
+        controller.enqueue(encoder.encode(`data: ${json}\n\n`));
+        traceWriter.write(json + "\n");
       };
 
       const keepalive = setInterval(() => {
@@ -331,6 +338,7 @@ function observeStream(findingText: string): Response {
       } finally {
         clearInterval(keepalive);
         clear();
+        traceWriter.end();
         controller.close();
       }
     },
