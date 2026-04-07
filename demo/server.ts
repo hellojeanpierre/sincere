@@ -295,7 +295,6 @@ function observeStream(findingText: string): Response {
 
   mkdirSync(TRACES_DIR, { recursive: true });
   const traceWriter = Bun.file(join(TRACES_DIR, `observer-${Date.now()}.jsonl`)).writer();
-  const writeTrace = (line: string) => { traceWriter.write(line + "\n"); };
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -314,7 +313,7 @@ function observeStream(findingText: string): Response {
         for (let i = 0; i < smokeEvents.length; i++) {
           const { line, ticketId, subject } = smokeEvents[i];
 
-          await startTraceSink({ workItemId: ticketId, write: writeTrace }, async () => {
+          await startTraceSink({ workItemId: ticketId, write: (line) => traceWriter.write(line) }, async () => {
             if (!announced.has(ticketId)) {
               announced.add(ticketId);
               send({ type: "ticket", id: ticketId, subject });

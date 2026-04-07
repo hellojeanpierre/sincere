@@ -16,12 +16,14 @@ import { resolveConfig } from "./lib/config.ts";
 // Maps pi-agent-core runtime events to the ALS-scoped trace sink.
 // No-op when no sink is active (traceEvent returns early).
 
+const MAX_TRACE_RESULT_CHARS = 4_000;
+
 function extractUserText(content: string | (TextContent | ImageContent)[]): string {
   if (typeof content === "string") return content;
-  return content
-    .filter((b): b is TextContent => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
+  const texts = content.filter((b): b is TextContent => b.type === "text");
+  const joined = texts.map((b) => b.text).join("\n");
+  const dropped = content.length - texts.length;
+  return dropped > 0 ? joined + `\n[${dropped} non-text block(s) omitted]` : joined;
 }
 
 function traceAssistantMessage(msg: AssistantMessage): void {
@@ -48,22 +50,27 @@ function forwardAgentTrace(e: AgentEvent): void {
     case "tool_execution_start":
       traceEvent("tool_call", { tool: e.toolName, args: e.args });
       break;
-    case "tool_execution_end":
-      traceEvent("tool_result", { tool: e.toolName, isError: e.isError });
+    case "tool_execution_end": {
+      const resultText = e.result?.content
+        ?.filter((b: { type: string }) => b.type === "text")
+        .map((b: { type: string; text: string }) => b.text)
+        .join("\n") ?? "";
+      const output = resultText.length > MAX_TRACE_RESULT_CHARS
+        ? resultText.slice(0, MAX_TRACE_RESULT_CHARS) + `\n[truncated, ${resultText.length} chars total]`
+        : resultText;
+      traceEvent("tool_result", { tool: e.toolName, isError: e.isError, output });
       break;
-    case "message_end": {
-      const msg = e.message;
-      if (!("role" in msg)) break;
-      switch (msg.role) {
+    }
+    case "message_end":
+      switch (e.message.role) {
         case "assistant":
-          traceAssistantMessage(msg);
+          traceAssistantMessage(e.message);
           break;
         case "user":
-          traceEvent("user_message", { text: extractUserText(msg.content) });
+          traceEvent("user_message", { text: extractUserText(e.message.content) });
           break;
       }
       break;
-    }
   }
 }
 

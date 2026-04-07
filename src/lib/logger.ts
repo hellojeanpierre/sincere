@@ -17,5 +17,9 @@ export function startTraceSink<T>(sink: TraceSink, fn: () => T): T {
 export function traceEvent(type: string, payload: Record<string, unknown>): void {
   const sink = traceALS.getStore();
   if (!sink) return;
-  sink.write(JSON.stringify({ ts: Date.now(), type, workItemId: sink.workItemId, ...payload }));
+  try {
+    sink.write(JSON.stringify({ ts: Date.now(), type, workItemId: sink.workItemId, ...payload }) + "\n");
+  } catch {
+    // Best-effort — tracing must never disrupt the agent control path.
+  }
 }
