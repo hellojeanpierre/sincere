@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { createAgent, createSessionHandler, loadSystemPrompt } from "../src/agent.ts";
 import { createLane } from "../src/lane.ts";
 import { subscribeTrace } from "../src/lib/trace.ts";
+import { startTraceSink } from "../src/lib/logger.ts";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
@@ -25,8 +26,8 @@ const RELEVANT_TYPES = new Set([
   "zen:event-type:ticket.group_assignment_changed",
 ]);
 const OBSERVE_TICKET_IDS = [
-  "4800003", "4800060", "4800031", "4800072",
-  "4800094", "4800063", "4800045", "4800020",
+  "4800003", "4800094", "4800060", "4800031", 
+  "4800072", "4800063", "4800045", "4800020",
 ];
 const OBSERVE_TICKET_SET = new Set(OBSERVE_TICKET_IDS);
 
@@ -279,14 +280,22 @@ function parseVerdict(
   return { ticketId, match: false };
 }
 
+// Redact ticket IDs (e.g. 4800094) from root cause text so the observer
+// cannot recognise a ticket because its ID appears in root cause text,
+// rather than matching on the described behavioral pattern.
+function redactTicketIds(text: string): string {
+  return text.replace(/\b48000\d{2}\b/g, "[ticket]");
+}
+
 function observeStream(findingText: string): Response {
   // graph.json is empty, so {{rootCauses}} resolves to blank — the observer
   // sees an empty ## Root causes section. Inject the finding there so the
   // observer recognises it as the root cause it should match against.
   const basePrompt = loadSystemPrompt(OBSERVER_PROMPT_PATH);
+  const redacted = redactTicketIds(findingText);
   const systemPrompt = basePrompt.replace(
     /## Root causes\n\n*/,
-    `## Root causes\n\n- ${findingText}\n\n`,
+    `## Root causes\n\n- ${redacted}\n\n`,
   );
 
   const { handler, sessions, clear } = createSessionHandler(
@@ -312,9 +321,7 @@ function observeStream(findingText: string): Response {
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: Record<string, unknown>) => {
-        const json = JSON.stringify(data);
-        controller.enqueue(encoder.encode(`data: ${json}\n\n`));
-        traceWriter.write(json + "\n");
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       };
 
       const keepalive = setInterval(() => {
@@ -327,24 +334,26 @@ function observeStream(findingText: string): Response {
         for (let i = 0; i < smokeEvents.length; i++) {
           const { line, ticketId, subject } = smokeEvents[i];
 
-          if (!announced.has(ticketId)) {
-            announced.add(ticketId);
-            send({ type: "ticket", id: ticketId, subject });
-          }
+          await startTraceSink({ workItemId: ticketId, write: (line) => traceWriter.write(line) }, async () => {
+            if (!announced.has(ticketId)) {
+              announced.add(ticketId);
+              send({ type: "ticket", id: ticketId, subject });
+            }
 
-          // lane.enqueue() returns a promise that resolves after handler()
-          // completes (not just after queuing) — sessions() reads are safe.
-          await lane.enqueue(ticketId, line);
+            // lane.enqueue() returns a promise that resolves after handler()
+            // completes (not just after queuing) — sessions() reads are safe.
+            await lane.enqueue(ticketId, line);
 
-          // Emit per-event reasoning so the browser can show live observer thinking.
-          const reasoning = extractLastReasoning(sessions(ticketId) ?? []);
-          if (reasoning) {
-            send({ type: "event_reasoning", ticketId, label: makeEventLabel(line), reasoning });
-          }
+            // Emit per-event reasoning so the browser can show live observer thinking.
+            const reasoning = extractLastReasoning(sessions(ticketId) ?? []);
+            if (reasoning) {
+              send({ type: "event_reasoning", ticketId, label: makeEventLabel(line), reasoning });
+            }
 
-          if (lastEventIdx.get(ticketId) === i) {
-            send({ type: "verdict", ...parseVerdict(ticketId, sessions(ticketId)) });
-          }
+            if (lastEventIdx.get(ticketId) === i) {
+              send({ type: "verdict", ...parseVerdict(ticketId, sessions(ticketId)) });
+            }
+          });
         }
 
         send({ type: "done" });
