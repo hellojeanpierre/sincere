@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { createAgent, createSessionHandler, loadSystemPrompt } from "../src/agent.ts";
 import { createLane } from "../src/lane.ts";
 import { subscribeTrace } from "../src/lib/trace.ts";
+import { startTraceSink } from "../src/lib/logger.ts";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
@@ -316,9 +317,7 @@ function observeStream(findingText: string): Response {
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: Record<string, unknown>) => {
-        const json = JSON.stringify(data);
-        controller.enqueue(encoder.encode(`data: ${json}\n\n`));
-        traceWriter.write(json + "\n");
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       };
 
       const keepalive = setInterval(() => {
@@ -331,24 +330,26 @@ function observeStream(findingText: string): Response {
         for (let i = 0; i < smokeEvents.length; i++) {
           const { line, ticketId, subject } = smokeEvents[i];
 
-          if (!announced.has(ticketId)) {
-            announced.add(ticketId);
-            send({ type: "ticket", id: ticketId, subject });
-          }
+          await startTraceSink({ workItemId: ticketId, write: (line) => traceWriter.write(line) }, async () => {
+            if (!announced.has(ticketId)) {
+              announced.add(ticketId);
+              send({ type: "ticket", id: ticketId, subject });
+            }
 
-          // lane.enqueue() returns a promise that resolves after handler()
-          // completes (not just after queuing) — sessions() reads are safe.
-          await lane.enqueue(ticketId, line);
+            // lane.enqueue() returns a promise that resolves after handler()
+            // completes (not just after queuing) — sessions() reads are safe.
+            await lane.enqueue(ticketId, line);
 
-          // Emit per-event reasoning so the browser can show live observer thinking.
-          const reasoning = extractLastReasoning(sessions(ticketId) ?? []);
-          if (reasoning) {
-            send({ type: "event_reasoning", ticketId, label: makeEventLabel(line), reasoning });
-          }
+            // Emit per-event reasoning so the browser can show live observer thinking.
+            const reasoning = extractLastReasoning(sessions(ticketId) ?? []);
+            if (reasoning) {
+              send({ type: "event_reasoning", ticketId, label: makeEventLabel(line), reasoning });
+            }
 
-          if (lastEventIdx.get(ticketId) === i) {
-            send({ type: "verdict", ...parseVerdict(ticketId, sessions(ticketId)) });
-          }
+            if (lastEventIdx.get(ticketId) === i) {
+              send({ type: "verdict", ...parseVerdict(ticketId, sessions(ticketId)) });
+            }
+          });
         }
 
         send({ type: "done" });
