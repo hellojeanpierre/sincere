@@ -259,8 +259,12 @@ function parseVerdict(
       .join("\n")
       .trim();
     if (!text) continue;
+    // The observer wraps JSON in a markdown code block with surrounding prose.
+    // Extract the JSON from the code block before parsing.
+    const codeBlockMatch = text.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
+    const jsonCandidate = codeBlockMatch ? codeBlockMatch[1].trim() : text;
     try {
-      const parsed = JSON.parse(text);
+      const parsed = JSON.parse(jsonCandidate);
       if (typeof parsed.state === "string" && parsed.state.toLowerCase() === "hold") {
         return { ticketId, match: true, reasoning: text };
       }
