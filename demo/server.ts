@@ -266,14 +266,22 @@ function parseVerdict(
   return { ticketId, match: false };
 }
 
+// Redact ticket IDs (e.g. 4800094) from root cause text so the observer
+// cannot recognise a ticket because its ID appears in root cause text,
+// rather than matching on the described behavioral pattern.
+function redactTicketIds(text: string): string {
+  return text.replace(/\b48000\d{2}\b/g, "[ticket]");
+}
+
 function observeStream(findingText: string): Response {
   // graph.json is empty, so {{rootCauses}} resolves to blank — the observer
   // sees an empty ## Root causes section. Inject the finding there so the
   // observer recognises it as the root cause it should match against.
   const basePrompt = loadSystemPrompt(OBSERVER_PROMPT_PATH);
+  const redacted = redactTicketIds(findingText);
   const systemPrompt = basePrompt.replace(
     /## Root causes\n\n*/,
-    `## Root causes\n\n- ${findingText}\n\n`,
+    `## Root causes\n\n- ${redacted}\n\n`,
   );
 
   const { handler, sessions, clear } = createSessionHandler(
