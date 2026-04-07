@@ -477,7 +477,7 @@
         if (area.style.display === 'none') {
           // First event — show with fade in
           labelEl.textContent = label;
-          reasoningEl.innerHTML = md(reasoning);
+          reasoningEl.textContent = reasoning;
           area.style.display = '';
           content.classList.add('fading');
           requestAnimationFrame(() => content.classList.remove('fading'));
@@ -486,7 +486,7 @@
           content.classList.add('fading');
           setTimeout(() => {
             labelEl.textContent = label;
-            reasoningEl.innerHTML = md(reasoning);
+            reasoningEl.textContent = reasoning;
             content.classList.remove('fading');
           }, 150);
         }
@@ -528,7 +528,7 @@
         <div class="ticket-event-area" style="display:none">
           <div class="event-content px-3 pb-3">
             <span class="event-label text-[11px] font-mono text-stone-500"></span>
-            <div class="event-reasoning md-prose text-sm text-stone-400 mt-1 leading-relaxed"></div>
+            <pre class="event-reasoning text-sm text-stone-400 mt-1 leading-relaxed whitespace-pre-wrap"></pre>
           </div>
         </div>`;
       list.appendChild(row);
