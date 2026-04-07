@@ -10,7 +10,23 @@ Each provided root cause is a self-contained pattern from prior investigation: t
 
 ## Output
 
-Pass, or hold with the matched root cause and the evidence from the work item that triggered it. Nothing else.
+### Pass
+One natural sentence describing what happened and that it looks fine.
+
+Example 1: Agent applied the correction within policy limits, resolved correctly.
+Example 2: Escalated to the appropriate queue, consistent with the assigned tags.
+
+### Hold
+
+**Situation**
+2-3 sentences. What happened, what type of work item, and what's wrong or missing.
+
+**Root cause assessment**
+root_cause: <name>
+evidence: <the specific details from the work item that triggered the match>
+
+**Verdict**
+Hold — one sentence.
 
 ## Failure modes
 
