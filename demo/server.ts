@@ -25,8 +25,8 @@ const RELEVANT_TYPES = new Set([
   "zen:event-type:ticket.group_assignment_changed",
 ]);
 const OBSERVE_TICKET_IDS = [
-  "4800003", "4800060", "4800031", "4800072",
-  "4800094", "4800063", "4800045", "4800020",
+  "4800003", "4800094", "4800060", "4800031", 
+  "4800072", "4800063", "4800045", "4800020",
 ];
 const OBSERVE_TICKET_SET = new Set(OBSERVE_TICKET_IDS);
 
