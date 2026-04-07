@@ -258,10 +258,23 @@ function parseVerdict(
       .join("\n")
       .trim();
     if (!text) continue;
-    if (/^\*{0,2}hold\b/im.test(text)) {
-      return { ticketId, match: true, reasoning: text };
+    // The observer wraps JSON in a markdown code block with surrounding prose.
+    // Extract the JSON from the code block before parsing.
+    const codeBlockMatch = text.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
+    const jsonCandidate = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+    try {
+      const parsed = JSON.parse(jsonCandidate);
+      if (typeof parsed.state === "string" && parsed.state.toLowerCase() === "hold") {
+        return { ticketId, match: true, reasoning: text };
+      }
+      return { ticketId, match: false };
+    } catch {
+      // fallback: legacy regex for non-JSON responses
+      if (/^\*{0,2}hold\b/im.test(text)) {
+        return { ticketId, match: true, reasoning: text };
+      }
+      return { ticketId, match: false };
     }
-    return { ticketId, match: false };
   }
   return { ticketId, match: false };
 }
