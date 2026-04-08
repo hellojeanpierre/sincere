@@ -171,7 +171,7 @@ function parseSkillFrontmatter(f: string): { name: string; description: string; 
     if (key && val) attrs[key] = val;
   }
   if (!attrs.name || !attrs.description) return null;
-  return { name: attrs.name, description: attrs.description, file: relative(process.cwd(), f), roles: parseInlineList(attrs.roles ?? "") };
+  return { name: attrs.name, description: attrs.description, file: relative(process.cwd(), f), roles: attrs.roles ? parseInlineList(attrs.roles) : undefined };
 }
 
 export function loadSystemPrompt(promptPath: string): string {
@@ -195,7 +195,7 @@ export function loadSystemPrompt(promptPath: string): string {
   // asked for a specific skill, so honour that regardless of prompt filename.
   const skills = skillEnv
     ? allSkills
-    : allSkills.filter(s => !s.roles || s.roles.includes(role));
+    : allSkills.filter(s => s.roles?.includes(role));
 
   if (skillEnv && skills.length === 0) throw new Error(`SKILL=${skillEnv}: failed to load skills/${skillEnv}.md`);
   if (skillEnv) logger.info({ skill: skills[0].name }, "single skill loaded");
