@@ -59,7 +59,7 @@ const FAKE_OBSERVER_OUTPUT = [
   { delay: 420, event: { type: "ticket", id: "TK-4902", subject: "Invoice shows wrong billing amount" } },
   { delay: 350, event: { type: "event_reasoning", ticketId: "TK-4902", label: "ticket created", reasoning: "Billing discrepancy report. Checking against known billing root causes." } },
   { delay: 280, event: { type: "event_reasoning", ticketId: "TK-4902", label: "assigned to agent_017", reasoning: "Routed to billing team. Agent is checking billing history — standard procedure." } },
-  { delay: 280, event: { type: "event_reasoning", ticketId: "TK-4902", label: "status → solved", reasoning: "pass. Plan mismatch was a display issue resolved by agent. No monitored root cause." } },
+  { delay: 280, event: { type: "event_reasoning", ticketId: "TK-4902", label: "status → solved", reasoning: "Billing display issue resolved by agent. No monitored root cause." } },
   { delay: 200, event: { type: "verdict", ticketId: "TK-4902", match: false, summary: "Billing display issue resolved by agent. No monitored root cause." } },
 
   { delay: 420, event: { type: "ticket", id: "TK-4903", subject: "Password reset not working — stuck on confirmation step" } },
@@ -72,13 +72,13 @@ const FAKE_OBSERVER_OUTPUT = [
 
   { delay: 420, event: { type: "ticket", id: "TK-4904", subject: "How do I export my billing history?" } },
   { delay: 280, event: { type: "event_reasoning", ticketId: "TK-4904", label: "ticket created", reasoning: "Self-service question about billing export. No root cause pattern expected." } },
-  { delay: 200, event: { type: "event_reasoning", ticketId: "TK-4904", label: "status → solved", reasoning: "pass. Agent directed user to Settings > Billing > Export. Straightforward." } },
+  { delay: 200, event: { type: "event_reasoning", ticketId: "TK-4904", label: "status → solved", reasoning: "Self-service billing export question answered. Straightforward." } },
   { delay: 140, event: { type: "verdict", ticketId: "TK-4904", match: false, summary: "Self-service billing export question answered. Straightforward." } },
 
   { delay: 420, event: { type: "ticket", id: "TK-4905", subject: "API rate limit — need higher quota" } },
   { delay: 350, event: { type: "event_reasoning", ticketId: "TK-4905", label: "ticket created", reasoning: "Rate limit increase request on enterprise plan. Checking against known patterns." } },
   { delay: 280, event: { type: "event_reasoning", ticketId: "TK-4905", label: "assigned to agent_008", reasoning: "Routed to API team. Quota increase is standard, no root cause match." } },
-  { delay: 200, event: { type: "event_reasoning", ticketId: "TK-4905", label: "status → solved", reasoning: "pass. Agent submitted quota increase request. Standard operational task." } },
+  { delay: 200, event: { type: "event_reasoning", ticketId: "TK-4905", label: "status → solved", reasoning: "Standard quota increase request processed. No root cause match." } },
   { delay: 140, event: { type: "verdict", ticketId: "TK-4905", match: false, summary: "Standard quota increase request processed. No root cause match." } },
 ];
 
@@ -284,6 +284,21 @@ function parseVerdict(
   return { ticketId, match: false };
 }
 
+// For the last event_reasoning (which contains the verdict JSON), strip the
+// JSON block and return only the prose (hold) or the summary sentence (pass).
+function stripVerdictJson(text: string): string {
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
+  if (!codeBlockMatch) return text;
+  try {
+    const parsed = JSON.parse(codeBlockMatch[1].trim());
+    if (parsed.state?.toLowerCase() === "pass" && parsed.summary) return parsed.summary;
+    // hold or unknown: return prose without the JSON block
+    return text.replace(/```(?:json)?\s*\n[\s\S]*?\n\s*```/, "").trim() || text;
+  } catch {
+    return text;
+  }
+}
+
 // Redact ticket IDs (e.g. 4800094) from root cause text so the observer
 // cannot recognise a ticket because its ID appears in root cause text,
 // rather than matching on the described behavioral pattern.
@@ -350,11 +365,12 @@ function observeStream(findingText: string): Response {
 
             // Emit per-event reasoning so the browser can show live observer thinking.
             const reasoning = extractLastReasoning(sessions(ticketId) ?? []);
+            const isLast = lastEventIdx.get(ticketId) === i;
             if (reasoning) {
-              send({ type: "event_reasoning", ticketId, label: makeEventLabel(line), reasoning });
+              send({ type: "event_reasoning", ticketId, label: makeEventLabel(line), reasoning: isLast ? stripVerdictJson(reasoning) : reasoning });
             }
 
-            if (lastEventIdx.get(ticketId) === i) {
+            if (isLast) {
               send({ type: "verdict", ...parseVerdict(ticketId, sessions(ticketId)) });
             }
           });
