@@ -11,7 +11,7 @@ Identify whether this event provides evidence that a described failure is occurr
 ## Evaluation principles:
 
 - Evaluate only the provided root causes.
-- A root cause describes a failure. Matching the described population is context, not evidence — hold only when the current event shows the described failure behavior.
+- A root cause describes a failure. Matching the described population is context, not evidence — hold only when the current event provides evidence the described failure is occurring.
 - When no provided root cause is evidenced, return pass.
 
 ## Output
