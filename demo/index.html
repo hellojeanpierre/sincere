@@ -124,7 +124,7 @@
             </div>
 
             <!-- description -->
-            <p class="text-sm text-stone-400 leading-relaxed">
+            <p id="metric-desc" class="text-sm text-stone-400 leading-relaxed" style="transition: opacity 0.3s ease, max-height 0.4s ease 0.1s, margin-top 0.4s ease 0.1s; max-height: 6em; overflow: hidden;">
               Resolution Rate measures how often support tickets are fully resolved
               before closing — a direct signal of whether customers are leaving with their problem solved.
             </p>
@@ -607,6 +607,10 @@
       btn.disabled = true;
       btn.classList.add('opacity-50', 'pointer-events-none');
 
+      // Collapse metric description
+      const desc = document.getElementById('metric-desc');
+      if (desc) { desc.style.opacity = '0'; desc.style.maxHeight = '0'; desc.style.marginTop = '0'; desc.style.paddingTop = '0'; }
+
       const btnContainer = btn.parentElement;
       const timelineRoot = btnContainer.parentElement;
       const agentEntry = createAgentCard(timelineRoot, btnContainer);
@@ -755,6 +759,8 @@
         // file:// fallback: load fixture directly
         btn.disabled = true;
         btn.classList.add('opacity-50', 'pointer-events-none');
+        const desc = document.getElementById('metric-desc');
+        if (desc) { desc.style.opacity = '0'; desc.style.maxHeight = '0'; desc.style.marginTop = '0'; desc.style.paddingTop = '0'; }
         const btnContainer = btn.parentElement;
         const timelineRoot = btnContainer.parentElement;
         const agentCard = createAgentCard(timelineRoot, btnContainer);
