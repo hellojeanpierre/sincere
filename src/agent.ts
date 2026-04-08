@@ -255,10 +255,12 @@ export function createAgent(opts: AgentOptions): { agent: Agent; dispose: () => 
   return { agent, dispose: bash.dispose };
 }
 
-export function createSessionHandler(createAgentFn: () => { agent: Agent; dispose: () => Promise<void> }) {
+const AGENT_TIMEOUT_MS = 60_000;
+
+export function createSessionHandler(createAgentFn: () => { agent: Agent; dispose: () => Promise<void> }, timeoutMs = AGENT_TIMEOUT_MS) {
   const store = new Map<string, AgentMessage[]>();
 
-  const handler: Handler = async (body, workItemId) => {
+  const handler: Handler<Record<string, unknown>> = async (event, workItemId) => {
     logger.info({ workItemId }, "handler start");
     const saved = store.get(workItemId) ?? [];
     const { agent, dispose } = createAgentFn();
@@ -267,11 +269,13 @@ export function createSessionHandler(createAgentFn: () => { agent: Agent; dispos
       agent.replaceMessages(saved);
     }
 
+    const start = performance.now();
+    const timeout = setTimeout(() => agent.abort(), timeoutMs);
     try {
-      const event = JSON.parse(body) as Record<string, unknown>;
       const response = await intake(agent, event);
+      const durationMs = Math.round(performance.now() - start);
       logger.info(
-        { workItemId, responsePreview: response.slice(0, 1000) },
+        { workItemId, durationMs, responsePreview: response.slice(0, 1000) },
         "handler response",
       );
       store.set(workItemId, [...agent.state.messages]);
@@ -279,6 +283,7 @@ export function createSessionHandler(createAgentFn: () => { agent: Agent; dispos
       logger.error({ workItemId, err }, "handler failed, session not updated");
       throw err;
     } finally {
+      clearTimeout(timeout);
       await dispose();
     }
   };
