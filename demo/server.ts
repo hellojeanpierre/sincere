@@ -367,7 +367,7 @@ function observeStream(findingText: string): Response {
             const reasoning = extractLastReasoning(sessions(ticketId) ?? []);
             const isLast = lastEventIdx.get(ticketId) === i;
             if (reasoning) {
-              send({ type: "event_reasoning", ticketId, label: makeEventLabel(line), reasoning: isLast ? stripVerdictJson(reasoning) : reasoning });
+              send({ type: "event_reasoning", ticketId, label: makeEventLabel(line), reasoning: stripVerdictJson(reasoning) });
             }
 
             if (isLast) {
