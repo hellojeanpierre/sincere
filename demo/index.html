@@ -566,11 +566,19 @@
           }, 150);
         }
       } else {
-        // Fade out the event area, then remove it — collapse to just header + check
         if (area) {
           const content = area.querySelector('.event-content');
           content.classList.add('fading');
-          setTimeout(() => area.remove(), 150);
+          if (verdict.summary) {
+            // Crossfade into summary-only display
+            setTimeout(() => {
+              content.innerHTML = `
+                <pre class="event-reasoning text-sm text-stone-500 leading-relaxed whitespace-pre-wrap">${esc(verdict.summary)}</pre>`;
+              content.classList.remove('fading');
+            }, 150);
+          } else {
+            setTimeout(() => area.remove(), 150);
+          }
         }
         statusEl.innerHTML = `
           <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">

@@ -54,13 +54,13 @@ const FAKE_OBSERVER_OUTPUT = [
   { delay: 350, event: { type: "event_reasoning", ticketId: "TK-4901", label: "ticket created", reasoning: "Account access issue after email change. Reviewing for known patterns." } },
   { delay: 280, event: { type: "event_reasoning", ticketId: "TK-4901", label: "assigned to agent_014", reasoning: "Standard triage assignment. No root cause signals in the ticket description." } },
   { delay: 280, event: { type: "event_reasoning", ticketId: "TK-4901", label: "status → open", reasoning: "Agent began work. Cache clearing suggestion is a generic first step, appropriate here." } },
-  { delay: 200, event: { type: "verdict", ticketId: "TK-4901", match: false } },
+  { delay: 200, event: { type: "verdict", ticketId: "TK-4901", match: false, summary: "Standard account access issue resolved with cache clearing." } },
 
   { delay: 420, event: { type: "ticket", id: "TK-4902", subject: "Invoice shows wrong billing amount" } },
   { delay: 350, event: { type: "event_reasoning", ticketId: "TK-4902", label: "ticket created", reasoning: "Billing discrepancy report. Checking against known billing root causes." } },
   { delay: 280, event: { type: "event_reasoning", ticketId: "TK-4902", label: "assigned to agent_017", reasoning: "Routed to billing team. Agent is checking billing history — standard procedure." } },
   { delay: 280, event: { type: "event_reasoning", ticketId: "TK-4902", label: "status → solved", reasoning: "pass. Plan mismatch was a display issue resolved by agent. No monitored root cause." } },
-  { delay: 200, event: { type: "verdict", ticketId: "TK-4902", match: false } },
+  { delay: 200, event: { type: "verdict", ticketId: "TK-4902", match: false, summary: "Billing display issue resolved by agent. No monitored root cause." } },
 
   { delay: 420, event: { type: "ticket", id: "TK-4903", subject: "Password reset not working — stuck on confirmation step" } },
   { delay: 350, event: { type: "event_reasoning", ticketId: "TK-4903", label: "ticket created", reasoning: "Password reset failure with session expiration. Early signals of token invalidation pattern." } },
@@ -73,13 +73,13 @@ const FAKE_OBSERVER_OUTPUT = [
   { delay: 420, event: { type: "ticket", id: "TK-4904", subject: "How do I export my billing history?" } },
   { delay: 280, event: { type: "event_reasoning", ticketId: "TK-4904", label: "ticket created", reasoning: "Self-service question about billing export. No root cause pattern expected." } },
   { delay: 200, event: { type: "event_reasoning", ticketId: "TK-4904", label: "status → solved", reasoning: "pass. Agent directed user to Settings > Billing > Export. Straightforward." } },
-  { delay: 140, event: { type: "verdict", ticketId: "TK-4904", match: false } },
+  { delay: 140, event: { type: "verdict", ticketId: "TK-4904", match: false, summary: "Self-service billing export question answered. Straightforward." } },
 
   { delay: 420, event: { type: "ticket", id: "TK-4905", subject: "API rate limit — need higher quota" } },
   { delay: 350, event: { type: "event_reasoning", ticketId: "TK-4905", label: "ticket created", reasoning: "Rate limit increase request on enterprise plan. Checking against known patterns." } },
   { delay: 280, event: { type: "event_reasoning", ticketId: "TK-4905", label: "assigned to agent_008", reasoning: "Routed to API team. Quota increase is standard, no root cause match." } },
   { delay: 200, event: { type: "event_reasoning", ticketId: "TK-4905", label: "status → solved", reasoning: "pass. Agent submitted quota increase request. Standard operational task." } },
-  { delay: 140, event: { type: "verdict", ticketId: "TK-4905", match: false } },
+  { delay: 140, event: { type: "verdict", ticketId: "TK-4905", match: false, summary: "Standard quota increase request processed. No root cause match." } },
 ];
 
 const FAKE_TICKETS_JSONL = [
@@ -248,7 +248,7 @@ function extractLastReasoning(msgs: AgentMessage[]): string {
 function parseVerdict(
   ticketId: string,
   messages: AgentMessage[] | undefined,
-): { ticketId: string; match: boolean; reasoning?: string } {
+): { ticketId: string; match: boolean; reasoning?: string; summary?: string } {
   if (!messages) return { ticketId, match: false };
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
@@ -266,9 +266,13 @@ function parseVerdict(
     try {
       const parsed = JSON.parse(jsonCandidate);
       if (typeof parsed.state === "string" && parsed.state.toLowerCase() === "hold") {
-        return { ticketId, match: true, reasoning: text };
+        // Strip the JSON code block, keep surrounding prose
+        const prose = codeBlockMatch
+          ? text.replace(/```(?:json)?\s*\n[\s\S]*?\n\s*```/, "").trim()
+          : "";
+        return { ticketId, match: true, reasoning: prose || parsed.summary || text };
       }
-      return { ticketId, match: false };
+      return { ticketId, match: false, summary: parsed.summary };
     } catch {
       // fallback: legacy regex for non-JSON responses
       if (/^\*{0,2}hold\b/im.test(text)) {
