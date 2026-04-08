@@ -342,7 +342,7 @@ function observeStream(findingText: string): Response {
 
             // lane.enqueue() returns a promise that resolves after handler()
             // completes (not just after queuing) — sessions() reads are safe.
-            await lane.enqueue(ticketId, line);
+            await lane.enqueue(ticketId, JSON.parse(line));
 
             // Emit per-event reasoning so the browser can show live observer thinking.
             const reasoning = extractLastReasoning(sessions(ticketId) ?? []);
