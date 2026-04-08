@@ -148,7 +148,13 @@ export function makeTransformContext(sessionDir: string, hintDir: string, setLas
   };
 }
 
-function parseSkillFrontmatter(f: string): { name: string; description: string; file: string } | null {
+function parseInlineList(value: string): string[] | undefined {
+  const inner = value.startsWith("[") && value.endsWith("]") ? value.slice(1, -1) : value;
+  const items = inner.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  return items.length > 0 ? items : undefined;
+}
+
+function parseSkillFrontmatter(f: string): { name: string; description: string; file: string; roles?: string[] } | null {
   let raw: string;
   try { raw = readFileSync(f, "utf-8"); } catch { return null; }
   if (!raw.startsWith("---") || raw.indexOf("\n---", 3) === -1) {
@@ -165,7 +171,7 @@ function parseSkillFrontmatter(f: string): { name: string; description: string; 
     if (key && val) attrs[key] = val;
   }
   if (!attrs.name || !attrs.description) return null;
-  return { name: attrs.name, description: attrs.description, file: relative(process.cwd(), f) };
+  return { name: attrs.name, description: attrs.description, file: relative(process.cwd(), f), roles: parseInlineList(attrs.roles ?? "") };
 }
 
 export function loadSystemPrompt(promptPath: string): string {
@@ -183,7 +189,13 @@ export function loadSystemPrompt(promptPath: string): string {
   const skillFiles = skillEnv
     ? [resolve(srcDir, "skills", `${skillEnv}.md`)]
     : globSync(resolve(srcDir, "skills", "*.md"));
-  const skills = skillFiles.map(parseSkillFrontmatter).filter((s): s is NonNullable<typeof s> => s !== null);
+  const allSkills = skillFiles.map(parseSkillFrontmatter).filter((s): s is NonNullable<typeof s> => s !== null);
+  const role = basename(promptPath, ".md").toLowerCase();
+  // Explicit SKILL selection (env var) bypasses role scoping — the developer
+  // asked for a specific skill, so honour that regardless of prompt filename.
+  const skills = skillEnv
+    ? allSkills
+    : allSkills.filter(s => !s.roles || s.roles.includes(role));
 
   if (skillEnv && skills.length === 0) throw new Error(`SKILL=${skillEnv}: failed to load skills/${skillEnv}.md`);
   if (skillEnv) logger.info({ skill: skills[0].name }, "single skill loaded");
