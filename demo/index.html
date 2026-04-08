@@ -570,11 +570,12 @@
           const content = area.querySelector('.event-content');
           content.classList.add('fading');
           if (verdict.summary) {
-            // Crossfade into summary-only display
+            // Crossfade into summary, then fade out and remove
             setTimeout(() => {
               content.innerHTML = `
                 <pre class="event-reasoning text-sm text-stone-500 leading-relaxed whitespace-pre-wrap">${esc(verdict.summary)}</pre>`;
               content.classList.remove('fading');
+              setTimeout(() => { content.classList.add('fading'); setTimeout(() => area.remove(), 150); }, 3000);
             }, 150);
           } else {
             setTimeout(() => area.remove(), 150);
