@@ -12,7 +12,7 @@ Aggregate to find patterns, then read the full content of individual records to 
 
 ## Before scripting
 
-Fields you never inspect cannot produce findings. Verify the field inventory of the dataset programmatically — including nested and metadata fields that won't surface in a typical aggregation query.
+Fields you never inspect cannot produce findings. Verify the field inventory of the dataset — including nested and metadata fields that won't surface in a typical aggregation query.
 
 ## Investigation framework
 
