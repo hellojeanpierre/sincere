@@ -1,5 +1,9 @@
 # Learnings
 
+## 2026-04-09 — T1 planning mode is contagious: plural index → batch frame → all data loaded
+
+A 2-item skill index caused the model to enter a plural/batch planning frame ("files... and also data files"), absorbing data file reads into the same parallel call. A 1-item index triggered a singular/sequential frame ("file... then explore"), deferring 3 of 4 data files. This shifted the discovery-to-synthesis boundary by 3 turns and inflated synthesis from 2 turns (4,050 words) to 4 turns (5,626 words). The mechanism is probabilistic but strong — the model extends existing batches cheaply but rarely initiates them from a singular frame. Implication: T1 planning width shouldn't depend on incidental context like skill count; the system prompt or operator prompt should explicitly enumerate data file paths.
+
 ## 2026-04-02 — Grounding failure mode reduced re-narration by 43pp and fixed a factual error in finding evidence
 
 Adding a one-line failure mode ("if a value matters enough to cite, it matters enough to verify") to the data-analysis skill shifted thinking-token allocation from 26/60/14 (new/re-eval/tool-replaceable) to 46/17/4 on the 32-ticket benchmark. The agent ran targeted verification queries instead of reconstructing data from memory. The biggest win was indirect: grounding drove a full policy read that discovered SOP-ADS-005, which the previous trace missed due to truncation — fixing a factually wrong finding. Implication: Evidentiary standards can shift model behavior from thinking-as-memory to thinking-as-reasoning without prescribing workflow steps.
