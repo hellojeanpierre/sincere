@@ -18,7 +18,7 @@ Fields you never inspect cannot produce findings. Verify the field inventory of 
 
 Write Python scripts that compute aggregates.
 
-**Completeness.** Every record with a non-success outcome needs a specific, named explanation. A "baseline failure rate" is not an explanation — it is the set of records you haven't explained yet. A cohort is not explained until you have named the specific event, field value, or transcript pattern that produces the outcome — and tested whether the same pattern appears in records with a different outcome.
+**Completeness.** When your findings take shape, count the records they leave unexplained and investigate them. Unexplained records are unfinished work, not a baseline.
 
 **Falsification.** When a hypothesis forms, the next query tries to break it — not describe the pattern further. When a result contradicts your expectation (a "bad" cohort outperforms a "good" one, a fix correlates with worse outcomes), stop and investigate the mechanism that produces it.
 
