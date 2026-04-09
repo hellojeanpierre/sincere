@@ -18,7 +18,7 @@ Fields you never inspect cannot produce findings. Verify the field inventory of 
 
 Write Python scripts that compute aggregates.
 
-**Completeness.** When your findings take shape, count the records they leave unexplained and investigate them. Unexplained records are unfinished work, not a baseline.
+**Completeness.** When records remain that your findings don't explain, the next query investigates them. Grouping unexplained records into a residual is not an explanation — it is unfinished investigation.
 
 **Falsification.** When a hypothesis forms, the next query tries to break it — not describe the pattern further. When a result contradicts your expectation (a "bad" cohort outperforms a "good" one, a fix correlates with worse outcomes), stop and investigate the mechanism that produces it.
 
