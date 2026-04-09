@@ -1,6 +1,10 @@
 # Learnings
 
-## 2026-04-09 — T1 planning mode is contagious: plural index → batch frame → all data loaded
+## 2026-04-09 — Prompt wording precision controls stochastic variance on judgment boundaries
+
+When a model's behavior is stochastic on the same input, the fix is wording precision at the judgment boundary, not additional instructions. The observer over- and under-triggered across runs because a single principle sat on an ambiguous threshold. Three word-level edits resolved it: "population is context, not evidence" (stopped cohort-matching), "provides evidence" over "shows" (allowed computable signals like timing gaps), and "one component of a compound failure is sufficient" (collapsed a 50/50 split). Dissect root cause text into population/trigger/effect to find where the boundary actually is.
+
+## 2026-04-09 — Turn 1 planning mode is contagious: plural index → batch frame → all data loaded
 
 A 2-item skill index caused the model to enter a plural/batch planning frame ("files... and also data files"), absorbing data file reads into the same parallel call. A 1-item index triggered a singular/sequential frame ("file... then explore"), deferring 3 of 4 data files. This shifted the discovery-to-synthesis boundary by 3 turns and inflated synthesis from 2 turns (4,050 words) to 4 turns (5,626 words). The mechanism is probabilistic but strong — the model extends existing batches cheaply but rarely initiates them from a singular frame. Implication: T1 planning width shouldn't depend on incidental context like skill count; the system prompt or operator prompt should explicitly enumerate data file paths.
 
