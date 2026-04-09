@@ -1,5 +1,10 @@
 # Learnings
 
+## 2026-04-09 — Explicit plan externalization eliminates circular deliberation, not thinking level
+
+Adding "State your plan before investigating" to the operator prompt produced the fastest, leanest run across all configurations: 273s (31% faster than medium-no-plan at 397s), 2,916 thinking words (32% fewer than medium-no-plan at 4,299), and 6 turns vs 13. High thinking with a plan (2,916 words) matched medium thinking without one (4,299 words), confirming the overthinking was caused by lack of plan, not by thinking level. The plan also caused the agent to internalize skill principles as plan steps — falsification appeared as step 5 and was actually executed for the first time. The fix was six words in the operator prompt: "State your plan before investigating."
+Implication: when an agent over-deliberates, the first intervention should be plan externalization, not thinking level reduction.
+
 ## 2026-04-09 — Prompt wording precision controls stochastic variance on judgment boundaries
 
 When a model's behavior is stochastic on the same input, the fix is wording precision at the judgment boundary, not additional instructions. The observer over- and under-triggered across runs because a single principle sat on an ambiguous threshold. Three word-level edits resolved it: "population is context, not evidence" (stopped cohort-matching), "provides evidence" over "shows" (allowed computable signals like timing gaps), and "one component of a compound failure is sufficient" (collapsed a 50/50 split). Dissect root cause text into population/trigger/effect to find where the boundary actually is.
