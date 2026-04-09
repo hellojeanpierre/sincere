@@ -1,5 +1,11 @@
 # Learnings
 
+## 2025-04-09 — A static plan acts as a completion ceiling that overrides skill principles
+
+
+The 273s plan run's T6 thinking shows the agent saw only 55% coverage (18.8 of 34.4 pts) but stopped anyway — "I'm ready to write up the final findings." All 5 plan steps were ticked; the plan became a checklist. The 438s no-plan run's T12 thinking explicitly quotes the Completeness principle: "every non-success outcome needs a specific explanation, so I can't just ignore it." Without a plan providing a competing completion signal, the skill principle drove the agent through 13 turns to 100% coverage. The plan gives speed, structure, and falsification; but its implicit "you're done when the steps are done" overrides the skill's "you're done when every record is explained."
+Implication: if the agent externalizes a plan, the plan's completion condition must be bound to the skill's coverage requirement — otherwise the plan becomes a cage, not a tool.
+
 ## 2026-04-09 — Explicit plan externalization eliminates circular deliberation, not thinking level
 
 Adding "State your plan before investigating" to the operator prompt produced the fastest, leanest run across all configurations: 273s (31% faster than medium-no-plan at 397s), 2,916 thinking words (32% fewer than medium-no-plan at 4,299), and 6 turns vs 13. High thinking with a plan (2,916 words) matched medium thinking without one (4,299 words), confirming the overthinking was caused by lack of plan, not by thinking level. The plan also caused the agent to internalize skill principles as plan steps — falsification appeared as step 5 and was actually executed for the first time. The fix was six words in the operator prompt: "State your plan before investigating."
