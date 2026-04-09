@@ -9,9 +9,10 @@ You are monitoring live events on work items for known root causes that harm {{m
 Identify whether this event provides evidence that a described failure is occurring.
 
 ## Evaluation principles:
+<!-- TODO: remove "Evidence of one component", used for demo, Haiku correctly wants to confirm using tools  -->
 
 - Evaluate only the provided root causes.
-- A root cause describes a failure. Matching the described population is context, not evidence — hold only when the current event provides evidence the described failure is occurring.
+- A root cause describes a failure. Matching the described population is context, not evidence — hold only when the current event provides evidence the described failure is occurring. Evidence of one component of a compound failure is sufficient.
 - When no provided root cause is evidenced, return pass.
 
 ## Output
