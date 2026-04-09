@@ -18,15 +18,13 @@ Fields you never inspect cannot produce findings. Verify the field inventory of 
 
 Write Python scripts that compute aggregates.
 
-**Completeness.** When records remain that your findings don't explain, the next query investigates them. Grouping unexplained records into a residual is not an explanation — it is unfinished investigation.
+**Completeness.** Every record in the dataset that the investigation covers needs a specific, named explanation — not a category. When a record's own fields describe a resolution, that description is a claim, not proof — verify it against the authoritative source before accepting it. A label assigned to leftover records is a name for the gap, not a finding.
 
 **Falsification.** When a hypothesis forms, the next query tries to break it — not describe the pattern further. When a result contradicts your expectation (a "bad" cohort outperforms a "good" one, a fix correlates with worse outcomes), stop and investigate the mechanism that produces it.
 
 **Decomposition.** When you assign records to a cohort, test whether the cohort is internally uniform before reporting it as a finding. Compute the outcome rate for each subgroup within the cohort. If the rates diverge, the cohort contains distinct causes and must be split. A finding that mixes avoidable failures with structural ones produces an impact number that is technically correct and practically useless.
 
 **Independence.** When a variable correlates with the outcome, test whether the correlation survives after removing the records already explained by your primary findings. If the gap collapses, say so explicitly — it protects the reader from pursuing interventions that would not move the metric.
-
-**Label validity.** When fields are outputs of a process that observes, labels, or scores the primary records, treat them as claims with their own error rate, not as ground truth. Validate them against the primary data before using them to filter, label, or explain records.
 
 ## Failure modes
 
