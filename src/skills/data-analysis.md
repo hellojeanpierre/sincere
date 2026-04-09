@@ -10,6 +10,10 @@ roles: [operator]
 
 Aggregate to find patterns, then read the full content of individual records to find causes. Numbers tell you where to look. The raw content tells you why.
 
+## Before scripting
+
+Fields you never inspect cannot produce findings. Verify the field inventory of the dataset programmatically — including nested and metadata fields that won't surface in a typical aggregation query.
+
 ## Investigation framework
 
 Write Python scripts that compute aggregates.
