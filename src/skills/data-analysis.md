@@ -10,13 +10,9 @@ roles: [operator]
 
 Aggregate to find patterns, then read the full content of individual records to find causes. Numbers tell you where to look. The raw content tells you why.
 
-## Before scripting
-
-Fields you never inspect cannot produce findings. Verify the field inventory of the dataset programmatically — including nested and metadata fields that won't surface in a typical aggregation query.
-
 ## Investigation framework
 
-Write Python scripts that load the dataset and compute aggregates.
+Write Python scripts that compute aggregates.
 
 **Completeness.** Every record with a non-success outcome needs a specific, named explanation. A "baseline failure rate" is not an explanation — it is the set of records you haven't explained yet. A cohort is not explained until you have named the specific event, field value, or transcript pattern that produces the outcome — and tested whether the same pattern appears in records with a different outcome.
 
