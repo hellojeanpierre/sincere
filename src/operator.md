@@ -14,4 +14,4 @@ Format each finding as:
 ## Finding <N> — <one-line summary>
 **Cohort:** <description> — <N> tickets
 **Outcome:** <description> — <X>pts of metric impact
-**Root cause:** ...
+**Root cause:** <description>
