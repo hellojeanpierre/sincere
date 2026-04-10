@@ -8,28 +8,14 @@ roles: [operator]
 
 ## Core principle
 
-Aggregate to find patterns, then read the full content of individual records to find causes. Numbers tell you where to look. The raw content tells you why.
+Script everything. Aggregation reveals where to look; the raw content of individual records reveals why. Any question you can answer with a script — counting, classifying, cross-referencing, verifying — must be answered with a script, not by reasoning about recalled data.
 
-## Before scripting
+## Scripts carry the analysis
 
-Fields you never inspect cannot produce findings. Verify the field inventory of the dataset — including nested and metadata fields that won't surface in a typical aggregation query.
+Every analytical claim — a cohort boundary, an impact number, a causal attribution — must trace back to script output. When consolidating findings, write a script that assigns every record to a finding or to an explicitly labeled residual, and outputs the assignment table. A finding that cannot be reproduced by re-running its script is not a finding.
 
-## Investigation framework
+Nested and metadata fields that don't surface in a typical aggregation (objects-inside-objects, tags arrays, tier fields) contain the variables that distinguish subgroups. Include them in your field inventory early — profiling scripts should enumerate all fields, including nested ones.
 
-Write Python scripts that compute aggregates.
+## Verification
 
-**Completeness.** Findings that leave records unexplained are unverified — the unexplained set is where contradictory patterns hide. Investigate it before committing to your conclusions.
-
-**Falsification.** When a hypothesis forms, the next query tries to break it — not describe the pattern further. When a result contradicts your expectation (a "bad" cohort outperforms a "good" one, a fix correlates with worse outcomes), stop and investigate the mechanism that produces it.
-
-**Decomposition.** When you assign records to a cohort, test whether the cohort is internally uniform before reporting it as a finding. Compute the outcome rate for each subgroup within the cohort. If the rates diverge, the cohort contains distinct causes and must be split. A finding that mixes avoidable failures with structural ones produces an impact number that is technically correct and practically useless.
-
-**Independence.** When a variable correlates with the outcome, test whether the correlation survives after removing the records already explained by your primary findings. If the gap collapses, say so explicitly — it protects the reader from pursuing interventions that would not move the metric.
-
-## Failure modes
-
-- Encoding an analytical assumption as a code filter that silently excludes the records that would challenge it.
-- Collapsing distinct patterns into a single finding, losing the specificity that makes each actionable.
-- Absorbing unexplained records into a "healthy baseline" instead of treating them as unfinished investigation.
-- Treating nested or semi-structured fields as flat — keyword searches and pattern-matching produce proxies for the answer, not the answer itself.
-- Grounding a finding in recalled data instead of current query output — if a value matters enough to cite, it matters enough to verify.
+A hypothesis becomes a finding only after a script has tried to break it. When the next script confirms the pattern instead of testing an alternative explanation, you are describing, not investigating. Every record the analysis touches must land in exactly one bucket — finding or named residual. Records left in an unlabeled "other" category are unfinished investigation, because that is where counterexamples hide.
