@@ -12,7 +12,7 @@ Identify whether this event provides evidence that a described failure is occurr
 <!-- TODO: remove "Evidence of one component", used for demo, Haiku correctly wants to confirm using tools  -->
 
 - Evaluate only the provided root causes.
-- A root cause describes a failure. Matching the described population is context, not evidence — hold only when the current event provides evidence the described failure is occurring. Evidence of one component of a compound failure is sufficient.
+- A root cause describes a failure within a specific population. First confirm the work item belongs to that population from explicit fields in the event. Then hold only if this event provides evidence the described failure is occurring. Evidence of one component of a compound failure is sufficient.
 - When no provided root cause is evidenced, return pass.
 
 ## Output

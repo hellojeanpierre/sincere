@@ -285,13 +285,9 @@ async function buildJsonlManifest(
 }
 
 const readSchema = Type.Object({
-  path: Type.String({ description: "File path relative to project root, or absolute" }),
-  offset: Type.Optional(
-    Type.Number({ description: "Line number to start from (0-based). Default: 0" }),
-  ),
-  limit: Type.Optional(
-    Type.Number({ description: "Max lines to return. Default: 2000" }),
-  ),
+  path: Type.String(),
+  offset: Type.Optional(Type.Number()),
+  limit: Type.Optional(Type.Number()),
 });
 
 export const readTool: AgentTool<typeof readSchema> = {

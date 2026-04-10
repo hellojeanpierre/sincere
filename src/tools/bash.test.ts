@@ -83,12 +83,12 @@ describe("bash tool", () => {
     expect(result.details).toBeNull();
   });
 
-  test("&& chaining is blocked", async () => {
+  test("&& chaining is allowed", async () => {
     const result = await tool.execute("test", {
-      command: "grep foo file && rm file",
+      command: "echo hello && echo world",
     });
-    expect(result.content[0].text).toContain("disallowed shell operator");
-    expect(result.details).toBeNull();
+    expect(result.content[0].text).toContain("hello");
+    expect(result.content[0].text).toContain("world");
   });
 
   test("|| chaining is blocked", async () => {
@@ -262,53 +262,100 @@ describe("bash tool", () => {
 
   // --- Truncation tests ---
 
-  test("output over 25k is truncated with persistence", async () => {
+  test("output over 100k is truncated with head+tail and persistence", async () => {
+    // Generate 120,000 chars with no newlines: 'H' * 60000 then 'T' * 60000
     const result = await tool.execute("trunc-test", {
-      command: `python3 -c "print('x' * 30000)"`,
+      command: `python3 -c "import sys; sys.stdout.write('H' * 60000 + 'T' * 60000)"`,
     });
     const text = result.content[0].text;
-    expect(text.length).toBeLessThan(3000);
-    expect(text).toContain("[Full output persisted to");
+    // Head present
+    expect(text.startsWith("H")).toBe(true);
+    // Tail present
+    expect(text.endsWith("T")).toBe(true);
+    // Truncation notice in the middle
+    expect(text).toContain("[... truncated");
     expect(text).toContain("use read tool to access]");
+    // No newlines in input, so head and tail fall back to exact HEAD_SIZE / TAIL_SIZE
+    const noticeStart = text.indexOf("\n\n[... truncated");
+    const noticeEnd = text.indexOf("]\n\n", noticeStart) + 3;
+    const head = text.slice(0, noticeStart);
+    const tail = text.slice(noticeEnd);
+    expect(head.length).toBe(50000);
+    expect(tail.length).toBe(50000);
     // Verify file was written
     const path = join(tmpDir, "trunc-test.txt");
     const persisted = readFileSync(path, "utf-8");
-    expect(persisted.length).toBe(30001); // 30000 x's + newline
+    expect(persisted.length).toBe(120000);
     // Details still present
     expect(result.details).not.toBeNull();
     expect(result.details!.exitCode).toBe(0);
   });
 
-  test("preview cuts at last newline before 2000 chars", async () => {
-    // Generate lines of 100 chars each — newlines at 101, 202, 303, ...
+  test("head and tail both break at newline boundaries", async () => {
+    // Generate 1200 lines of 100 chars each = 121,200 chars (each line 101 with newline)
     const result = await tool.execute("newline-test", {
-      command: `python3 -c "exec('for i in range(300):\\n    print(chr(97) * 100)')"`,
+      command: `python3 -c "exec('for i in range(1200):\\n    print(chr(97) * 100)')"`,
     });
     const text = result.content[0].text;
-    const previewEnd = text.indexOf("\n\n[Full output persisted");
-    const preview = text.slice(0, previewEnd);
-    // Each line is 101 chars (100 'a' + newline). lastIndexOf("\n", 2000)
-    // finds the newline, slice(0, pos) excludes it, so the preview is
-    // n complete lines minus the final newline: (n * 101) - 1.
-    expect((preview.length + 1) % 101).toBe(0);
+    const noticeStart = text.indexOf("\n\n[... truncated");
+    const noticeEnd = text.indexOf("]\n\n", noticeStart) + 3;
+    const head = text.slice(0, noticeStart);
+    const tail = text.slice(noticeEnd);
+    // Head should end at a complete line boundary — (n * 101) - 1 chars
+    expect((head.length + 1) % 101).toBe(0);
+    // Tail should contain only complete lines — each line is 101 chars
+    // (the tail includes the trailing newline of each line)
+    expect(tail.length % 101).toBe(0);
   });
 
   test("empty toolCallId falls back to Date.now()", async () => {
     const result = await tool.execute("", {
-      command: `python3 -c "print('y' * 30000)"`,
+      command: `python3 -c "import sys; sys.stdout.write('y' * 120000)"`,
     });
     const text = result.content[0].text;
-    expect(text).toContain("[Full output persisted to");
+    expect(text).toContain("[... truncated");
     // File should exist with a numeric name
     expect(text).toMatch(/\/\d+\.txt/);
   });
 
-  test("output under 25k is returned in full", async () => {
+  test("leading newline does not produce empty head", async () => {
+    // Output starts with \n followed by 120,000 x's
+    const result = await tool.execute("leading-nl", {
+      command: `python3 -c "import sys; sys.stdout.write('\\n' + 'x' * 120000)"`,
+    });
+    const text = result.content[0].text;
+    const noticeStart = text.indexOf("\n\n[... truncated");
+    const head = text.slice(0, noticeStart);
+    // headBreak === 0 (\n at position 0) falls back to HEAD_SIZE, not empty
+    expect(head.length).toBe(50000);
+    expect(head.startsWith("\n")).toBe(true);
+  });
+
+  test("persistence failure returns head+tail with 'output lost'", async () => {
+    // Point sessionDir at an impossible path so mkdir throws
+    const failBash = bashTool("/dev/null/impossible");
+    const failTool = failBash.tool;
+    try {
+      const result = await failTool.execute("fail-persist", {
+        command: `python3 -c "import sys; sys.stdout.write('A' * 60000 + 'B' * 60000)"`,
+      });
+      const text = result.content[0].text;
+      expect(text).toContain("output lost");
+      expect(text).toContain("persistence failed");
+      // Head and tail still present
+      expect(text.startsWith("A")).toBe(true);
+      expect(text.endsWith("B")).toBe(true);
+    } finally {
+      await failBash.dispose();
+    }
+  });
+
+  test("output under 100k is returned in full", async () => {
     const result = await tool.execute("small-test", {
       command: `python3 -c "print('z' * 1000)"`,
     });
     const text = result.content[0].text;
-    expect(text).not.toContain("[Full output persisted");
+    expect(text).not.toContain("[... truncated");
     expect(text.length).toBe(1001); // 1000 z's + newline
   });
 
@@ -351,7 +398,7 @@ describe("bash tool", () => {
 
   test("description includes sessionDir and truncation note", () => {
     expect(tool.description).toContain(tmpDir);
-    expect(tool.description).toContain("Output over 25,000 chars is truncated");
+    expect(tool.description).toContain("Output over 100000 chars is truncated");
   });
 
   // --- Persistent session tests ---
