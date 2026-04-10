@@ -7,7 +7,18 @@ import type { ToolResultMessage } from "@mariozechner/pi-ai";
 
 const TEST_DIR = resolve(import.meta.dirname, "..", "data/test-tool-results");
 const TEST_HINT_DIR = "data/sessions/latest/tool-results";
-const transformContext = makeTransformContext(TEST_DIR, TEST_HINT_DIR);
+
+// Small context window so tests can easily trigger pressure.
+// 1000 tokens * 4 chars/token = 4000 chars of headroom at 100%.
+// At 80% threshold that's 800 tokens = 3200 chars before compaction fires.
+const SMALL_CTX = 1000;
+
+// Large context window — nothing triggers compaction at this size.
+const LARGE_CTX = 1_000_000;
+
+function makeCtx(contextWindow = SMALL_CTX, systemPrompt = "") {
+  return makeTransformContext(TEST_DIR, TEST_HINT_DIR, contextWindow, systemPrompt);
+}
 
 function userMsg(text: string): AgentMessage {
   return { role: "user", content: [{ type: "text", text }] };
@@ -39,225 +50,221 @@ function toolResult(toolName: string, text: string, opts?: { isError?: boolean; 
   };
 }
 
-// Append enough turns after a target message to push it into the stale zone
-// (before freshBoundary). Needs at least FRESH_WINDOW_TURNS + 1 assistant turns
-// after the target.
-function stalePadding(): AgentMessage[] {
+// 11 turns of padding to push earlier messages outside the 10-turn protection zone.
+// Each turn: user + assistant + toolResult (small text so padding itself doesn't
+// dominate the char budget — the target message should be what pushes over pressure).
+function protectionPadding(): AgentMessage[] {
   const pad: AgentMessage[] = [];
-  for (let i = 0; i < 5; i++) {
-    pad.push(userMsg(`pad ${i}`), assistantMsg(`pad ${i}`));
+  for (let i = 0; i < 11; i++) {
+    pad.push(userMsg(`p${i}`), assistantMsg(`a${i}`), toolResult("read", `r${i}`));
   }
   return pad;
 }
 
 describe("transformContext", () => {
-  describe("microcompaction", () => {
-    test("results under 10k pass through unchanged", async () => {
+  describe("pressure trigger", () => {
+    test("below 80% pressure, nothing compacts", async () => {
+      const ctx = makeCtx(LARGE_CTX);
       const messages: AgentMessage[] = [
         userMsg("go"),
-        toolResult("read", "x".repeat(9_999)),
+        assistantMsg("calling"),
+        toolResult("read", "x".repeat(20_000)),
+        ...protectionPadding(),
       ];
-      const result = await transformContext(messages);
-      const tr = result[1];
-      expect(tr.role).toBe("toolResult");
-      const text = (tr as ToolResultMessage).content[0];
-      expect(text.type).toBe("text");
-      expect(text.text).toBe("x".repeat(9_999));
+      const result = await ctx(messages);
+      const tr = result[2];
+      expect((tr as ToolResultMessage).content[0].text).toBe("x".repeat(20_000));
     });
 
-    test("preserves non-text content blocks when microcompacting", async () => {
+    test("results are compacted under pressure", async () => {
+      const ctx = makeCtx(SMALL_CTX);
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        assistantMsg("calling"),
+        toolResult("bash", "x".repeat(5_000)),
+        ...protectionPadding(),
+      ];
+      const result = await ctx(messages);
+      const tr = result[2];
+      const text = (tr as ToolResultMessage).content[0].text;
+      expect(text).toContain("[Full output persisted to");
+      expect(text.length).toBeLessThan(2_200);
+    });
+
+    test("small tool results are compacted when over pressure", async () => {
+      // contextWindow = 100 tokens → threshold = 80 tokens = 320 chars.
+      // 500-char result + ~75 chars padding easily exceeds 320.
+      const ctx = makeCtx(100);
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        assistantMsg("calling"),
+        toolResult("read", "x".repeat(500)),
+        ...protectionPadding(),
+      ];
+      const result = await ctx(messages);
+      const tr = result[2];
+      const text = (tr as ToolResultMessage).content[0].text;
+      expect(text).toContain("[Full output persisted to");
+    });
+  });
+
+  describe("protection zone", () => {
+    test("protection zone covers exactly last 10 turns", async () => {
+      const ctx = makeCtx(SMALL_CTX);
+      // Turn 0 (outside protection — 11th from end)
+      const messages: AgentMessage[] = [
+        userMsg("t0"), assistantMsg("a0"), toolResult("bash", "A".repeat(3_000)),
+      ];
+      // Turns 1-10 (protected — last 10 turns)
+      for (let i = 1; i <= 10; i++) {
+        messages.push(userMsg(`t${i}`), assistantMsg(`a${i}`), toolResult("bash", "B".repeat(3_000)));
+      }
+
+      const result = await ctx(messages);
+
+      // Turn 0 result (idx 2) — outside protection, compacted
+      const t0 = result[2];
+      expect((t0 as ToolResultMessage).content[0].text).toContain("[Full output persisted to");
+
+      // Turns 1-10 results — inside protection, untouched
+      for (let i = 1; i <= 10; i++) {
+        const idx = i * 3 + 2;
+        const tr = result[idx];
+        expect((tr as ToolResultMessage).content[0].text).toBe("B".repeat(3_000));
+      }
+    });
+  });
+
+  describe("compaction behavior", () => {
+    test("compaction stops once pressure drops below threshold", async () => {
+      // contextWindow = 2500 tokens → threshold = 2000 tokens = 8000 chars.
+      // Two compactable 3000-char tool results outside protection zone.
+      // Padding adds ~11*6 = ~66 chars. System prompt = 0.
+      // Total before compaction: ~6066 chars. Wait, that's under 8000.
+      // Need to calibrate: make the results bigger or the window smaller.
+      // contextWindow = 1500 → threshold = 1200 tokens = 4800 chars.
+      // Two 3000-char results + padding ~66 = ~6066 chars → over 4800.
+      // Compacting first result saves ~3000-2100 = ~900 chars → ~5166 chars, still over.
+      // Compacting second result saves ~900 more → ~4266, under 4800. Both compact.
+      // Instead: contextWindow = 1800 → threshold = 1440 tokens = 5760 chars.
+      // Two 3000-char results + padding ~66 = ~6066 → over 5760.
+      // Compacting first saves ~900 → ~5166, under 5760. Only first compacts.
+      const ctx = makeCtx(1800);
+      const id1 = "tc_stop1_" + Date.now();
+      const id2 = "tc_stop2_" + Date.now();
+      const messages: AgentMessage[] = [
+        userMsg("t0"), assistantMsg("a0"), toolResult("bash", "A".repeat(3_000), { toolCallId: id1 }),
+        userMsg("t1"), assistantMsg("a1"), toolResult("bash", "B".repeat(3_000), { toolCallId: id2 }),
+      ];
+      // Add 10 turns of small padding for protection zone
+      for (let i = 2; i <= 11; i++) {
+        messages.push(userMsg(`t${i}`), assistantMsg(`a${i}`), toolResult("read", `r${i}`));
+      }
+
+      const result = await ctx(messages);
+
+      // First result (idx 2) — compacted
+      expect((result[2] as ToolResultMessage).content[0].text).toContain("[Full output persisted to");
+      // Second result (idx 5) — pressure dropped, not compacted
+      expect((result[5] as ToolResultMessage).content[0].text).toBe("B".repeat(3_000));
+    });
+
+    test("already-compacted results are skipped", async () => {
+      const ctx = makeCtx(SMALL_CTX);
+      const alreadyCompacted = toolResult("bash", "preview text\n\n[Full output persisted to data/sessions/latest/tool-results/old.txt — use read tool to access]");
+      const messages: AgentMessage[] = [
+        userMsg("go"),
+        assistantMsg("calling"),
+        alreadyCompacted,
+        ...protectionPadding(),
+      ];
+      const result = await ctx(messages);
+      // Should be unchanged — not re-compacted, no new file written
+      expect((result[2] as ToolResultMessage).content[0].text).toBe(
+        (alreadyCompacted as ToolResultMessage).content[0].text,
+      );
+    });
+
+    test("preserves non-text content blocks when compacting", async () => {
+      const ctx = makeCtx(SMALL_CTX);
       const imageBlock = { type: "image" as const, source: { type: "base64" as const, media_type: "image/png" as const, data: "abc" } };
       const messages: AgentMessage[] = [
         userMsg("go"),
-        toolResult("read", "x".repeat(11_000), { extraContent: [imageBlock] }),
-        ...stalePadding(),
+        assistantMsg("calling"),
+        toolResult("read", "x".repeat(5_000), { extraContent: [imageBlock] }),
+        ...protectionPadding(),
       ];
 
-      const result = await transformContext(messages);
-      const tr = result[1];
-      expect(tr.role).toBe("toolResult");
-      const content = (tr as ToolResultMessage).content;
+      const result = await ctx(messages);
+      const content = (result[2] as ToolResultMessage).content;
       expect(content.length).toBe(2);
       expect(content[0].type).toBe("text");
       expect(content[1].type).toBe("image");
     });
 
-    test("microcompaction persists full text and keeps 2k preview", async () => {
-      const fullText = "x".repeat(12_000);
-      const messages: AgentMessage[] = [
-        userMsg("go"),
-        toolResult("read", fullText),
-        ...stalePadding(),
-      ];
-
-      const result = await transformContext(messages);
-      const tr = result[1];
-      expect(tr.role).toBe("toolResult");
-      const text = (tr as ToolResultMessage).content[0];
-      expect(text.type).toBe("text");
-      expect(text.text).toContain("x".repeat(2_000));
-      expect(text.text).toContain("[Full output persisted to data/sessions/latest/tool-results/");
-      expect(text.text.length).toBeLessThan(2_200);
-    });
-
     test("persisted file contains full original text", async () => {
+      const ctx = makeCtx(SMALL_CTX);
       const callId = "tc_persist_check_" + Date.now();
-      const fullText = "y".repeat(12_000);
+      const fullText = "y".repeat(5_000);
       const messages: AgentMessage[] = [
         userMsg("go"),
+        assistantMsg("calling"),
         toolResult("read", fullText, { toolCallId: callId }),
-        ...stalePadding(),
+        ...protectionPadding(),
       ];
 
-      await transformContext(messages);
+      await ctx(messages);
 
       const filePath = resolve(TEST_DIR, `${callId}.txt`);
       expect(existsSync(filePath)).toBe(true);
-      const written = readFileSync(filePath, "utf-8");
-      expect(written).toBe(fullText);
+      expect(readFileSync(filePath, "utf-8")).toBe(fullText);
     });
 
     test("write failure still truncates to preview", async () => {
-      const failCtx = makeTransformContext("/dev/null/impossible/path", "data/sessions/latest/tool-results");
+      const failCtx = makeTransformContext("/dev/null/impossible/path", TEST_HINT_DIR, SMALL_CTX, "");
       const messages: AgentMessage[] = [
         userMsg("go"),
-        toolResult("bash", "z".repeat(15_000)),
-        ...stalePadding(),
+        assistantMsg("calling"),
+        toolResult("bash", "z".repeat(5_000)),
+        ...protectionPadding(),
       ];
 
       const result = await failCtx(messages);
-      const tr = result[1];
-      expect(tr.role).toBe("toolResult");
-      const text = (tr as ToolResultMessage).content[0];
-      expect(text.type).toBe("text");
-      expect(text.text.length).toBeLessThan(2_200);
-      expect(text.text).toContain("z".repeat(2_000));
-      expect(text.text).toContain("[Full output lost");
-    });
-  });
-
-  describe("age-based freshness", () => {
-    test("fresh large results pass through unchanged", async () => {
-      const messages: AgentMessage[] = [
-        userMsg("go"),
-        assistantMsg("calling tool"),
-        toolResult("bash", "x".repeat(12_000)),
-      ];
-      const result = await transformContext(messages);
-      const tr = result[2];
-      expect(tr.role).toBe("toolResult");
-      const text = (tr as ToolResultMessage).content[0];
-      expect(text.type).toBe("text");
-      expect(text.text).toBe("x".repeat(12_000));
-    });
-
-    test("stale large results are microcompacted", async () => {
-      const messages: AgentMessage[] = [
-        userMsg("go"),
-        assistantMsg("calling tool"),
-        toolResult("bash", "x".repeat(12_000)),
-        ...stalePadding(),
-      ];
-      const result = await transformContext(messages);
-      const tr = result[2];
-      expect(tr.role).toBe("toolResult");
-      const text = (tr as ToolResultMessage).content[0];
-      expect(text.type).toBe("text");
-      expect(text.text).toContain("[Full output persisted to");
-      expect(text.text.length).toBeLessThan(2_200);
-    });
-
-    test("stale small results pass through unchanged", async () => {
-      const messages: AgentMessage[] = [
-        userMsg("go"),
-        assistantMsg("calling tool"),
-        toolResult("bash", "x".repeat(5_000)),
-        ...stalePadding(),
-      ];
-      const result = await transformContext(messages);
-      const tr = result[2];
-      expect(tr.role).toBe("toolResult");
-      const text = (tr as ToolResultMessage).content[0];
-      expect(text.type).toBe("text");
-      expect(text.text).toBe("x".repeat(5_000));
-    });
-
-    test("boundary: first turn stale, last four fresh", async () => {
-      const messages: AgentMessage[] = [
-        // Turn 1 (stale — before the 4th-from-end assistant msg)
-        userMsg("t1"), assistantMsg("a1"), toolResult("bash", "A".repeat(12_000)),
-        // Turns 2-5 (fresh window)
-        userMsg("t2"), assistantMsg("a2"), toolResult("bash", "B".repeat(12_000)),
-        userMsg("t3"), assistantMsg("a3"), toolResult("bash", "C".repeat(12_000)),
-        userMsg("t4"), assistantMsg("a4"), toolResult("bash", "D".repeat(12_000)),
-        userMsg("t5"), assistantMsg("a5"), toolResult("bash", "E".repeat(12_000)),
-      ];
-      const result = await transformContext(messages);
-
-      // Turn 1 result (idx 2) — stale, compacted
-      const t1 = result[2];
-      expect(t1.role).toBe("toolResult");
-      const t1text = (t1 as ToolResultMessage).content[0];
-      expect(t1text.type).toBe("text");
-      expect(t1text.text).toContain("[Full output persisted to");
-
-      // Turns 2-5 results — fresh, pass through
-      for (const idx of [5, 8, 11, 14]) {
-        const tr = result[idx];
-        expect(tr.role).toBe("toolResult");
-        const text = (tr as ToolResultMessage).content[0];
-        expect(text.type).toBe("text");
-        expect(text.text.length).toBe(12_000);
-      }
-    });
-
-    test("short conversations never compact", async () => {
-      // Only 3 assistant turns — all fresh
-      const messages: AgentMessage[] = [
-        userMsg("t1"), assistantMsg("a1"), toolResult("bash", "x".repeat(20_000)),
-        userMsg("t2"), assistantMsg("a2"), toolResult("bash", "y".repeat(20_000)),
-        userMsg("t3"), assistantMsg("a3"), toolResult("bash", "z".repeat(20_000)),
-      ];
-      const result = await transformContext(messages);
-      for (const idx of [2, 5, 8]) {
-        const tr = result[idx];
-        expect(tr.role).toBe("toolResult");
-        const text = (tr as ToolResultMessage).content[0];
-        expect(text.type).toBe("text");
-        expect(text.text.length).toBe(20_000);
-      }
+      const text = (result[2] as ToolResultMessage).content[0].text;
+      expect(text.length).toBeLessThan(2_200);
+      expect(text).toContain("z".repeat(2_000));
+      expect(text).toContain("[Full output lost");
     });
   });
 
   describe("error passthrough", () => {
-    test("never compacts error results regardless of size", async () => {
-      const bigError = "E".repeat(15_000);
+    test("never compacts error results", async () => {
+      const ctx = makeCtx(SMALL_CTX);
+      const bigError = "E".repeat(5_000);
       const messages: AgentMessage[] = [
         userMsg("go"),
+        assistantMsg("calling"),
         toolResult("bash", bigError, { isError: true }),
-        ...stalePadding(),
+        ...protectionPadding(),
       ];
 
-      const result = await transformContext(messages);
-      const tr = result[1];
-      expect(tr.role).toBe("toolResult");
-      const text = (tr as ToolResultMessage).content[0];
-      expect(text.type).toBe("text");
-      expect(text.text).toBe(bigError);
+      const result = await ctx(messages);
+      expect((result[2] as ToolResultMessage).content[0].text).toBe(bigError);
     });
   });
 
   describe("setLastResult integration", () => {
-    test("microcompaction calls setLastResult with absolute writePath", async () => {
+    test("compaction calls setLastResult with absolute writePath", async () => {
       const calls: string[] = [];
       const setLastResult = (path: string) => { calls.push(path); };
-      const ctx = makeTransformContext(TEST_DIR, TEST_HINT_DIR, setLastResult);
+      const ctx = makeTransformContext(TEST_DIR, TEST_HINT_DIR, SMALL_CTX, "", setLastResult);
 
       const callId = "tc_inject_" + Date.now();
       const messages: AgentMessage[] = [
         userMsg("go"),
-        toolResult("bash", "x".repeat(12_000), { toolCallId: callId }),
-        ...stalePadding(),
+        assistantMsg("calling"),
+        toolResult("bash", "x".repeat(5_000), { toolCallId: callId }),
+        ...protectionPadding(),
       ];
 
       await ctx(messages);
@@ -266,15 +273,16 @@ describe("transformContext", () => {
       expect(calls[0]).toBe(`${TEST_DIR}/${callId}.txt`);
     });
 
-    test("setLastResult not called for small results", async () => {
+    test("setLastResult not called for protected results", async () => {
       const calls: string[] = [];
       const setLastResult = (path: string) => { calls.push(path); };
-      const ctx = makeTransformContext(TEST_DIR, TEST_HINT_DIR, setLastResult);
+      const ctx = makeTransformContext(TEST_DIR, TEST_HINT_DIR, SMALL_CTX, "", setLastResult);
 
+      // Only 3 turns — all inside protection zone
       const messages: AgentMessage[] = [
-        userMsg("go"),
-        toolResult("bash", "small output"),
-        ...stalePadding(),
+        userMsg("go"), assistantMsg("a"), toolResult("bash", "x".repeat(5_000)),
+        userMsg("go2"), assistantMsg("a2"), toolResult("bash", "y".repeat(5_000)),
+        userMsg("go3"), assistantMsg("a3"), toolResult("bash", "z".repeat(5_000)),
       ];
 
       await ctx(messages);
@@ -284,12 +292,13 @@ describe("transformContext", () => {
     test("setLastResult not called when persistence fails", async () => {
       const calls: string[] = [];
       const setLastResult = (path: string) => { calls.push(path); };
-      const ctx = makeTransformContext("/dev/null/impossible/path", TEST_HINT_DIR, setLastResult);
+      const ctx = makeTransformContext("/dev/null/impossible/path", TEST_HINT_DIR, SMALL_CTX, "", setLastResult);
 
       const messages: AgentMessage[] = [
         userMsg("go"),
-        toolResult("bash", "x".repeat(12_000)),
-        ...stalePadding(),
+        assistantMsg("calling"),
+        toolResult("bash", "x".repeat(5_000)),
+        ...protectionPadding(),
       ];
 
       await ctx(messages);
