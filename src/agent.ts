@@ -63,9 +63,15 @@ function forwardAgentTrace(e: AgentEvent): void {
     }
     case "message_end":
       switch (e.message.role) {
-        case "assistant":
+        case "assistant": {
           traceAssistantMessage(e.message);
+          const { input, output, cacheRead, cacheWrite, totalTokens, cost } = e.message.usage;
+          logger.info(
+            { input, output, cacheRead, cacheWrite, totalTokens, cost: cost.total },
+            "model usage",
+          );
           break;
+        }
         case "user":
           traceEvent("user_message", { text: extractUserText(e.message.content) });
           break;
