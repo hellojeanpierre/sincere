@@ -83,12 +83,12 @@ describe("bash tool", () => {
     expect(result.details).toBeNull();
   });
 
-  test("&& chaining is blocked", async () => {
+  test("&& chaining is allowed", async () => {
     const result = await tool.execute("test", {
-      command: "grep foo file && rm file",
+      command: "echo hello && echo world",
     });
-    expect(result.content[0].text).toContain("disallowed shell operator");
-    expect(result.details).toBeNull();
+    expect(result.content[0].text).toContain("hello");
+    expect(result.content[0].text).toContain("world");
   });
 
   test("|| chaining is blocked", async () => {
@@ -398,7 +398,7 @@ describe("bash tool", () => {
 
   test("description includes sessionDir and truncation note", () => {
     expect(tool.description).toContain(tmpDir);
-    expect(tool.description).toContain("Output over 100,000 chars is truncated");
+    expect(tool.description).toContain("Output over 100000 chars is truncated");
   });
 
   // --- Persistent session tests ---

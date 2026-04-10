@@ -5,7 +5,7 @@ import { Type } from "@mariozechner/pi-ai";
 import { logger } from "../lib/logger.ts";
 
 const bashSchema = Type.Object({
-  command: Type.String({ description: "Shell command to execute against the working directory" }),
+  command: Type.String(),
 });
 
 const ALLOWED_BINARIES = new Set([
@@ -36,7 +36,6 @@ const ALLOWED_BINARIES = new Set([
 // so e.g. && is tested before &. Pipe is handled separately (splits segments).
 // Redirects are handled separately (digit-prefix regex doesn't fit this pattern).
 const DISALLOWED_OPS = [
-  { match: "&&", name: "&&" },
   { match: "||", name: "||" },
   { match: "$(", name: "$()" },
   { match: "`", name: "backticks" },
@@ -157,6 +156,14 @@ function tokenizeShell(command: string): TokenizeResult | string {
       quote = Quote.Double;
       current += ch;
       i++;
+      continue;
+    }
+
+    // && — allowed operator, splits segments (each side has its own binary)
+    if (command.startsWith("&&", i)) {
+      operators.push("&&");
+      pushSegment();
+      i += 2;
       continue;
     }
 
@@ -487,7 +494,7 @@ export function bashTool(sessionDir: string, timeoutMs = COMMAND_TIMEOUT_MS): Ba
   const tool: AgentTool<typeof bashSchema> = {
     name: "bash",
     label: "Execute Command",
-    description: `Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). ${timeoutMs / 1000}-second timeout. Output over 100,000 chars is truncated to first 50,000 + last 50,000 chars. Full output is persisted to ${sessionDir}/{toolCallId}.txt.`,
+    description: `Run a shell command in the project working directory and return stdout/stderr. The shell session is persistent — variables, files, and working directory survive across calls. Use && to chain dependent commands and | for pipelines. Only allowlisted binaries: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No other shell chaining (;, ||), no redirects (>, >>), no command substitution ($(), backticks). ${timeoutMs / 1000}-second timeout. Output over ${MAX_OUTPUT} chars is truncated to first ${HEAD_SIZE} + last ${TAIL_SIZE} chars; full output persisted to ${sessionDir}/{toolCallId}.txt.`,
     parameters: bashSchema,
     async execute(toolCallId, params) {
       const error = validateCommand(params.command);
