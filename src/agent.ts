@@ -80,77 +80,114 @@ function forwardAgentTrace(e: AgentEvent): void {
   }
 }
 
-// Microcompaction: persist oversized stale tool results to disk, keep a 2k
-// preview inline. Fresh results (within the last FRESH_WINDOW_TURNS assistant
-// turns) pass through unchanged — bash owns the size gate for those.
-const FRESH_WINDOW_TURNS = 4;
+// Pressure-based microcompaction: persist tool results to disk when estimated
+// context utilization exceeds PRESSURE_THRESHOLD of the model's context window.
+// Compacts oldest tool results first, preserving the last PROTECTED_TURNS
+// verbatim. No size floor — any tool result outside the protection zone is
+// eligible when pressure is high.
+const PRESSURE_THRESHOLD = 0.8;
+const CHARS_PER_TOKEN = 4;
+const PROTECTED_TURNS = 10;
 
-export function makeTransformContext(sessionDir: string, hintDir: string, setLastResult?: (path: string) => void) {
+const COMPACTED_MARKER = "— use read tool to access]";
+
+function estimateMessageChars(msg: AgentMessage): number {
+  if (msg.role === "user") {
+    if (typeof msg.content === "string") return msg.content.length;
+    return (msg.content as any[]).reduce((sum, b) => sum + (b.type === "text" ? b.text.length : 100), 0);
+  }
+  if (msg.role === "assistant") {
+    return (msg.content as any[]).reduce((sum, b) => {
+      if (b.type === "text") return sum + b.text.length;
+      if (b.type === "thinking") return sum + (b.thinking?.length ?? 0);
+      if (b.type === "tool_call") return sum + JSON.stringify(b.arguments ?? {}).length;
+      return sum;
+    }, 0);
+  }
+  if (msg.role === "toolResult") {
+    return ((msg as ToolResultMessage).content as any[]).reduce(
+      (sum, b) => sum + (b.type === "text" ? b.text.length : 100), 0,
+    );
+  }
+  return 0;
+}
+
+function findProtectionBoundary(messages: AgentMessage[]): number {
+  let turns = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user") {
+      turns++;
+      if (turns >= PROTECTED_TURNS) return i;
+    }
+  }
+  return 0;
+}
+
+export function makeTransformContext(
+  sessionDir: string,
+  hintDir: string,
+  contextWindow: number,
+  systemPrompt: string,
+  setLastResult?: (path: string) => void,
+) {
   let dirReady = false;
 
   return async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
-    let assistantCount = 0;
-    // 0 means all messages are in the fresh window — correct default when the
-    // conversation has fewer than FRESH_WINDOW_TURNS assistant turns.
-    let freshBoundary = 0;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "assistant") {
-        assistantCount++;
-        if (assistantCount >= FRESH_WINDOW_TURNS) {
-          freshBoundary = i;
-          break;
-        }
-      }
-    }
+    let totalChars = systemPrompt.length;
+    for (const msg of messages) totalChars += estimateMessageChars(msg);
 
-    return Promise.all(messages.map(async (msg, idx) => {
-      if (msg.role !== "toolResult" || msg.isError) return msg;
-      // Assumes ordering: user → assistant → toolResult(s). If multiple
-      // toolResults follow one assistant message, this index-based check still
-      // holds — they all share the same stale/fresh classification. Would only
-      // misclassify if toolResults appeared before their assistant message.
-      if (idx >= freshBoundary) return msg;
+    const threshold = contextWindow * PRESSURE_THRESHOLD;
+    if (totalChars / CHARS_PER_TOKEN <= threshold) return messages;
+
+    const protectedStart = findProtectionBoundary(messages);
+    if (protectedStart === 0) return messages;
+
+    const result = [...messages];
+    for (let i = 0; i < protectedStart; i++) {
+      const msg = result[i];
+      if (msg.role !== "toolResult" || msg.isError) continue;
 
       const trMsg = msg as ToolResultMessage;
-      const texts = trMsg.content.filter((b): b is TextContent => b.type === "text");
-      const totalLen = texts.reduce((sum, b) => sum + b.text.length, 0);
+      if (!trMsg.toolCallId) continue;
 
-      if (totalLen > 10_000 && trMsg.toolCallId) {
-        const joined = texts.map(b => b.text).join("\n");
-        const safeId = trMsg.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_");
-        const writePath = `${sessionDir}/${safeId}.txt`;
-        const hintPath = `${hintDir}/${safeId}.txt`;
-        const nonText = trMsg.content.filter(b => b.type !== "text");
-        const preview = joined.slice(0, 2_000);
-        try {
-          if (!dirReady) {
-            await mkdir(sessionDir, { recursive: true });
-            dirReady = true;
-          }
-          await writeFile(writePath, joined);
-          setLastResult?.(writePath);
-          logger.info({ toolCallId: trMsg.toolCallId, toolName: trMsg.toolName, chars: totalLen, path: writePath }, "microcompaction persisted");
-          return {
-            ...trMsg,
-            content: [
-              { type: "text" as const, text: preview + `\n\n[Full output persisted to ${hintPath} — use read tool to access]` },
-              ...nonText,
-            ],
-          };
-        } catch (err) {
-          logger.error({ toolCallId: trMsg.toolCallId, err }, "microcompaction write failed, truncating without persistence");
-          return {
-            ...trMsg,
-            content: [
-              { type: "text" as const, text: preview + `\n\n[Full output lost — persistence failed]` },
-              ...nonText,
-            ],
-          };
+      const texts = trMsg.content.filter((b): b is TextContent => b.type === "text");
+      if (texts.some(b => b.text.endsWith(COMPACTED_MARKER))) continue;
+
+      const totalLen = texts.reduce((sum, b) => sum + b.text.length, 0);
+      const joined = texts.map(b => b.text).join("\n");
+      const safeId = trMsg.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_");
+      const writePath = `${sessionDir}/${safeId}.txt`;
+      const hintPath = `${hintDir}/${safeId}.txt`;
+      const nonText = trMsg.content.filter(b => b.type !== "text");
+      const preview = joined.slice(0, 2_000);
+
+      try {
+        if (!dirReady) {
+          await mkdir(sessionDir, { recursive: true });
+          dirReady = true;
         }
+        await writeFile(writePath, joined);
+        setLastResult?.(writePath);
+        const compactedText = preview + `\n\n[Full output persisted to ${hintPath} ${COMPACTED_MARKER}`;
+        logger.info({ toolCallId: trMsg.toolCallId, toolName: trMsg.toolName, chars: totalLen, path: writePath }, "microcompaction persisted");
+        result[i] = {
+          ...trMsg,
+          content: [{ type: "text" as const, text: compactedText }, ...nonText],
+        };
+        totalChars -= (totalLen - compactedText.length);
+      } catch (err) {
+        logger.error({ toolCallId: trMsg.toolCallId, err }, "microcompaction write failed, truncating without persistence");
+        const fallbackText = preview + `\n\n[Full output lost — persistence failed]`;
+        result[i] = {
+          ...trMsg,
+          content: [{ type: "text" as const, text: fallbackText }, ...nonText],
+        };
+        totalChars -= (totalLen - fallbackText.length);
       }
 
-      return msg;
-    }));
+      if (totalChars / CHARS_PER_TOKEN <= threshold) break;
+    }
+    return result;
   };
 }
 
@@ -247,7 +284,7 @@ export function createAgent(opts: AgentOptions): { agent: Agent; dispose: () => 
   const agent = new Agent({
     streamFn: streamSimple,
     getApiKey: () => apiKey,
-    transformContext: makeTransformContext(sessionDir, hintDir, bash.setLastResult),
+    transformContext: makeTransformContext(sessionDir, hintDir, model.contextWindow, systemPrompt, bash.setLastResult),
     initialState: {
       systemPrompt,
       model,
