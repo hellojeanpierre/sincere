@@ -89,6 +89,10 @@ export function makeTransformContext(sessionDir: string, hintDir: string, setLas
   let dirReady = false;
 
   return async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
+    // --- microcompaction disabled: return all messages uncompacted ---
+    return messages;
+    // --- end disabled block ---
+
     let assistantCount = 0;
     // 0 means all messages are in the fresh window — correct default when the
     // conversation has fewer than FRESH_WINDOW_TURNS assistant turns.
