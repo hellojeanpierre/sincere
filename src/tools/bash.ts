@@ -245,8 +245,9 @@ function validateCommand(command: string): string | null {
   return null;
 }
 
-const MAX_OUTPUT = 25_000;
-const PREVIEW_LIMIT = 2_000;
+const MAX_OUTPUT = 100_000;
+const HEAD_SIZE = 50_000;
+const TAIL_SIZE = 50_000;
 const COMMAND_TIMEOUT_MS = 30_000;
 const STDERR_FLUSH_DELAY_MS = 50;
 const POLL_INTERVAL_MS = 100;
@@ -486,7 +487,7 @@ export function bashTool(sessionDir: string, timeoutMs = COMMAND_TIMEOUT_MS): Ba
   const tool: AgentTool<typeof bashSchema> = {
     name: "bash",
     label: "Execute Command",
-    description: `Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). ${timeoutMs / 1000}-second timeout. Output over 25,000 chars is truncated to a 2,000-char preview. Full output is persisted to ${sessionDir}/{toolCallId}.txt.`,
+    description: `Run a shell command in the project working directory and return stdout/stderr. Only allowlisted read-only binaries are permitted: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No shell chaining (;, &&, ||), no redirects (>, >>), no command substitution ($(), backticks). ${timeoutMs / 1000}-second timeout. Output over 100,000 chars is truncated to first 50,000 + last 50,000 chars. Full output is persisted to ${sessionDir}/{toolCallId}.txt.`,
     parameters: bashSchema,
     async execute(toolCallId, params) {
       const error = validateCommand(params.command);
@@ -534,9 +535,19 @@ export function bashTool(sessionDir: string, timeoutMs = COMMAND_TIMEOUT_MS): Ba
 
       if (text.length > MAX_OUTPUT) {
         const safeId = toolCallId ? toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_") : String(Date.now());
-        const lastNewline = text.lastIndexOf("\n", PREVIEW_LIMIT);
-        const preview = text.slice(0, lastNewline > 0 ? lastNewline : PREVIEW_LIMIT);
         const path = `${sessionDir}/${safeId}.txt`;
+
+        // Both snaps go inward (head backward, tail forward) to keep only
+        // complete lines and maximise the omitted region.
+        const headBreak = text.lastIndexOf("\n", HEAD_SIZE);
+        const head = text.slice(0, headBreak > 0 ? headBreak : HEAD_SIZE);
+
+        const tailStart = text.indexOf("\n", text.length - TAIL_SIZE);
+        const tail = text.slice(tailStart >= 0 ? tailStart + 1 : text.length - TAIL_SIZE);
+
+        const omitted = Math.max(0, text.length - head.length - tail.length);
+        const notice = `\n\n[... truncated ${omitted} characters — full output persisted to ${path} — use read tool to access]\n\n`;
+        const preview = head + notice + tail;
 
         try {
           if (!dirReady) {
@@ -546,13 +557,13 @@ export function bashTool(sessionDir: string, timeoutMs = COMMAND_TIMEOUT_MS): Ba
           await writeFile(path, text);
           logger.info({ toolCallId, command: params.command, chars: text.length, path }, "bash output truncated and persisted");
           return {
-            content: [{ type: "text", text: preview + `\n\n[Full output persisted to ${path} — use read tool to access]` }],
+            content: [{ type: "text", text: preview }],
             details: { command: params.command, exitCode, durationMs },
           };
         } catch (err) {
           logger.error({ toolCallId, err }, "bash output persistence failed");
           return {
-            content: [{ type: "text", text: preview + `\n\n[Full output lost — persistence failed]` }],
+            content: [{ type: "text", text: head + `\n\n[... truncated ${omitted} characters — full output lost — persistence failed]\n\n` + tail }],
             details: { command: params.command, exitCode, durationMs },
           };
         }
