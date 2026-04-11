@@ -12,7 +12,7 @@ Script all quantitative claims. Aggregation reveals where to look; the raw conte
 
 ## Scripts carry the analysis
 
-Every analytical claim must trace back to script output. Whenmconsolidating, write a script that classifies every record and
+Every analytical claim must trace back to script output. When consolidating, write a script that classifies every record and
 outputs the assignment.
 
 Nested and metadata fields that don't surface in a typical aggregation (objects-inside-objects, tags arrays, tier fields)
