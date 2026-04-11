@@ -8,14 +8,8 @@ roles: [operator]
 
 ## Core principle
 
-Script everything. Aggregation reveals where to look; the raw content of individual records reveals why. Any question you can answer with a script — counting, classifying, cross-referencing, verifying — must be answered with a script, not by reasoning about recalled data.
+Script everything. Any question you can answer with a script — counting, classifying, cross-referencing — must be answered with a script, not by reasoning about recalled data. Prefer fewer, wider scripts that cross-tabulate multiple fields over many narrow scripts that each probe one dimension.
 
-## Scripts carry the analysis
+## Depth comes from fields, not passes
 
-Every analytical claim — a cohort boundary, an impact number, a causal attribution — must trace back to script output. When consolidating findings, write a script that assigns every record to a finding or to an explicitly labeled residual, and outputs the assignment table. A finding that cannot be reproduced by re-running its script is not a finding.
-
-Nested and metadata fields that don't surface in a typical aggregation (objects-inside-objects, tags arrays, tier fields) contain the variables that distinguish subgroups. Include them in your field inventory early — profiling scripts should enumerate all fields, including nested ones.
-
-## Verification
-
-A hypothesis becomes a finding only after a script has tried to break it. When the next script confirms the pattern instead of testing an alternative explanation, you are describing, not investigating. Every record the analysis touches must land in exactly one bucket — finding or named residual. Records left in an unlabeled "other" category are unfinished investigation, because that is where counterexamples hide.
+The variables that distinguish subgroups hide in nested and metadata fields (objects-inside-objects, tags arrays, tier fields). Include all fields — including nested ones — in your analysis scripts from the start, so a single pass surfaces the distinctions that would otherwise require follow-up queries.
