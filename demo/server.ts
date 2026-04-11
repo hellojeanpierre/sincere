@@ -125,7 +125,7 @@ function investigateStream(): Response {
   const { agent, dispose } = createAgent({
     promptPath: OPERATOR_PROMPT_PATH,
     model: "claude-sonnet-4-6",
-    thinkingLevel: "medium",
+    thinkingLevel: "high",
   });
 
   const unsubTrace = subscribeTrace(agent, "demo");
