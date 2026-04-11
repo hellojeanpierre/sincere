@@ -8,15 +8,15 @@ roles: [operator]
 
 ## Core principle
 
-Script everything. Aggregation reveals where to look; the raw content of individual records reveals why. Any question you can answer with a script — counting, classifying, cross-referencing, verifying — must be answered with a script, not by reasoning about recalled data.
+Script everything. Any question you can answer with a script — counting, classifying, cross-referencing, verifying — must be answered with a script, not by reasoning about recalled data.
 
 ## Scripts carry the analysis
 
 Every analytical claim — a cohort boundary, an impact number, a causal attribution — must trace back to script output.
 
-Profiling scripts should enumerate all fields, including nested ones (objects-inside-objects, tags arrays, tier fields). These contain the variables that distinguish subgroups.
+Profiling means breaking the data across every available dimension, including nested and metadata fields. Subgroups that stand out from the aggregate are where findings begin. When fields are outputs of the process under investigation, treat them as claims with their own error rate — validate them against the primary data before using them to partition, group, or explain records.
 
-Grouping records into findings is classification — a scripting task, not a reasoning task. Before writing any finding, a script must assign every record to exactly one finding and output the assignment table. If a record fits no finding, the script outputs it as unassigned and the analysis continues.
+Grouping records into findings is classification — a scripting task, not a reasoning task. Before writing any finding, a script must assign every record to exactly one finding and output the assignment table. Records that fit no finding are unassigned — they are open questions, not answers.
 
 ## Verification
 
