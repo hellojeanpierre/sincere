@@ -124,7 +124,7 @@ function skipStream(): Response {
 function investigateStream(): Response {
   const { agent, dispose } = createAgent({
     promptPath: OPERATOR_PROMPT_PATH,
-    model: "claude-opus-4-6",
+    model: "claude-sonnet-4-6",
     thinkingLevel: "medium",
   });
 
