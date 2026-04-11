@@ -124,8 +124,8 @@ function skipStream(): Response {
 function investigateStream(): Response {
   const { agent, dispose } = createAgent({
     promptPath: OPERATOR_PROMPT_PATH,
-    model: "claude-sonnet-4-6",
-    thinkingLevel: "high",
+    model: "claude-opus-4-6",
+    thinkingLevel: "medium",
   });
 
   const unsubTrace = subscribeTrace(agent, "demo");
@@ -320,9 +320,9 @@ function observeStream(findingText: string): Response {
   const { handler, sessions, clear } = createSessionHandler(
     () => createAgent({
       systemPrompt,
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-sonnet-4-6",
       tools: [],
-      thinkingLevel: "off",
+      thinkingLevel: "low",
     }),
   );
   const lane = createLane(handler);
