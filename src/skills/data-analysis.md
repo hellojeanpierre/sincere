@@ -8,7 +8,7 @@ roles: [operator]
 
 ## Core principle
 
-Script all quantitative claims. Aggregation reveals where to look; the raw content of individual records reveals why. Any question you can answer with a script — counting, classifying, cross-referencing, verifying — must be answered with a script, not by reasoning about recalled data.
+Script everything. Aggregation reveals where to look; the raw content of individual records reveals why. Any question you can answer with a script — counting, classifying, cross-referencing, verifying — must be answered with a script, not by reasoning about recalled data.
 
 ## Scripts carry the analysis
 
