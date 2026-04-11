@@ -12,14 +12,12 @@ Script everything. Aggregation reveals where to look; the raw content of individ
 
 ## Scripts carry the analysis
 
-Every analytical claim — a cohort boundary, an impact number, a causal attribution — must trace back to script output. When
-consolidating findings, write a script that assigns every record to a finding and outputs the assignment table.
+Every analytical claim — a cohort boundary, an impact number, a causal attribution — must trace back to script output.
 
-Nested and metadata fields that don't surface in a typical aggregation (objects-inside-objects, tags arrays, tier fields)
-contain the variables that distinguish subgroups. Include them in your field inventory early — profiling scripts should
-enumerate all fields, including nested ones.
+Profiling scripts should enumerate all fields, including nested ones (objects-inside-objects, tags arrays, tier fields). These contain the variables that distinguish subgroups.
+
+Grouping records into findings is classification — a scripting task, not a reasoning task. Before writing any finding, a script must assign every record to exactly one finding and output the assignment table. If a record fits no finding, the script outputs it as unassigned and the analysis continues.
 
 ## Verification
 
-A hypothesis becomes a finding only after a script has tried to break it. When the next script confirms the pattern instead of
-testing an alternative explanation, you are describing, not investigating. Every record the analysis touches must land in exactly one bucket — finding. The analysis is not done while records remain unexplained.
+A hypothesis becomes a finding only after a script has grouped the same records on a different dimension and the hypothesis still held. When the next script confirms your grouping instead of testing an alternative, you are describing, not investigating.
