@@ -18,4 +18,4 @@ Nested and metadata fields that don't surface in a typical aggregation (objects-
 
 ## Verification
 
-A hypothesis becomes a finding only after a script has tried to break it. When the next script confirms the pattern instead of testing an alternative explanation, you are describing, not investigating. Every record the analysis touches must land in exactly one bucket — finding or named residual. Records left in an unlabeled "other" category are unfinished investigation, because that is where counterexamples hide.
+A hypothesis becomes a finding only after a script has tried to break it. When the next script confirms the pattern instead of testing an alternative explanation, you are describing, not investigating. Every record the analysis touches must land in exactly one bucket — finding. Records left in an unlabeled "other" category are unfinished investigation, because that is where counterexamples hide.
