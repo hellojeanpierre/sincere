@@ -494,7 +494,7 @@ export function bashTool(sessionDir: string, timeoutMs = COMMAND_TIMEOUT_MS): Ba
   const tool: AgentTool<typeof bashSchema> = {
     name: "bash",
     label: "Execute Command",
-    description: `Run a shell command in the project working directory and return stdout/stderr. The shell session is persistent — variables, files, and working directory survive across calls. Use && to chain dependent commands and | for pipelines. Only allowlisted binaries: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No other shell chaining (;, ||), no redirects (>, >>), no command substitution ($(), backticks). ${timeoutMs / 1000}-second timeout. Output over ${MAX_OUTPUT} chars is truncated to first ${HEAD_SIZE} + last ${TAIL_SIZE} chars; full output persisted to ${sessionDir}/{toolCallId}.txt.`,
+    description: `Run a shell command. If commands depend on each other and must run sequentially, chain them with && in a single call instead of making separate calls. If commands are independent, make multiple bash tool calls in a single message to run them in parallel. Minimize round-trips. Session is persistent — variables and working directory survive across calls. Use | for pipelines. Only allowlisted binaries: grep, awk, sed, jq, wc, cat, head, tail, sort, uniq, cut, tr, python3. No other shell chaining (;, ||), no redirects (>, >>), no command substitution ($(), backticks). ${timeoutMs / 1000}-second timeout. Output over ${MAX_OUTPUT} chars is truncated to first ${HEAD_SIZE} + last ${TAIL_SIZE} chars; full output persisted to ${sessionDir}/{toolCallId}.txt.`,
     parameters: bashSchema,
     async execute(toolCallId, params) {
       const error = validateCommand(params.command);
