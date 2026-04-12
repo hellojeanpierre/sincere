@@ -12,4 +12,6 @@ Before profiling, read the schema, sample records, and map every available dimen
 
 Profiling means summarizing every dimension against the analysis question — not just counts. Patterns that stand out are candidate findings. Output each candidate with its key metric and how it differs from the overall pattern, sorted by size of difference.
 
+Drill into each candidate's records as a group to find what they share beyond the grouping dimension.
+
 Before writing any finding, a script must assign every record to exactly one finding and output the assignment table. Records that fit no finding are unassigned — open questions, not answers.
