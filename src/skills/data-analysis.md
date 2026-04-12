@@ -18,14 +18,6 @@ Profiling means scripting breakdowns across every available dimension, including
 
 Grouping records into findings is classification. The filter logic that assigns each record defines the cohort boundary — without it, the finding's scope is whatever you recall, not what the data shows. Before writing any finding, a script must assign every record to exactly one finding and output the assignment table. Records that fit no finding are unassigned — they are open questions, not answers. When a script returns record-level detail, the next action is another script that classifies those records — not reasoning about them in context.
 
-## Verification
-
-A hypothesis becomes a finding only after a script has grouped the same records on a different dimension and the hypothesis still held. When the next script confirms your grouping instead of testing an alternative, you are describing, not investigating.
-
-When you assign records to a cohort, test whether the cohort is internally uniform. If subgroups within it diverge, the cohort contains distinct patterns and must be split. A finding that mixes them produces a result that is technically correct and practically useless.
-
-When a variable appears to explain records, test whether the explanation survives after removing records already covered by prior findings. If the gap collapses, the variable is confounded, not causal.
-
 ## Failure modes
 
 - Encoding an analytical assumption as a code filter that silently excludes the records that would challenge it.
