@@ -6,12 +6,10 @@ roles: [operator]
 
 # Data Analysis
 
-Script everything. Any question that can be answered with a script must be answered with a script, not by reasoning from recalled data.
+Script everything. Any question you can answer with a script must be answered with a script, not by reasoning about recalled data.
 
 Before profiling, read the schema, sample records, and map every available dimension — including nested fields, metadata, and derived attributes.
 
-Profiling means comparing the analysis target across every dimension, not just counts. Every material difference is a candidate pattern. Output a candidate table with: candidate, signal, size, direction, supporting records, and overlap with other candidates.
+Profiling means summarizing every dimension against the analysis question — not just counts. Patterns that stand out are candidate findings. Output each candidate with its key metric and how it differs from the overall pattern, and how much its records overlap with other candidates — sorted by size of difference
 
-Before writing conclusions, script a disposition for every candidate: promote, merge, reject, or unresolved. Rejections and unresolved candidates must be justified by missing or contradictory evidence, not by a plausible narrative alone.
-
-Inspect individual records only to test, refine, or split candidate patterns — not to invent conclusions first. Final conclusions must come from promoted or merged candidates, and every record must be assigned to one conclusion or to an unresolved candidate table.
+Before writing any finding, a script must assign every record to exactly one finding and output the assignment table. Records that fit no finding are unassigned — open questions, not answers.
