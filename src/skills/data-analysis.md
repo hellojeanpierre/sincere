@@ -16,9 +16,11 @@ Every analytical claim must trace back to script output.
 
 Profiling means scripting breakdowns across every available dimension, including nested and metadata fields. Subgroups that stand out from the aggregate are where findings begin. When fields are themselves outputs of a labeling, scoring, or classification process, treat them as claims with their own error rate — validate them against the primary data before using them to partition, group, or explain records.
 
-Grouping records into findings is classification. The filter logic that assigns each record defines the cohort boundary — without it, the finding's scope is whatever you recall, not what the data shows. Before writing any finding, a script must assign every record to exactly one finding and output the assignment table. Records that fit no finding are unassigned — they are open questions, not answers. When a script returns record-level detail, the next action is another script that classifies those records — not reasoning about them in context.
+Grouping records into findings is classification. The filter logic that assigns each record defines the cohort boundary — without it, the finding's scope is whatever you recall, not what the data shows. Before writing any finding, a script must assign every record to exactly one finding and output the assignment table. Records that fit no finding are unassigned — they are open questions, not answers. Dimensions that showed strong signals in profiling but were not used as classification criteria are also open questions — they are either independent findings or confounds of existing ones, and only a script can tell which.
 
 ## Verification
+
+When profiling surfaced strong signals on dimensions that the findings don't classify by, test each: remove records already covered by existing findings and check whether the signal persists in the remainder. If it does, it is an independent finding. If it collapses, it was confounded.
 
 A hypothesis becomes a finding only after a script has grouped the same records on a different dimension and the hypothesis still held. When the next script confirms your grouping instead of testing an alternative, you are describing, not investigating.
 
@@ -31,3 +33,4 @@ When a variable appears to explain records, test whether the explanation survive
 - Encoding an analytical assumption as a code filter that silently excludes the records that would challenge it.
 - Collapsing distinct patterns into a single finding, losing the specificity that makes each actionable.
 - Absorbing unexplained records into the background instead of treating them as unfinished investigation.
+- Treating 100% record assignment as investigation complete, when profiling dimensions with strong signals remain untested against the findings.
