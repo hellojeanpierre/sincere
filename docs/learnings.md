@@ -1,5 +1,9 @@
 # Learnings
 
+## 2026-04-12 — Skill text controls what profiling scripts compute but cannot control which computed signals the agent pursues
+
+Nine skill variants tested. All profiling improvements worked — the agent reliably computes structural signals (partner_c 43%, experienced 44%) with flags. No skill variant caused the agent to act on these signals. Gates, output specs, imperatives, why-framing, and suspicion-framing were all inert. The thinking block selectively keeps signals that lead to individual-record investigation and drops signals that would require cross-dimensional testing. This filtering is invariant to skill text. Implication: structural findings require architectural intervention, not skill iteration.
+
 ## 2026-04-12 — Classification is reasoning, and reasoning is influenced by context composition, not by instruction
 
 Across 9 runs with 4 skill variants, classification method was invariant to skill text — the agent always classified by individual-record properties (response text, SOP cross-reference) over structural signals (partner gap, tenure inversion). Run 9's agent explicitly proposed partner_c as a finding, then abandoned it two lines later. Adding verification triggers (Run 4) cost 70s with zero findings. Removing structural language (Run 8) caused 9x deliberation expansion without changing output. The skill's proven leverage is profiling — what data is visible before reasoning starts — not what reasoning concludes. Implication: skill text targeting reasoning-phase behavior functions as a deliberation compressor, not a behavioral change agent.
