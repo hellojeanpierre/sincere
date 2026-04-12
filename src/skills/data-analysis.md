@@ -18,11 +18,16 @@ Before profiling, understand the shape of the data. Read the schema, sample reco
 
 Profiling means computing the outcome metric across every available dimension. Counts alone are not profiling — a dimension is profiled when its subgroups' outcome rates are compared to the aggregate. Subgroups that diverge from the aggregate are where findings begin.
 
+Profiling surfaces two kinds of signals: properties of individual records (what happened in this case) and structural patterns across groups (which subgroups consistently over- or under-perform the aggregate). Structural patterns are stronger starting points for findings because they point to systemic causes rather than individual failures.
+
+Grouping records into findings is classification. Start from the structural patterns that profiling surfaced, not from individual records. Individual records explain why a structural pattern exists — the pattern itself comes from the aggregate. The filter logic that assigns each record defines the cohort boundary — without it, the finding's scope is whatever you recall, not what the data shows. Before writing any finding, a script must assign every record to exactly one finding and output the assignment table. Records that fit no finding are unassigned — they are open questions, not answers.
+
 When fields are themselves outputs of a labeling, scoring, or classification process, treat them as claims with their own error rate — validate them against the primary data before using them to partition, group, or explain records.
 
 
 ## Failure modes
 
+- Classifying by reasoning about individual records instead of by structural patterns from profiling — individual cases explain the why, aggregate divergences define the what.
 - Computing counts per dimension without outcome rates. That is counting, not profiling.
 - Encoding an analytical assumption as a code filter that silently excludes the records that would challenge it.
 - Collapsing distinct patterns into a single finding, losing the specificity that makes each actionable.
