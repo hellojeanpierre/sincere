@@ -10,6 +10,6 @@ Script everything. Any question you can answer with a script must be answered wi
 
 Before profiling, read the schema, sample records, and map every available dimension — including nested fields, metadata, and derived attributes.
 
-Profiling means summarizing every dimension against the analysis question — not just counts. Patterns that stand out are candidate findings. Output each candidate with its key metric and how it differs from the overall pattern, sorted by size of difference. Profile each candidate's records across all other dimensions.
+Profiling means summarizing every dimension against the analysis question — not just counts. Patterns that stand out are candidates. Output each candidate with its key metric, how it differs from the overall pattern, and its rate broken down by every other candidate dimension — sorted by size of difference.
 
 Before writing any finding, a script must assign every record to exactly one finding and output the assignment table. Records that fit no finding are unassigned — open questions, not answers.
