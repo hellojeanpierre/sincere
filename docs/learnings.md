@@ -1,7 +1,14 @@
 # Learnings
 
-## 2025-04-09 — A static plan acts as a completion ceiling that overrides skill principles
+## 2026-04-12 — Classification is reasoning, and reasoning is influenced by context composition, not by instruction
 
+Across 9 runs with 4 skill variants, classification method was invariant to skill text — the agent always classified by individual-record properties (response text, SOP cross-reference) over structural signals (partner gap, tenure inversion). Run 9's agent explicitly proposed partner_c as a finding, then abandoned it two lines later. Adding verification triggers (Run 4) cost 70s with zero findings. Removing structural language (Run 8) caused 9x deliberation expansion without changing output. The skill's proven leverage is profiling — what data is visible before reasoning starts — not what reasoning concludes. Implication: skill text targeting reasoning-phase behavior functions as a deliberation compressor, not a behavioral change agent.
+
+## 2026-04-12 — Separating planners from raw data produces higher insight recall than prompting agents to classify structurally
+
+DataSTORM (Stanford, April 2026) achieved 19.4% improvement in insight-level recall on InsightBench by architecturally preventing its planner from seeing raw records — it only receives aggregate statistics from an executor. InsightEval (Nov 2025) independently identified "limited breadth in insight exploration" as agents' primary failure mode. Both align with our 9-run history: the operator profiles partner_c at 43% vs 80% baseline, acknowledges it in thinking, then abandons it once individual records enter context. Prompt-level interventions compressed deliberation but never changed classification method. Implication: structural classification may require controlling what data enters context, not what the prompt says to do with it.
+
+## 2025-04-09 — A static plan acts as a completion ceiling that overrides skill principles
 
 The 273s plan run's T6 thinking shows the agent saw only 55% coverage (18.8 of 34.4 pts) but stopped anyway — "I'm ready to write up the final findings." All 5 plan steps were ticked; the plan became a checklist. The 438s no-plan run's T12 thinking explicitly quotes the Completeness principle: "every non-success outcome needs a specific explanation, so I can't just ignore it." Without a plan providing a competing completion signal, the skill principle drove the agent through 13 turns to 100% coverage. The plan gives speed, structure, and falsification; but its implicit "you're done when the steps are done" overrides the skill's "you're done when every record is explained."
 Implication: if the agent externalizes a plan, the plan's completion condition must be bound to the skill's coverage requirement — otherwise the plan becomes a cage, not a tool.
