@@ -162,14 +162,16 @@
 
     // ── Row management ──────────────────────────────────────────────
 
-    const rows = new Map(); // ticketId → row element
+    // ── Ticket rows ─────────────────────────────────────────────────
+    // Each entry caches its DOM handles so event handlers never querySelector.
 
-    function appendTicketRow(id, subject) {
-      const list = document.getElementById('ticket-list');
-      const row = document.createElement('div');
-      row.className = 'finding-card rounded-lg border overflow-hidden bg-stone-900/60 border-stone-700/50';
-      row.style.animationDelay = '0ms';
-      row.innerHTML = `
+    const tickets = new Map(); // ticketId → { root, eventArea, eventContent, label, thinkingWrap, thinkingArea, thinkingPre }
+
+    function createTicketRow(id, subject) {
+      const root = document.createElement('div');
+      root.className = 'finding-card rounded-lg border overflow-hidden bg-stone-900/60 border-stone-700/50';
+      root.style.animationDelay = '0ms';
+      root.innerHTML = `
         <div class="flex items-center justify-between p-3">
           <div class="flex items-center gap-2 min-w-0">
             <span class="text-xs font-mono text-stone-500 shrink-0">${esc(id)}</span>
@@ -187,38 +189,89 @@
             <pre class="thinking-text"></pre>
           </div>
         </div>`;
-      list.appendChild(row);
-      rows.set(id, row);
+
+      const eventArea = root.querySelector('.ticket-event-area');
+      const t = {
+        root,
+        eventArea,
+        eventContent: eventArea.querySelector('.event-content'),
+        label: eventArea.querySelector('.event-label'),
+        thinkingWrap: root.querySelector('.ticket-thinking'),
+        thinkingArea: root.querySelector('.thinking-area'),
+        thinkingPre: root.querySelector('.thinking-text'),
+      };
+
+      document.getElementById('ticket-list').appendChild(root);
+      tickets.set(id, t);
+      return t;
     }
 
-    function updateTicketEvent(ticketId, label) {
-      const row = rows.get(ticketId);
-      if (!row) return;
-      const area = row.querySelector('.ticket-event-area');
-      const content = area.querySelector('.event-content');
-      const labelEl = area.querySelector('.event-label');
-
-      if (area.style.display === 'none') {
-        labelEl.textContent = label;
-        area.style.display = '';
-        content.classList.add('fading');
-        requestAnimationFrame(() => content.classList.remove('fading'));
+    function showEventLabel(t, label) {
+      if (t.eventArea.style.display === 'none') {
+        t.label.textContent = label;
+        t.eventArea.style.display = '';
+        t.eventContent.classList.add('fading');
+        requestAnimationFrame(() => t.eventContent.classList.remove('fading'));
       } else {
-        content.classList.add('fading');
+        t.eventContent.classList.add('fading');
         setTimeout(() => {
-          labelEl.textContent = label;
-          content.classList.remove('fading');
+          t.label.textContent = label;
+          t.eventContent.classList.remove('fading');
         }, 150);
       }
     }
 
     // ── SSE stream ──────────────────────────────────────────────────
 
+    let active = null; // ticket entry currently being processed
+
+    const handlers = {
+      ticket(ev) {
+        createTicketRow(ev.id, ev.subject);
+      },
+
+      event(ev) {
+        const t = tickets.get(ev.ticketId);
+        if (!t) return;
+        active = t;
+        showEventLabel(t, ev.label);
+        t.thinkingPre.textContent = '';
+        t.thinkingWrap.style.display = '';
+      },
+
+      thinking_delta(ev) {
+        if (!active) return;
+        active.thinkingPre.textContent += ev.text;
+        active.thinkingArea.scrollTop = active.thinkingArea.scrollHeight;
+      },
+
+      tool_start(ev) {
+        if (!active) return;
+        const preview = ev.tool === 'bash' ? (ev.args?.command || '') : (ev.args?.path || ev.tool);
+        const el = document.createElement('div');
+        el.className = 'tool-call';
+        el.textContent = (ev.tool === 'bash' ? '$ ' : '') + (preview.length > 200 ? preview.slice(0, 200) + '\u2026' : preview);
+        active.thinkingArea.appendChild(el);
+        active.thinkingArea.scrollTop = active.thinkingArea.scrollHeight;
+      },
+
+      event_done(ev) {
+        const t = tickets.get(ev.ticketId);
+        if (t) t.thinkingWrap.style.display = 'none';
+      },
+
+      done() {
+        active = null;
+        const statusEl = document.getElementById('stream-status');
+        statusEl.innerHTML = CHECKMARK_HTML + '<span class="text-emerald-400">Complete</span>';
+        deactivateGradient(document.getElementById('stream-border'));
+        for (const t of tickets.values()) t.thinkingWrap.style.display = 'none';
+      },
+    };
+
     function startStream() {
       document.getElementById('btn-start-wrap').style.display = 'none';
-
-      const statusEl = document.getElementById('stream-status');
-      statusEl.innerHTML = GREEN_DOT_HTML + '<span style="color:#34d399">Streaming</span>';
+      document.getElementById('stream-status').innerHTML = GREEN_DOT_HTML + '<span style="color:#34d399">Streaming</span>';
 
       fetch('/api/stream').then(res => {
         if (!res.ok || !res.body) return;
@@ -226,7 +279,7 @@
         const decoder = new TextDecoder();
         let buffer = '';
 
-        function pump() {
+        (function pump() {
           reader.read().then(({ done, value }) => {
             if (done) return;
             buffer += decoder.decode(value, { stream: true });
@@ -234,69 +287,15 @@
             buffer = lines.pop() || '';
             for (const line of lines) {
               if (!line.startsWith('data: ')) continue;
-              try { handleEvent(JSON.parse(line.slice(6))); } catch {}
+              try {
+                const ev = JSON.parse(line.slice(6));
+                handlers[ev.type]?.(ev);
+              } catch {}
             }
             pump();
           });
-        }
-        pump();
+        })();
       });
-    }
-
-    let activeTicketId = null;
-
-    function handleEvent(ev) {
-      if (ev.type === 'ticket') {
-        appendTicketRow(ev.id, ev.subject);
-      } else if (ev.type === 'event') {
-        // Event label arrives before agent runs (awake moment)
-        activeTicketId = ev.ticketId;
-        updateTicketEvent(ev.ticketId, ev.label);
-        // Show & clear thinking area for this ticket
-        const row = rows.get(ev.ticketId);
-        if (row) {
-          const thinkingArea = row.querySelector('.ticket-thinking');
-          const thinkingText = row.querySelector('.thinking-text');
-          thinkingText.textContent = '';
-          thinkingArea.style.display = '';
-        }
-      } else if (ev.type === 'thinking_delta') {
-        if (!activeTicketId) return;
-        const row = rows.get(activeTicketId);
-        if (!row) return;
-        const thinkingText = row.querySelector('.thinking-text');
-        thinkingText.textContent += ev.text;
-        const area = row.querySelector('.thinking-area');
-        area.scrollTop = area.scrollHeight;
-      } else if (ev.type === 'tool_start') {
-        if (!activeTicketId) return;
-        const row = rows.get(activeTicketId);
-        if (!row) return;
-        const area = row.querySelector('.thinking-area');
-        const preview = ev.tool === 'bash' ? (ev.args?.command || '') : (ev.args?.path || ev.tool);
-        const truncated = preview.length > 200 ? preview.slice(0, 200) + '\u2026' : preview;
-        const toolEl = document.createElement('div');
-        toolEl.className = 'tool-call';
-        toolEl.textContent = (ev.tool === 'bash' ? '$ ' : '') + truncated;
-        area.appendChild(toolEl);
-        area.scrollTop = area.scrollHeight;
-      } else if (ev.type === 'event_done') {
-        // Agent finished processing this event
-        const row = rows.get(ev.ticketId);
-        if (row) {
-          // Hide thinking area when done
-          row.querySelector('.ticket-thinking').style.display = 'none';
-        }
-      } else if (ev.type === 'done') {
-        activeTicketId = null;
-        const statusEl = document.getElementById('stream-status');
-        statusEl.innerHTML = CHECKMARK_HTML + '<span class="text-emerald-400">Complete</span>';
-        deactivateGradient(document.getElementById('stream-border'));
-        // Hide any remaining thinking areas
-        for (const row of rows.values()) {
-          row.querySelector('.ticket-thinking').style.display = 'none';
-        }
-      }
     }
 
     document.getElementById('btn-start').addEventListener('click', startStream);
