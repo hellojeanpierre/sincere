@@ -65,6 +65,9 @@
     .event-content.fading {
       opacity: 0;
     }
+    .event-label {
+      color: #34d399;
+    }
   </style>
 </head>
 <body class="bg-surface text-stone-200 min-h-screen antialiased">
@@ -78,36 +81,34 @@
         <div id="stream-border" class="gradient-border">
           <div class="bg-card p-6 space-y-3">
             <div class="flex items-center justify-between">
-              <p class="text-xs uppercase tracking-wider text-stone-500">Live Ticket Stream</p>
+              <p class="text-xs uppercase tracking-wider text-stone-500">Zendesk tickets</p>
               <div id="stream-status" class="flex items-center gap-1.5 text-xs text-stone-500"></div>
             </div>
             <div id="ticket-list" class="space-y-2"></div>
+            <div id="btn-start-wrap" class="flex justify-center pt-1">
+              <button
+                id="btn-start"
+                class="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-surface text-sm font-medium px-4 py-2 rounded-full transition-colors"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/>
+                </svg>
+                Start
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-
-      <!-- Start button -->
-      <div class="relative z-10 mt-8 flex flex-col items-center">
-        <button
-          id="btn-start"
-          class="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-surface text-sm font-medium px-4 py-2 rounded-full transition-colors"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/>
-          </svg>
-          Start
-        </button>
       </div>
 
     </div>
   </div>
 
   <script>
-    const SPINNER_HTML = `
-      <svg class="w-4 h-4 text-stone-500 animate-spin" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-      </svg>`;
+    const GREEN_DOT_HTML = `
+      <span class="relative flex h-2 w-2">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+      </span>`;
 
     const CHECKMARK_HTML = `
       <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
@@ -141,11 +142,11 @@
             <span class="text-xs font-mono text-stone-500 shrink-0">${esc(id)}</span>
             <span class="text-sm text-stone-300 truncate">${esc(subject)}</span>
           </div>
-          <div class="ticket-status ml-3 shrink-0">${SPINNER_HTML}</div>
+          <div class="ticket-status ml-3 shrink-0">${GREEN_DOT_HTML}</div>
         </div>
         <div class="ticket-event-area" style="display:none">
           <div class="event-content px-3 pb-3">
-            <span class="event-label text-[11px] font-mono text-stone-500"></span>
+            <span class="event-label text-[11px] font-mono text-emerald-400"></span>
           </div>
         </div>`;
       list.appendChild(row);
@@ -176,12 +177,10 @@
     // ── SSE stream ──────────────────────────────────────────────────
 
     function startStream() {
-      const btn = document.getElementById('btn-start');
-      btn.disabled = true;
-      btn.classList.add('opacity-50', 'pointer-events-none');
+      document.getElementById('btn-start-wrap').style.display = 'none';
 
       const statusEl = document.getElementById('stream-status');
-      statusEl.innerHTML = SPINNER_HTML + '<span>Streaming</span>';
+      statusEl.innerHTML = GREEN_DOT_HTML + '<span style="color:#34d399">Streaming</span>';
 
       fetch('/api/stream').then(res => {
         if (!res.ok || !res.body) return;
