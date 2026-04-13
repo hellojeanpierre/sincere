@@ -17,7 +17,7 @@ async function loadEvent(id: string): Promise<Record<string, unknown>> {
 
 describe("intake", () => {
   const { agent, dispose } = createAgent({
-    promptPath: resolve(import.meta.dirname, "operator.md"),
+    promptPath: resolve(import.meta.dirname, "analyst.md"),
     model: process.env.MODEL || "claude-sonnet-4-6",
     thinkingLevel: "high",
   });

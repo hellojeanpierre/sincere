@@ -27,7 +27,7 @@ const ALLOWED_BINARIES = new Set([
   "echo",
   "pwd",
   // python3 is a full escape hatch — it can import os, subprocess, etc.
-  // This is accepted risk: we need it for computation and trust the Operator
+  // This is accepted risk: we need it for computation and trust the Analyst
   // prompt to use it safely. The guard is defence-in-depth, not a sandbox.
   "python3",
 ]);

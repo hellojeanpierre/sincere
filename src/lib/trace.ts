@@ -3,7 +3,7 @@ import { resolve, basename, dirname } from "path";
 import type { Agent } from "@mariozechner/pi-agent-core";
 import { logger } from "./logger.ts";
 
-export type TraceSource = "operator" | "demo";
+export type TraceSource = "analyst" | "demo";
 
 // Anchor to repo root (src/lib/ → ../../data/traces) so traces land in the
 // right place regardless of the caller's cwd.
