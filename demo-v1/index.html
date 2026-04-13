@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sincere — Timeline</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: '#1a1614',
+            card: '#242020',
+            accent: '#d4856a',
+            'accent-hover': '#c07058',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      border: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      background-size: 512px 512px;
+      opacity: 0.14;
+    }
+    body > * { position: relative; z-index: 1; }
+    @property --angle {
+      syntax: '<angle>';
+      initial-value: 0deg;
+      inherits: false;
+    }
+    @keyframes rotate-gradient {
+      to { --angle: 360deg; }
+    }
+    .gradient-border {
+      position: relative;
+      border-radius: 1rem;
+      padding: 1px;
+      background: conic-gradient(from var(--angle), #d4856a, #6b4c3b, #3a2d28, #d4856a);
+      animation: rotate-gradient 4s linear infinite;
+    }
+    .gradient-border > div {
+      border-radius: calc(1rem - 1px);
+    }
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateX(-12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .finding-card {
+      opacity: 0;
+      animation: slide-in 0.3s ease-out forwards;
+    }
+    .root-cause {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.25s ease, margin-top 0.25s ease, padding-top 0.25s ease, border-color 0.25s ease;
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 1px solid transparent;
+    }
+    .root-cause > div {
+      overflow: hidden;
+    }
+    .root-cause.open {
+      grid-template-rows: 1fr;
+      margin-top: 0.5rem;
+      padding-top: 0.5rem;
+      border-top-color: rgba(120, 113, 108, 0.4);
+    }
+    /* Per-event reasoning crossfade */
+    .event-content {
+      transition: opacity 0.15s ease;
+    }
+    .event-content.fading {
+      opacity: 0;
+    }
+    /* Markdown prose inside finding cards */
+    .md-prose { line-height: 1.5; }
+    .md-prose p { margin: 0.25rem 0; }
+    .md-prose strong { color: #e7e5e4; font-weight: 600; }
+    .md-prose em { color: #d6d3d1; }
+    .md-prose ul, .md-prose ol { margin: 0.25rem 0 0.25rem 1.25rem; }
+    .md-prose li { margin: 0.1rem 0; }
+    .md-prose code { background: rgba(255,255,255,0.06); padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.7rem; }
+    .md-prose table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 0.75rem; }
+    .md-prose th { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid rgba(120,113,108,0.5); color: #d6d3d1; font-weight: 600; }
+    .md-prose td { padding: 0.25rem 0.5rem; border-bottom: 1px solid rgba(120,113,108,0.2); color: #a8a29e; }
+    .md-prose tr:last-child td { border-bottom: none; }
+    .md-prose blockquote { border-left: 2px solid #d4856a; padding-left: 0.75rem; margin: 0.25rem 0; color: #a8a29e; }
+    .md-prose h1, .md-prose h2, .md-prose h3, .md-prose h4 { color: #e7e5e4; font-weight: 600; margin: 0.4rem 0 0.2rem; }
+    .md-prose h3 { font-size: 0.8rem; }
+    .md-prose h4 { font-size: 0.75rem; }
+  </style>
+</head>
+<body class="bg-surface text-stone-200 min-h-screen antialiased">
+  <div class="max-w-2xl mx-auto px-4 py-12">
+
+    <!-- centered vertical timeline -->
+    <div class="relative flex flex-col items-center">
+      <!-- vertical line -->
+      <div class="absolute top-0 bottom-0 w-px bg-accent/30"></div>
+
+      <!-- Timeline entry: CSAT metric card -->
+      <div class="relative z-10 w-full max-w-md">
+        <div class="gradient-border">
+          <div class="bg-card p-6 space-y-4">
+            <!-- header row -->
+            <div>
+              <p class="text-xs uppercase tracking-wider text-stone-500 mb-1">Resolution Rate</p>
+              <div class="flex items-baseline gap-3">
+                <span class="text-4xl font-bold text-stone-100">65.6%</span>
+                <span class="text-sm text-stone-500">target 85%</span>
+              </div>
+            </div>
+
+            <!-- description -->
+            <p id="metric-desc" class="text-sm text-stone-400 leading-relaxed" style="transition: opacity 0.3s ease, max-height 0.4s ease 0.1s, margin-top 0.4s ease 0.1s; max-height: 6em; overflow: hidden;">
+              Resolution Rate measures how often support tickets are fully resolved
+              before closing — a direct signal of whether customers are leaving with their problem solved.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Investigate button as timeline endpoint -->
+      <div class="relative z-10 mt-8 flex flex-col items-center">
+        <button
+          id="btn-investigate"
+          class="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-surface text-sm font-medium px-4 py-2 rounded-full transition-colors"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+          </svg>
+          Investigate historical data
+        </button>
+      </div>
+
+    </div><!-- /timeline -->
+  </div>
+
+  <script>
+    function parseFindings(text) {
+      const findings = [];
+      // Split on ## Finding headers, keeping the delimiter
+      const parts = text.split(/(?=^#{0,3}\s*Finding\s+\d)/m);
+      for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        const headerMatch = trimmed.match(/^#{0,3}\s*Finding\s+(\d+)\s*[—–-]\s*(.+)/m);
+        if (!headerMatch) continue;
+        const id = parseInt(headerMatch[1], 10);
+        const title = headerMatch[2].trim();
+        const body = trimmed.slice(headerMatch[0].length);
+        const field = (label, greedy) => {
+          const pat = '\\*{0,2}' + label + ':\\*{0,2}\\s*';
+          const re = greedy
+            ? new RegExp(pat + '(.+)', 's')
+            : new RegExp(pat + '(.+?)(?=\\n\\*{0,2}(?:Cohort|Outcome|Root cause)\\*{0,2}:|$)', 's');
+          const m = body.match(re);
+          return m ? m[1].replace(/\n---\s*$/, '').trim() : '';
+        };
+        findings.push({ id, title, cohort: field('Cohort'), outcome: field('Outcome'), rootCause: field('Root cause', true) });
+      }
+      return findings;
+    }
+
+    function deactivateGradient(el) {
+      el.classList.remove('gradient-border');
+      Object.assign(el.style, { background: 'none', border: '1px solid #3a2d28', borderRadius: '1rem' });
+      el.querySelector(':scope > div').style.borderRadius = 'calc(1rem - 1px)';
+    }
+
+    const CHECKMARK_HTML = `
+      <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+      </svg>
+      <span class="text-emerald-400">Complete</span>`;
+
+    const AGENT_CARD_HTML = `
+      <div class="gradient-border">
+        <div class="bg-card p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <p class="text-xs uppercase tracking-wider text-stone-500">Agent: Historical Analysis</p>
+            <span class="agent-status flex items-center gap-2 text-xs text-stone-500"></span>
+          </div>
+          <pre class="agent-reasoning text-sm text-stone-400 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto scrollbar-thin"></pre>
+        </div>
+      </div>`;
+
+    function createAgentCard(timelineRoot, insertBefore) {
+      timelineRoot.querySelectorAll('.gradient-border').forEach(deactivateGradient);
+      const entry = document.createElement('div');
+      entry.className = 'relative z-10 w-full max-w-md mt-8';
+      entry.innerHTML = AGENT_CARD_HTML;
+      timelineRoot.insertBefore(entry, insertBefore);
+      return entry;
+    }
+
+    function renderAgentComplete(agentCard, findingsText) {
+      const statusEl = agentCard.querySelector('.agent-status');
+      const reasoningEl = agentCard.querySelector('.agent-reasoning');
+      statusEl.innerHTML = CHECKMARK_HTML;
+      const findings = parseFindings(findingsText);
+      if (findings.length) {
+        reasoningEl.textContent = `${findings.length} findings identified.`;
+        reasoningEl.classList.remove('max-h-96', 'overflow-y-auto');
+        appendFindingsToCard(findings, agentCard);
+      }
+    }
+
+    function collapseAndRemove(el) {
+      el.style.maxHeight = el.offsetHeight + 'px';
+      el.style.overflow = 'hidden';
+      el.getBoundingClientRect(); // force layout
+      el.style.transition = 'opacity 0.25s ease, max-height 0.35s ease 0.05s, margin-top 0.35s ease 0.05s, padding 0.35s ease 0.05s';
+      el.style.opacity = '0';
+      el.style.maxHeight = '0';
+      el.style.marginTop = '0';
+      el.style.padding = '0';
+      setTimeout(() => el.remove(), 400);
+    }
+
+    function appendFindingsToCard(findings, agentCard) {
+      const innerDiv = agentCard.querySelector('.bg-card');
+
+      const listWrap = document.createElement('div');
+      listWrap.id = 'findings-list';
+      listWrap.className = 'space-y-3';
+      innerDiv.appendChild(listWrap);
+
+      const assignBtn = document.createElement('button');
+      assignBtn.id = 'btn-assign';
+      assignBtn.className = 'w-full mt-1 py-2.5 rounded-full text-sm font-medium transition-colors bg-accent/30 text-stone-500 cursor-default flex items-center justify-center gap-2';
+      assignBtn.disabled = true;
+      assignBtn.innerHTML = `
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v13m0 0l-4-4m4 4l4-4M4 20h16"/>
+        </svg>
+        Assign Agent`;
+      innerDiv.appendChild(assignBtn);
+
+      findings.forEach((f, i) => {
+        const card = document.createElement('div');
+        card.className = 'finding-card p-3 rounded-lg bg-stone-900/60 border border-stone-700/50 cursor-pointer transition-all duration-200 hover:border-accent/50';
+        card.style.animationDelay = `${i * 120}ms`;
+        card.dataset.findingId = f.id;
+        const impact = f.outcome.match(/([\d.]+)\s*pts?/i)?.[1];
+        const tickets = f.cohort.match(/[—–-]\s*(\d+)\s*tickets?/i)?.[1];
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-3 mb-1">
+            <p class="text-sm font-medium text-stone-200">${esc(f.title)}</p>
+            ${impact ? `<span class="shrink-0 text-xs font-medium text-accent">${impact} pts</span>` : ''}
+          </div>
+          ${tickets ? `<p class="text-xs text-stone-400">${tickets} ticket${parseInt(tickets) === 1 ? '' : 's'}</p>` : ''}
+          <div class="root-cause">
+            <div>
+              <div class="text-xs text-stone-400 pt-2"><span class="text-stone-300 font-medium">Root cause:</span><div class="md-prose mt-1">${md(f.rootCause)}</div></div>
+              ${f.cohort ? `<div class="text-xs text-stone-400 mt-2"><span class="text-stone-300 font-medium">Cohort:</span><div class="md-prose mt-1">${md(f.cohort)}</div></div>` : ''}
+              ${f.outcome ? `<div class="text-xs text-stone-400 mt-2"><span class="text-stone-300 font-medium">Outcome:</span><div class="md-prose mt-1">${md(f.outcome)}</div></div>` : ''}
+            </div>
+          </div>`;
+        card.addEventListener('click', () => {
+          const rc = card.querySelector('.root-cause');
+          const isOpen = rc.classList.contains('open');
+          listWrap.querySelectorAll('.root-cause').forEach(el => el.classList.remove('open'));
+          listWrap.querySelectorAll('[data-finding-id]').forEach(el => {
+            el.classList.remove('border-accent', 'bg-stone-800/80', 'shadow-lg', 'shadow-accent/10', 'scale-[1.02]');
+          });
+          if (!isOpen) {
+            rc.classList.add('open');
+            card.classList.add('border-accent', 'bg-stone-800/80', 'shadow-lg', 'shadow-accent/10', 'scale-[1.02]');
+          }
+          if (assignBtn.dataset.used) return;
+          const anySelected = !!listWrap.querySelector('.border-accent');
+          if (anySelected) {
+            assignBtn.disabled = false;
+            assignBtn.classList.remove('bg-accent/30', 'text-stone-500', 'cursor-default');
+            assignBtn.classList.add('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+          } else {
+            assignBtn.disabled = true;
+            assignBtn.classList.add('bg-accent/30', 'text-stone-500', 'cursor-default');
+            assignBtn.classList.remove('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+          }
+        });
+        listWrap.appendChild(card);
+      });
+
+      assignBtn.addEventListener('click', () => {
+        if (assignBtn.disabled || assignBtn.dataset.used) return;
+        assignBtn.dataset.used = 'true';
+
+        // Fade out the "Complete" status
+        const statusEl = agentCard.querySelector('.agent-status');
+        statusEl.style.transition = 'opacity 0.3s ease';
+        statusEl.style.opacity = '0';
+        setTimeout(() => { statusEl.style.display = 'none'; }, 300);
+
+        const allCards = [...listWrap.querySelectorAll('[data-finding-id]')];
+        const selectedCard = listWrap.querySelector('.border-accent');
+        allCards.forEach(card => {
+          if (card !== selectedCard) collapseAndRemove(card);
+        });
+
+        setTimeout(() => {
+          assignBtn.remove();
+          appendPermissionsToCard(innerDiv, agentCard);
+        }, 450);
+      });
+    }
+
+    function appendPermissionsToCard(innerDiv, agentCard) {
+      const permsDiv = document.createElement('div');
+      permsDiv.className = 'space-y-3 pt-4 border-t border-stone-700/40';
+      permsDiv.innerHTML = `
+        <p class="text-xs uppercase tracking-wider text-stone-500 finding-card" style="animation-delay:0ms">Agent permissions</p>
+        <div class="space-y-3">
+          <div class="flex items-center gap-3 p-3 rounded-lg bg-stone-900/60 border border-stone-700/50 cursor-pointer transition-all duration-200 hover:border-accent/50 perm-option finding-card" data-perm="reroute" style="animation-delay:120ms">
+            <span class="w-4 h-4 rounded-full border-2 border-stone-600 flex-shrink-0 flex items-center justify-center perm-circle transition-colors">
+              <span class="w-2 h-2 rounded-full bg-accent hidden perm-dot"></span>
+            </span>
+            <svg class="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 3M21 7.5H7.5"/>
+            </svg>
+            <span><span class="text-sm font-medium text-stone-200">Re-route</span> <span class="text-sm text-stone-500">Move ticket to a different queue</span></span>
+          </div>
+          <div class="flex items-center gap-3 p-3 rounded-lg bg-stone-900/60 border border-stone-700/50 cursor-pointer transition-all duration-200 hover:border-accent/50 perm-option finding-card" data-perm="guidance" style="animation-delay:240ms">
+            <span class="w-4 h-4 rounded-full border-2 border-stone-600 flex-shrink-0 flex items-center justify-center perm-circle transition-colors">
+              <span class="w-2 h-2 rounded-full bg-accent hidden perm-dot"></span>
+            </span>
+            <svg class="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+            </svg>
+            <span><span class="text-sm font-medium text-stone-200">Guidance</span> <span class="text-sm text-stone-500">Add a private note for the agent</span></span>
+          </div>
+        </div>
+        <button id="btn-deploy" class="w-full py-2.5 rounded-full text-sm font-medium transition-colors bg-accent/30 text-stone-500 cursor-default flex items-center justify-center gap-2 finding-card" style="animation-delay:360ms" disabled>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5"/>
+          </svg>
+          <span id="deploy-label">Select at least one permission</span>
+        </button>`;
+      innerDiv.appendChild(permsDiv);
+
+      const deployBtn = permsDiv.querySelector('#btn-deploy');
+      const deployLabel = permsDiv.querySelector('#deploy-label');
+      const options = permsDiv.querySelectorAll('.perm-option');
+      const selected = new Set();
+
+      options.forEach(opt => {
+        opt.addEventListener('click', () => {
+          const perm = opt.dataset.perm;
+          if (selected.has(perm)) {
+            selected.delete(perm);
+            opt.classList.remove('border-accent/40', 'bg-accent/5');
+            opt.querySelector('.perm-dot').classList.add('hidden');
+          } else {
+            selected.add(perm);
+            opt.classList.add('border-accent/40', 'bg-accent/5');
+            opt.querySelector('.perm-dot').classList.remove('hidden');
+          }
+          const canDeploy = selected.size > 0;
+          deployBtn.disabled = !canDeploy;
+          deployLabel.textContent = canDeploy ? 'Deploy Agent' : 'Select at least one permission';
+          if (canDeploy) {
+            deployBtn.classList.remove('bg-accent/30', 'text-stone-500', 'cursor-default');
+            deployBtn.classList.add('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+          } else {
+            deployBtn.classList.add('bg-accent/30', 'text-stone-500', 'cursor-default');
+            deployBtn.classList.remove('bg-accent', 'hover:bg-accent-hover', 'cursor-pointer', 'text-surface');
+          }
+        });
+      });
+
+      deployBtn.addEventListener('click', (e) => {
+        if (deployBtn.disabled || deployBtn.dataset.used) return;
+        deployBtn.dataset.used = 'true';
+
+        // Extract the selected finding's full root cause text
+        const selectedFinding = innerDiv.querySelector('[data-finding-id]');
+        const findingText = selectedFinding
+          ? selectedFinding.querySelector('.root-cause')?.textContent?.trim() || ''
+          : '';
+
+        // Collapse the selected finding accordion and remove highlight
+        if (selectedFinding) {
+          selectedFinding.querySelector('.root-cause')?.classList.remove('open');
+          selectedFinding.classList.remove('border-accent', 'bg-stone-800/80', 'shadow-lg', 'shadow-accent/10', 'scale-[1.02]');
+        }
+
+        // Deactivate gradient on the agent card — it's no longer the active card
+        const gb = agentCard.querySelector('.gradient-border');
+        if (gb) deactivateGradient(gb);
+
+        // Collapse permissions section
+        collapseAndRemove(permsDiv);
+
+        const skipObserver = e.shiftKey || deployBtn.dataset.skipMode === 'true';
+
+        // Append live monitoring status inside the agent card
+        setTimeout(() => {
+          const liveStatus = document.createElement('div');
+          liveStatus.className = 'finding-card flex items-center justify-center gap-2 py-1 text-xs text-emerald-400';
+          liveStatus.style.animationDelay = '0ms';
+          liveStatus.innerHTML = `
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Live monitoring for incoming tickets`;
+          innerDiv.appendChild(liveStatus);
+
+          // Append live ticket stream as a new timeline card
+          const timelineRoot = agentCard.parentElement;
+          const insertBefore = agentCard.nextSibling;
+          startObserverStream(timelineRoot, insertBefore, findingText, skipObserver);
+        }, 420);
+      });
+    }
+
+    function startObserverStream(timelineRoot, insertBefore, findingText, skip) {
+      const entry = document.createElement('div');
+      entry.className = 'relative z-10 w-full max-w-md mt-8';
+      entry.innerHTML = `
+        <div class="gradient-border">
+          <div class="bg-card p-6 space-y-3">
+            <div class="flex items-center justify-between">
+              <p class="text-xs uppercase tracking-wider text-stone-500">Live Ticket Stream</p>
+            </div>
+            <div id="ticket-stream-list" class="space-y-2"></div>
+          </div>
+        </div>`;
+      timelineRoot.insertBefore(entry, insertBefore);
+
+      const list = entry.querySelector('#ticket-stream-list');
+      const pendingRows = new Map(); // ticketId → row element
+
+      const payload = { type: 'observer', finding: findingText || undefined, skip: skip || undefined };
+      fetch('/api/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then(res => {
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function pump() {
+          reader.read().then(({ done, value }) => {
+            if (done) return;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              try { handleObserverEvent(JSON.parse(line.slice(6))); } catch {}
+            }
+            pump();
+          });
+        }
+        pump();
+      });
+
+      function updateEventReasoning(row, label, reasoning) {
+        const area = row.querySelector('.ticket-event-area');
+        const content = area.querySelector('.event-content');
+        const labelEl = area.querySelector('.event-label');
+        const reasoningEl = area.querySelector('.event-reasoning');
+
+        if (area.style.display === 'none') {
+          // First event — show with fade in
+          labelEl.textContent = label;
+          reasoningEl.textContent = reasoning;
+          area.style.display = '';
+          content.classList.add('fading');
+          requestAnimationFrame(() => content.classList.remove('fading'));
+        } else {
+          // Crossfade: fade out, swap, fade in
+          content.classList.add('fading');
+          setTimeout(() => {
+            labelEl.textContent = label;
+            reasoningEl.textContent = reasoning;
+            content.classList.remove('fading');
+          }, 150);
+        }
+      }
+
+      function handleObserverEvent(ev) {
+        if (ev.type === 'ticket') {
+          const row = appendTicketRow(list, { id: ev.id, subject: ev.subject });
+          pendingRows.set(ev.id, row);
+        } else if (ev.type === 'event_reasoning') {
+          const row = pendingRows.get(ev.ticketId);
+          if (row) updateEventReasoning(row, ev.label, ev.reasoning);
+        } else if (ev.type === 'verdict') {
+          const row = pendingRows.get(ev.ticketId);
+          if (row) resolveTicketRow(row, ev);
+          pendingRows.delete(ev.ticketId);
+        }
+      }
+    }
+
+    const SPINNER_HTML = `
+      <svg class="w-4 h-4 text-stone-500 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>`;
+
+    function appendTicketRow(list, ticket) {
+      const row = document.createElement('div');
+      row.className = 'finding-card rounded-lg border overflow-hidden bg-stone-900/60 border-stone-700/50';
+      row.style.animationDelay = '0ms';
+      row.innerHTML = `
+        <div class="flex items-center justify-between p-3">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xs font-mono text-stone-500 shrink-0">${esc(ticket.id)}</span>
+            <span class="text-sm text-stone-300 truncate">${esc(ticket.subject)}</span>
+          </div>
+          <div class="ticket-status ml-3 shrink-0">${SPINNER_HTML}</div>
+        </div>
+        <div class="ticket-event-area" style="display:none">
+          <div class="event-content px-3 pb-3">
+            <span class="event-label text-[11px] font-mono text-stone-500"></span>
+            <pre class="event-reasoning text-sm text-stone-400 mt-1 leading-relaxed whitespace-pre-wrap"></pre>
+          </div>
+        </div>`;
+      list.appendChild(row);
+      return row;
+    }
+
+    function resolveTicketRow(row, verdict) {
+      const statusEl = row.querySelector('.ticket-status');
+      const area = row.querySelector('.ticket-event-area');
+
+      if (verdict.match) {
+        row.classList.remove('bg-stone-900/60', 'border-stone-700/50');
+        row.classList.add('bg-accent/5', 'border-accent/30');
+        statusEl.innerHTML = `
+          <svg class="w-4 h-4 text-accent" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+          </svg>`;
+
+        // Crossfade the event area into the permanent match display
+        if (area) {
+          const content = area.querySelector('.event-content');
+          content.classList.add('fading');
+          setTimeout(() => {
+            content.className = 'event-content px-3 pb-3 space-y-1.5 border-t border-accent/20';
+            content.innerHTML = `
+              <p class="text-xs font-medium text-accent pt-2 flex items-center gap-1.5">
+                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374L10.05 3.378c.866-1.5 3.032-1.5 3.898 0L21.303 16.126z"/>
+                </svg>
+                Root cause match detected
+              </p>
+              <div class="md-prose text-xs text-stone-400 leading-relaxed">${md(verdict.reasoning)}</div>
+              <p class="text-xs font-medium text-accent">→ Action taken: ${esc(verdict.action)}</p>`;
+            content.classList.remove('fading');
+          }, 150);
+        }
+      } else {
+        if (area) {
+          const content = area.querySelector('.event-content');
+          content.classList.add('fading');
+          if (verdict.summary) {
+            // Crossfade into summary, then fade out and remove
+            setTimeout(() => {
+              content.innerHTML = `
+                <pre class="event-reasoning text-sm text-stone-500 leading-relaxed whitespace-pre-wrap">${esc(verdict.summary)}</pre>`;
+              content.classList.remove('fading');
+              setTimeout(() => { content.classList.add('fading'); setTimeout(() => area.remove(), 150); }, 3000);
+            }, 150);
+          } else {
+            setTimeout(() => area.remove(), 150);
+          }
+        }
+        statusEl.innerHTML = `
+          <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+          </svg>`;
+      }
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    function md(s) {
+      if (!s) return '';
+      return marked.parse(s, { breaks: true });
+    }
+
+    // Track in-flight investigation so Shift+S can interrupt it
+    let activeInvestigation = null;
+
+    document.getElementById('btn-investigate').addEventListener('click', () => {
+      const btn = document.getElementById('btn-investigate');
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'pointer-events-none');
+
+      // Collapse metric description
+      const desc = document.getElementById('metric-desc');
+      if (desc) { desc.style.opacity = '0'; desc.style.maxHeight = '0'; desc.style.marginTop = '0'; desc.style.paddingTop = '0'; }
+
+      const btnContainer = btn.parentElement;
+      const timelineRoot = btnContainer.parentElement;
+      const agentEntry = createAgentCard(timelineRoot, btnContainer);
+      btnContainer.classList.add('hidden');
+
+      const statusEl = agentEntry.querySelector('.agent-status');
+      const reasoningEl = agentEntry.querySelector('.agent-reasoning');
+      statusEl.innerHTML = `
+        <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        <span id="agent-label">Connecting...</span>`;
+      const labelEl = document.getElementById('agent-label');
+      let fullText = '';
+
+      // On file:// there's no server — load fixture directly
+      if (location.protocol === 'file:') {
+        const base = location.href.replace(/\/[^/]*$/, '/');
+        fetch(base + 'sample_findings.txt')
+          .then(r => { if (!r.ok) throw new Error(); return r.text(); })
+          .then(text => renderAgentComplete(agentEntry, text))
+          .catch(() => markError('Could not load sample_findings.txt'));
+        return;
+      }
+
+      const skipMode = btn.dataset.skipMode === 'true';
+      const abortController = new AbortController();
+      activeInvestigation = { agentEntry, abort: abortController };
+      fetch('/api/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'operator', skip: skipMode || undefined }),
+        signal: abortController.signal,
+      }).then((res) => {
+        if (!res.ok || !res.body) { markError('Connection failed'); return; }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function pump() {
+          reader.read().then(({ done, value }) => {
+            if (done) { markComplete(); return; }
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              try { handleEvent(JSON.parse(line.slice(6))); } catch {}
+            }
+            pump();
+          }).catch(() => markError('Stream interrupted'));
+        }
+        pump();
+      }).catch(() => markError('Connection failed'));
+
+      function handleEvent(ev) {
+        if (ev.type === 'meta') {
+          labelEl.textContent = `Analyzing ${ev.ticketCount} tickets\u2026`;
+        } else if (ev.type === 'thinking_delta') {
+          labelEl.textContent = 'Thinking\u2026';
+          fullText += ev.text;
+          reasoningEl.textContent = fullText;
+          reasoningEl.scrollTop = reasoningEl.scrollHeight;
+        } else if (ev.type === 'reasoning_delta') {
+          if (labelEl.textContent !== 'Writing\u2026') {
+            // Transition from thinking to writing: clear thinking text
+            fullText = '';
+            labelEl.textContent = 'Writing\u2026';
+          }
+          fullText += ev.text;
+          reasoningEl.textContent = fullText;
+          reasoningEl.scrollTop = reasoningEl.scrollHeight;
+        } else if (ev.type === 'tool_start') {
+          labelEl.textContent = ev.tool === 'bash' ? 'Running command\u2026' : `Reading ${ev.args?.path || ev.tool}\u2026`;
+          const preview = ev.tool === 'bash' ? (ev.args?.command || '') : (ev.args?.path || '');
+          if (preview) {
+            const truncated = preview.length > 200 ? preview.slice(0, 200) + '\u2026' : preview;
+            const toolEl = document.createElement('div');
+            toolEl.className = 'text-xs text-stone-500 font-mono mt-2 p-2 bg-stone-900/50 rounded overflow-hidden whitespace-pre-wrap break-all';
+            toolEl.textContent = (ev.tool === 'bash' ? '$ ' : '') + truncated;
+            reasoningEl.appendChild(toolEl);
+            reasoningEl.scrollTop = reasoningEl.scrollHeight;
+          }
+        } else if (ev.type === 'reasoning') {
+          fullText = ev.text;
+          reasoningEl.textContent = fullText;
+          reasoningEl.scrollTop = reasoningEl.scrollHeight;
+        } else if (ev.type === 'done') {
+          markComplete();
+        } else if (ev.type === 'error') {
+          markError(ev.message || 'Agent error');
+        }
+      }
+
+      let completed = false;
+      function markComplete() {
+        if (completed) return;
+        completed = true;
+        activeInvestigation = null;
+        renderAgentComplete(agentEntry, fullText);
+      }
+
+      function markError(msg) {
+        statusEl.innerHTML = `
+          <svg class="w-3.5 h-3.5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+          </svg>
+          <span class="text-red-400">${msg}</span>`;
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.shiftKey && e.key === 'D') {
+        // Set skip mode on the deploy button so observer uses canned output
+        const deployBtn = document.getElementById('btn-deploy');
+        if (deployBtn && !deployBtn.disabled && !deployBtn.dataset.used) {
+          deployBtn.dataset.skipMode = 'true';
+          deployBtn.click();
+        }
+        return;
+      }
+      if (e.shiftKey && e.key === 'S') {
+        // Mid-investigation: cancel the stream and show fixture results
+        if (activeInvestigation) {
+          const { agentEntry, abort } = activeInvestigation;
+          activeInvestigation = null;
+          abort.abort();
+          fetch('/sample_findings.txt')
+            .then(r => { if (!r.ok) throw new Error(); return r.text(); })
+            .then(text => renderAgentComplete(agentEntry, text))
+            .catch(() => {});
+          return;
+        }
+
+        const btn = document.getElementById('btn-investigate');
+        if (btn.disabled) return;
+
+        // If served from a server, use the skip endpoint via the main handler
+        if (location.protocol !== 'file:') {
+          btn.dataset.skipMode = 'true';
+          btn.click();
+          return;
+        }
+
+        // file:// fallback: load fixture directly
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'pointer-events-none');
+        const desc = document.getElementById('metric-desc');
+        if (desc) { desc.style.opacity = '0'; desc.style.maxHeight = '0'; desc.style.marginTop = '0'; desc.style.paddingTop = '0'; }
+        const btnContainer = btn.parentElement;
+        const timelineRoot = btnContainer.parentElement;
+        const agentCard = createAgentCard(timelineRoot, btnContainer);
+        btnContainer.classList.add('hidden');
+
+        // Resolve sample_findings.txt relative to the current file
+        const base = location.href.replace(/\/[^/]*$/, '/');
+        fetch(base + 'sample_findings.txt')
+          .then(r => { if (!r.ok) throw new Error(); return r.text(); })
+          .then(text => renderAgentComplete(agentCard, text))
+          .catch(() => {
+            const s = agentCard.querySelector('.agent-status');
+            s.innerHTML = '<span class="text-red-400">Start the demo server to use Shift+S</span>';
+          });
+      }
+    });
+  </script>
+</body>
+</html>
