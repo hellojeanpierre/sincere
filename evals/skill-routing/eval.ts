@@ -6,7 +6,7 @@ import { loadSystemPrompt } from "../../src/agent.ts";
 const SRC_DIR = process.argv[2] || "./src";
 const MODEL = process.env.MODEL || "claude-haiku-4-5-20251001";
 
-const systemPrompt = loadSystemPrompt(resolve(SRC_DIR, "operator.md"));
+const systemPrompt = loadSystemPrompt(resolve(SRC_DIR, "analyst.md"));
 const client = new Anthropic();
 
 // --- Tool definition matching src/tools/read.ts schema ---

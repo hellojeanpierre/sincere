@@ -4,21 +4,21 @@ import { logger } from "../src/lib/logger.ts";
 import { subscribeTrace } from "../src/lib/trace.ts";
 
 if (import.meta.main) {
-  runOperator().catch((err) => {
+  runAnalyst().catch((err) => {
     logger.fatal(err);
     process.exit(1);
   });
 }
 
-async function runOperator() {
+async function runAnalyst() {
 
 const { agent, dispose } = createAgent({
-  promptPath: resolve(import.meta.dirname, "../src/operator.md"),
+  promptPath: resolve(import.meta.dirname, "../src/analyst.md"),
   model: process.env.MODEL || "claude-sonnet-4-6",
   thinkingLevel: "high",
 });
 
-const _unsubTrace = subscribeTrace(agent, "operator");
+const _unsubTrace = subscribeTrace(agent, "analyst");
 
 agent.subscribe((event) => {
   switch (event.type) {
@@ -67,4 +67,4 @@ try {
   await dispose();
 }
 
-} // end runOperator
+} // end runAnalyst

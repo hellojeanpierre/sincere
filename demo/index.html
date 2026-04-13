@@ -643,7 +643,7 @@
       fetch('/api/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'operator', skip: skipMode || undefined }),
+        body: JSON.stringify({ type: 'analyst', skip: skipMode || undefined }),
         signal: abortController.signal,
       }).then((res) => {
         if (!res.ok || !res.body) { markError('Connection failed'); return; }

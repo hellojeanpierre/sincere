@@ -8,7 +8,7 @@ import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 const DATA_PATH = join(import.meta.dir, "../data/pintest-v2/smoke-tickets/smoke_tickets.jsonl");
-const OPERATOR_PROMPT_PATH = join(import.meta.dir, "../src/operator.md");
+const ANALYST_PROMPT_PATH = join(import.meta.dir, "../src/analyst.md");
 const OBSERVER_PROMPT_PATH = join(import.meta.dir, "../src/observer.md");
 const SAMPLE_FINDINGS_PATH = join(import.meta.dir, "sample_findings.txt");
 const EVENTS_PATH = join(import.meta.dir, "../data/pintest-v2/smoke-tickets/smoke_events.jsonl");
@@ -123,7 +123,7 @@ function skipStream(): Response {
 
 function investigateStream(): Response {
   const { agent, dispose } = createAgent({
-    promptPath: OPERATOR_PROMPT_PATH,
+    promptPath: ANALYST_PROMPT_PATH,
     model: "claude-sonnet-4-6",
     thinkingLevel: "high",
   });
@@ -408,7 +408,7 @@ const server = Bun.serve({
       try {
         const body = await req.json() as { type: string; finding?: string; skip?: boolean };
 
-        if (body.type === "operator") {
+        if (body.type === "analyst") {
           return body.skip ? skipStream() : investigateStream();
         }
 
