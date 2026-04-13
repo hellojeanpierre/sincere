@@ -68,17 +68,11 @@
     .event-label {
       color: #d4856a;
     }
-    .thinking-area {
-      max-height: 180px;
-      overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: #78706c transparent;
-    }
     .thinking-area pre {
       margin: 0;
       white-space: pre-wrap;
       word-break: break-word;
-      font-size: 0.65rem;
+      font-size: 0.8rem;
       line-height: 1.4;
       color: #a8a29e;
       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
@@ -196,6 +190,7 @@
         eventArea,
         eventContent: eventArea.querySelector('.event-content'),
         label: eventArea.querySelector('.event-label'),
+        status: root.querySelector('.ticket-status'),
         thinkingWrap: root.querySelector('.ticket-thinking'),
         thinkingArea: root.querySelector('.thinking-area'),
         thinkingPre: root.querySelector('.thinking-text'),
@@ -234,30 +229,33 @@
         const t = tickets.get(ev.ticketId);
         if (!t) return;
         active = t;
-        showEventLabel(t, ev.label);
+        showEventLabel(t, 'agent awakened: ' + ev.label);
+        t.status.innerHTML = SPINNER_HTML;
+        // Clear previous event's outputs
         t.thinkingPre.textContent = '';
-        t.thinkingWrap.style.display = '';
-      },
-
-      thinking_delta(ev) {
-        if (!active) return;
-        active.thinkingPre.textContent += ev.text;
-        active.thinkingArea.scrollTop = active.thinkingArea.scrollHeight;
+        while (t.thinkingArea.lastChild !== t.thinkingPre) t.thinkingArea.removeChild(t.thinkingArea.lastChild);
+        t.thinkingWrap.style.display = 'none';
       },
 
       tool_start(ev) {
         if (!active) return;
+        active.thinkingWrap.style.display = '';
         const preview = ev.tool === 'bash' ? (ev.args?.command || '') : (ev.args?.path || ev.tool);
         const el = document.createElement('div');
         el.className = 'tool-call';
         el.textContent = (ev.tool === 'bash' ? '$ ' : '') + (preview.length > 200 ? preview.slice(0, 200) + '\u2026' : preview);
         active.thinkingArea.appendChild(el);
-        active.thinkingArea.scrollTop = active.thinkingArea.scrollHeight;
       },
 
       event_done(ev) {
         const t = tickets.get(ev.ticketId);
-        if (t) t.thinkingWrap.style.display = 'none';
+        if (!t) return;
+        t.status.innerHTML = CHECKMARK_HTML;
+        // Show final reasoning instead of streaming deltas
+        if (ev.reasoning) {
+          t.thinkingPre.textContent = ev.reasoning;
+          t.thinkingWrap.style.display = '';
+        }
       },
 
       done() {
@@ -265,7 +263,6 @@
         const statusEl = document.getElementById('stream-status');
         statusEl.innerHTML = CHECKMARK_HTML + '<span class="text-emerald-400">Complete</span>';
         deactivateGradient(document.getElementById('stream-border'));
-        for (const t of tickets.values()) t.thinkingWrap.style.display = 'none';
       },
     };
 
