@@ -1,10 +1,12 @@
 import { join } from "path";
+import { mkdirSync } from "fs";
 import { createAgent, createSessionHandler } from "../src/agent.ts";
 import { createLane } from "../src/lane.ts";
-import { logger } from "../src/lib/logger.ts";
-import { subscribeTrace } from "../src/lib/trace.ts";
+import { logger, startTraceSink } from "../src/lib/logger.ts";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { AgentMessage, AgentEvent } from "@mariozechner/pi-agent-core";
+
+const TRACES_DIR = join(import.meta.dir, "..", "data", "traces");
 
 const log = logger.child({ component: "demo" });
 
@@ -127,7 +129,6 @@ async function ticketStream(): Promise<Response> {
   // Shared SSE send — set once the stream starts, used by agent subscriptions.
   let send: (data: Record<string, unknown>) => void = () => {};
 
-  const traceUnsubs: (() => void)[] = [];
   const { handler, sessions, clear } = createSessionHandler(
     () => {
       const created = createAgent({
@@ -136,16 +137,9 @@ async function ticketStream(): Promise<Response> {
         tools: [],
         thinkingLevel: "high",
       });
-      traceUnsubs.push(subscribeTrace(created.agent, "demo"));
       created.agent.subscribe(logAgentEvent);
-      // Forward thinking deltas and tool calls to SSE
+      // Forward tool calls to SSE
       created.agent.subscribe((e: AgentEvent) => {
-        if (e.type === "message_update") {
-          const me = e.assistantMessageEvent as { type: string; delta?: string };
-          if (me.type === "thinking_delta" && me.delta) {
-            send({ type: "thinking_delta", text: me.delta });
-          }
-        }
         if (e.type === "tool_execution_start") {
           send({ type: "tool_start", tool: e.toolName, args: e.args });
         }
@@ -167,6 +161,9 @@ async function ticketStream(): Promise<Response> {
       }, 5_000);
 
       const announced = new Set<string>();
+
+      mkdirSync(TRACES_DIR, { recursive: true });
+      const traceWriter = Bun.file(join(TRACES_DIR, `demo-${Date.now()}.jsonl`)).writer();
 
       log.info({ tickets: demoEventsByTicket.length }, "stream started");
 
@@ -191,9 +188,13 @@ async function ticketStream(): Promise<Response> {
               label: makeEventLabel(event),
             });
 
-            await lane.enqueue(ticketId, event);
+            await startTraceSink({ workItemId: ticketId, write: (line) => traceWriter.write(line) }, () =>
+              lane.enqueue(ticketId, event),
+            );
 
-            const reasoning = extractLastReasoning(sessions(ticketId) ?? []);
+            const msgs = sessions(ticketId) ?? [];
+            const reasoning = extractLastReasoning(msgs);
+            log.debug({ ticketId, reasoningLen: reasoning.length, msgCount: msgs.length }, "event_done reasoning");
             send({
               type: "event_done",
               ticketId,
@@ -209,7 +210,7 @@ async function ticketStream(): Promise<Response> {
         send({ type: "error", message: err instanceof Error ? err.message : String(err) });
       } finally {
         clearInterval(keepalive);
-        for (const unsub of traceUnsubs) unsub();
+        traceWriter.end();
         clear();
         controller.close();
       }
