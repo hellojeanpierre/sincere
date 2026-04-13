@@ -66,7 +66,7 @@
       opacity: 0;
     }
     .event-label {
-      color: #34d399;
+      color: #d4856a;
     }
   </style>
 </head>
@@ -77,7 +77,7 @@
       <div class="absolute top-0 bottom-0 w-px bg-accent/30"></div>
 
       <!-- Ticket stream card -->
-      <div id="stream-card" class="relative z-10 w-full max-w-md">
+      <div id="stream-card" class="relative z-10 w-full max-w-lg">
         <div id="stream-border" class="gradient-border">
           <div class="bg-card p-6 space-y-3">
             <div class="flex items-center justify-between">
@@ -109,6 +109,12 @@
         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
         <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
       </span>`;
+
+    const SPINNER_HTML = `
+      <svg class="w-4 h-4 text-stone-500 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>`;
 
     const CHECKMARK_HTML = `
       <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
@@ -142,11 +148,11 @@
             <span class="text-xs font-mono text-stone-500 shrink-0">${esc(id)}</span>
             <span class="text-sm text-stone-300 truncate">${esc(subject)}</span>
           </div>
-          <div class="ticket-status ml-3 shrink-0">${GREEN_DOT_HTML}</div>
+          <div class="ticket-status ml-3 shrink-0">${SPINNER_HTML}</div>
         </div>
         <div class="ticket-event-area" style="display:none">
           <div class="event-content px-3 pb-3">
-            <span class="event-label text-[11px] font-mono text-emerald-400"></span>
+            <span class="event-label text-[11px] font-mono"></span>
           </div>
         </div>`;
       list.appendChild(row);
