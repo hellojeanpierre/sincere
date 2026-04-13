@@ -68,6 +68,33 @@
     .event-label {
       color: #d4856a;
     }
+    .thinking-area {
+      max-height: 180px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #78706c transparent;
+    }
+    .thinking-area pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.65rem;
+      line-height: 1.4;
+      color: #a8a29e;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    }
+    .tool-call {
+      font-size: 0.7rem;
+      color: #78706c;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      background: rgba(0,0,0,0.3);
+      border-radius: 0.375rem;
+      overflow: hidden;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body class="bg-surface text-stone-200 min-h-screen antialiased">
@@ -154,6 +181,11 @@
           <div class="event-content px-3 pb-3">
             <span class="event-label text-[11px] font-mono"></span>
           </div>
+        </div>
+        <div class="ticket-thinking" style="display:none">
+          <div class="thinking-area px-3 pb-3">
+            <pre class="thinking-text"></pre>
+          </div>
         </div>`;
       list.appendChild(row);
       rows.set(id, row);
@@ -211,15 +243,59 @@
       });
     }
 
+    let activeTicketId = null;
+
     function handleEvent(ev) {
       if (ev.type === 'ticket') {
         appendTicketRow(ev.id, ev.subject);
       } else if (ev.type === 'event') {
+        // Event label arrives before agent runs (awake moment)
+        activeTicketId = ev.ticketId;
         updateTicketEvent(ev.ticketId, ev.label);
+        // Show & clear thinking area for this ticket
+        const row = rows.get(ev.ticketId);
+        if (row) {
+          const thinkingArea = row.querySelector('.ticket-thinking');
+          const thinkingText = row.querySelector('.thinking-text');
+          thinkingText.textContent = '';
+          thinkingArea.style.display = '';
+        }
+      } else if (ev.type === 'thinking_delta') {
+        if (!activeTicketId) return;
+        const row = rows.get(activeTicketId);
+        if (!row) return;
+        const thinkingText = row.querySelector('.thinking-text');
+        thinkingText.textContent += ev.text;
+        const area = row.querySelector('.thinking-area');
+        area.scrollTop = area.scrollHeight;
+      } else if (ev.type === 'tool_start') {
+        if (!activeTicketId) return;
+        const row = rows.get(activeTicketId);
+        if (!row) return;
+        const area = row.querySelector('.thinking-area');
+        const preview = ev.tool === 'bash' ? (ev.args?.command || '') : (ev.args?.path || ev.tool);
+        const truncated = preview.length > 200 ? preview.slice(0, 200) + '\u2026' : preview;
+        const toolEl = document.createElement('div');
+        toolEl.className = 'tool-call';
+        toolEl.textContent = (ev.tool === 'bash' ? '$ ' : '') + truncated;
+        area.appendChild(toolEl);
+        area.scrollTop = area.scrollHeight;
+      } else if (ev.type === 'event_done') {
+        // Agent finished processing this event
+        const row = rows.get(ev.ticketId);
+        if (row) {
+          // Hide thinking area when done
+          row.querySelector('.ticket-thinking').style.display = 'none';
+        }
       } else if (ev.type === 'done') {
+        activeTicketId = null;
         const statusEl = document.getElementById('stream-status');
         statusEl.innerHTML = CHECKMARK_HTML + '<span class="text-emerald-400">Complete</span>';
         deactivateGradient(document.getElementById('stream-border'));
+        // Hide any remaining thinking areas
+        for (const row of rows.values()) {
+          row.querySelector('.ticket-thinking').style.display = 'none';
+        }
       }
     }
 

@@ -40,9 +40,23 @@ function parseJsonl<T>(text: string): T[] {
 }
 
 const allEvents = parseJsonl<ZenEvent>(await Bun.file(EVENTS_PATH).text());
-const demoEvents = allEvents.filter(
+const demoEventsRaw = allEvents.filter(
   (e) => ALLOWED_EVENT_TYPES.has(e.type) && DEMO_TICKET_IDS.has(String(e.detail.id)),
 );
+
+// Group events by ticket so we process all events for one ticket before
+// moving to the next — lets the audience follow one ticket's reasoning at a time.
+const demoEventsByTicket: ZenEvent[][] = [];
+{
+  const byId = new Map<string, ZenEvent[]>();
+  const order: string[] = [];
+  for (const e of demoEventsRaw) {
+    const id = String(e.detail.id);
+    if (!byId.has(id)) { byId.set(id, []); order.push(id); }
+    byId.get(id)!.push(e);
+  }
+  for (const id of order) demoEventsByTicket.push(byId.get(id)!);
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -110,17 +124,32 @@ async function ticketStream(): Promise<Response> {
 - SOPs: \`${POLICY_PATH}\` — JSONL file with standard operating procedures (10 policies)
 `;
 
+  // Shared SSE send — set once the stream starts, used by agent subscriptions.
+  let send: (data: Record<string, unknown>) => void = () => {};
+
   const traceUnsubs: (() => void)[] = [];
   const { handler, sessions, clear } = createSessionHandler(
     () => {
       const created = createAgent({
         systemPrompt,
-        model: "claude-haiku-4-5-20251001",
+        model: "claude-sonnet-4-6",
         tools: [],
         thinkingLevel: "high",
       });
       traceUnsubs.push(subscribeTrace(created.agent, "demo"));
       created.agent.subscribe(logAgentEvent);
+      // Forward thinking deltas and tool calls to SSE
+      created.agent.subscribe((e: AgentEvent) => {
+        if (e.type === "message_update") {
+          const me = e.assistantMessageEvent as { type: string; delta?: string };
+          if (me.type === "thinking_delta" && me.delta) {
+            send({ type: "thinking_delta", text: me.delta });
+          }
+        }
+        if (e.type === "tool_execution_start") {
+          send({ type: "tool_start", tool: e.toolName, args: e.args });
+        }
+      });
       return created;
     },
   );
@@ -129,7 +158,7 @@ async function ticketStream(): Promise<Response> {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (data: Record<string, unknown>) => {
+      send = (data: Record<string, unknown>) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       };
 
@@ -139,12 +168,12 @@ async function ticketStream(): Promise<Response> {
 
       const announced = new Set<string>();
 
-      log.info({ events: demoEvents.length }, "stream started");
+      log.info({ tickets: demoEventsByTicket.length }, "stream started");
 
       try {
-        for (const event of demoEvents) {
-          const ticketId = String(event.detail.id);
-          const subject = String(event.detail.subject ?? "");
+        for (const ticketEvents of demoEventsByTicket) {
+          const ticketId = String(ticketEvents[0].detail.id);
+          const subject = String(ticketEvents[0].detail.subject ?? "");
 
           await new Promise((r) => setTimeout(r, EVENT_DELAY_MS));
 
@@ -154,15 +183,23 @@ async function ticketStream(): Promise<Response> {
             log.debug({ ticketId, subject }, "ticket announced");
           }
 
-          await lane.enqueue(ticketId, event);
+          for (const event of ticketEvents) {
+            // Send event label before agent processes (awake moment)
+            send({
+              type: "event",
+              ticketId,
+              label: makeEventLabel(event),
+            });
 
-          const reasoning = extractLastReasoning(sessions(ticketId) ?? []);
-          send({
-            type: "event",
-            ticketId,
-            label: makeEventLabel(event),
-            reasoning,
-          });
+            await lane.enqueue(ticketId, event);
+
+            const reasoning = extractLastReasoning(sessions(ticketId) ?? []);
+            send({
+              type: "event_done",
+              ticketId,
+              reasoning,
+            });
+          }
         }
 
         log.info("stream completed");
