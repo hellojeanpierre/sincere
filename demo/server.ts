@@ -6,7 +6,7 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 // ── Constants ───────────────────────────────────────────────────────
 
-const OPERATOR_PROMPT_PATH = join(import.meta.dir, "operator.md");
+const OPERATOR_PROMPT_PATH = join(import.meta.dir, "../src/operator.md");
 const STATIC_DIR = import.meta.dir;
 const EVENT_DELAY_MS = 2_000;
 
