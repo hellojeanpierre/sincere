@@ -1,5 +1,3 @@
-Acknowledge the incoming event. Respond with a short one-sentence acknowledgement.
-
 ## Output
 
 Decision: no action needed (work item is on track) or intervention needed (with a specific recommended action and reasoning)
