@@ -308,14 +308,14 @@ describe("transformContext", () => {
 });
 
 describe("loadSystemPrompt", () => {
-  test("produces a non-empty prompt containing the operator section", () => {
-    const prompt = loadSystemPrompt(resolve(import.meta.dirname, "operator.md"));
+  test("produces a non-empty prompt containing the analyst section", () => {
+    const prompt = loadSystemPrompt(resolve(import.meta.dirname, "analyst.md"));
     expect(prompt.length).toBeGreaterThan(0);
-    expect(prompt).toContain("# Operator Prompt");
+    expect(prompt).toContain("# Analyst Prompt");
   });
 
   test("skill paths in system prompt resolve to existing files from project root", () => {
-    const prompt = loadSystemPrompt(resolve(import.meta.dirname, "operator.md"));
+    const prompt = loadSystemPrompt(resolve(import.meta.dirname, "analyst.md"));
     const skillPathPattern = /\*\*\w[\w-]*\*\* \(([^)]+)\):/g;
     const paths: string[] = [];
     let match: RegExpExecArray | null;
