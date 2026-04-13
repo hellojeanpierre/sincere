@@ -59,49 +59,166 @@
       opacity: 0;
       animation: slide-in 0.3s ease-out forwards;
     }
-    .root-cause {
-      display: grid;
-      grid-template-rows: 0fr;
-      transition: grid-template-rows 0.25s ease, margin-top 0.25s ease, padding-top 0.25s ease, border-color 0.25s ease;
-      margin-top: 0;
-      padding-top: 0;
-      border-top: 1px solid transparent;
-    }
-    .root-cause > div {
-      overflow: hidden;
-    }
-    .root-cause.open {
-      grid-template-rows: 1fr;
-      margin-top: 0.5rem;
-      padding-top: 0.5rem;
-      border-top-color: rgba(120, 113, 108, 0.4);
-    }
     .event-content {
       transition: opacity 0.15s ease;
     }
     .event-content.fading {
       opacity: 0;
     }
-    .md-prose { line-height: 1.5; }
-    .md-prose p { margin: 0.25rem 0; }
-    .md-prose strong { color: #e7e5e4; font-weight: 600; }
-    .md-prose em { color: #d6d3d1; }
-    .md-prose ul, .md-prose ol { margin: 0.25rem 0 0.25rem 1.25rem; }
-    .md-prose li { margin: 0.1rem 0; }
-    .md-prose code { background: rgba(255,255,255,0.06); padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.7rem; }
-    .md-prose table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 0.75rem; }
-    .md-prose th { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid rgba(120,113,108,0.5); color: #d6d3d1; font-weight: 600; }
-    .md-prose td { padding: 0.25rem 0.5rem; border-bottom: 1px solid rgba(120,113,108,0.2); color: #a8a29e; }
-    .md-prose tr:last-child td { border-bottom: none; }
-    .md-prose blockquote { border-left: 2px solid #d4856a; padding-left: 0.75rem; margin: 0.25rem 0; color: #a8a29e; }
-    .md-prose h1, .md-prose h2, .md-prose h3, .md-prose h4 { color: #e7e5e4; font-weight: 600; margin: 0.4rem 0 0.2rem; }
-    .md-prose h3 { font-size: 0.8rem; }
-    .md-prose h4 { font-size: 0.75rem; }
   </style>
 </head>
 <body class="bg-surface text-stone-200 min-h-screen antialiased">
   <div class="max-w-2xl mx-auto px-4 py-12">
-    <h1 class="text-2xl font-bold">Sincere Demo</h1>
+
+    <div class="relative flex flex-col items-center">
+      <div class="absolute top-0 bottom-0 w-px bg-accent/30"></div>
+
+      <!-- Ticket stream card -->
+      <div id="stream-card" class="relative z-10 w-full max-w-md">
+        <div id="stream-border" class="gradient-border">
+          <div class="bg-card p-6 space-y-3">
+            <div class="flex items-center justify-between">
+              <p class="text-xs uppercase tracking-wider text-stone-500">Live Ticket Stream</p>
+              <div id="stream-status" class="flex items-center gap-1.5 text-xs text-stone-500"></div>
+            </div>
+            <div id="ticket-list" class="space-y-2"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Start button -->
+      <div class="relative z-10 mt-8 flex flex-col items-center">
+        <button
+          id="btn-start"
+          class="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-surface text-sm font-medium px-4 py-2 rounded-full transition-colors"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/>
+          </svg>
+          Start
+        </button>
+      </div>
+
+    </div>
   </div>
+
+  <script>
+    const SPINNER_HTML = `
+      <svg class="w-4 h-4 text-stone-500 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>`;
+
+    const CHECKMARK_HTML = `
+      <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+      </svg>`;
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    function deactivateGradient(el) {
+      el.classList.remove('gradient-border');
+      Object.assign(el.style, { background: 'none', border: '1px solid #3a2d28', borderRadius: '1rem' });
+      el.querySelector(':scope > div').style.borderRadius = 'calc(1rem - 1px)';
+    }
+
+    // ── Row management ──────────────────────────────────────────────
+
+    const rows = new Map(); // ticketId → row element
+
+    function appendTicketRow(id, subject) {
+      const list = document.getElementById('ticket-list');
+      const row = document.createElement('div');
+      row.className = 'finding-card rounded-lg border overflow-hidden bg-stone-900/60 border-stone-700/50';
+      row.style.animationDelay = '0ms';
+      row.innerHTML = `
+        <div class="flex items-center justify-between p-3">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xs font-mono text-stone-500 shrink-0">${esc(id)}</span>
+            <span class="text-sm text-stone-300 truncate">${esc(subject)}</span>
+          </div>
+          <div class="ticket-status ml-3 shrink-0">${SPINNER_HTML}</div>
+        </div>
+        <div class="ticket-event-area" style="display:none">
+          <div class="event-content px-3 pb-3">
+            <span class="event-label text-[11px] font-mono text-stone-500"></span>
+          </div>
+        </div>`;
+      list.appendChild(row);
+      rows.set(id, row);
+    }
+
+    function updateTicketEvent(ticketId, label) {
+      const row = rows.get(ticketId);
+      if (!row) return;
+      const area = row.querySelector('.ticket-event-area');
+      const content = area.querySelector('.event-content');
+      const labelEl = area.querySelector('.event-label');
+
+      if (area.style.display === 'none') {
+        labelEl.textContent = label;
+        area.style.display = '';
+        content.classList.add('fading');
+        requestAnimationFrame(() => content.classList.remove('fading'));
+      } else {
+        content.classList.add('fading');
+        setTimeout(() => {
+          labelEl.textContent = label;
+          content.classList.remove('fading');
+        }, 150);
+      }
+    }
+
+    // ── SSE stream ──────────────────────────────────────────────────
+
+    function startStream() {
+      const btn = document.getElementById('btn-start');
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'pointer-events-none');
+
+      const statusEl = document.getElementById('stream-status');
+      statusEl.innerHTML = SPINNER_HTML + '<span>Streaming</span>';
+
+      fetch('/api/stream').then(res => {
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function pump() {
+          reader.read().then(({ done, value }) => {
+            if (done) return;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              try { handleEvent(JSON.parse(line.slice(6))); } catch {}
+            }
+            pump();
+          });
+        }
+        pump();
+      });
+    }
+
+    function handleEvent(ev) {
+      if (ev.type === 'ticket') {
+        appendTicketRow(ev.id, ev.subject);
+      } else if (ev.type === 'event') {
+        updateTicketEvent(ev.ticketId, ev.label);
+      } else if (ev.type === 'done') {
+        const statusEl = document.getElementById('stream-status');
+        statusEl.innerHTML = CHECKMARK_HTML + '<span class="text-emerald-400">Complete</span>';
+        deactivateGradient(document.getElementById('stream-border'));
+      }
+    }
+
+    document.getElementById('btn-start').addEventListener('click', startStream);
+  </script>
 </body>
 </html>
