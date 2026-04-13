@@ -1,8 +1,12 @@
 import { join } from "path";
 import { createAgent, createSessionHandler } from "../src/agent.ts";
 import { createLane } from "../src/lane.ts";
+import { logger } from "../src/lib/logger.ts";
+import { subscribeTrace } from "../src/lib/trace.ts";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage, AgentEvent } from "@mariozechner/pi-agent-core";
+
+const log = logger.child({ component: "demo" });
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -65,6 +69,36 @@ function extractLastReasoning(msgs: AgentMessage[]): string {
   return "";
 }
 
+// ── Agent event logging ─────────────────────────────────────────────
+
+function logAgentEvent(event: AgentEvent): void {
+  switch (event.type) {
+    case "message_end":
+      if (event.message.role === "assistant") {
+        for (const block of (event.message as AssistantMessage).content) {
+          if (block.type === "text" && block.text) {
+            log.info({ text: block.text.slice(0, 500) }, "agent reasoning");
+          }
+        }
+      }
+      break;
+    case "tool_execution_start":
+      log.info({ tool: event.toolName, args: event.args }, "tool call");
+      break;
+    case "tool_execution_end": {
+      const text = event.result?.content
+        ?.filter((b: { type: string }): b is { type: "text"; text: string } => b.type === "text")
+        .map((b: { type: "text"; text: string }) => b.text)
+        .join("\n") ?? "";
+      log.info(
+        { tool: event.toolName, isError: event.isError, output: text.slice(0, 500) },
+        "tool result",
+      );
+      break;
+    }
+  }
+}
+
 // ── SSE stream ──────────────────────────────────────────────────────
 
 async function ticketStream(): Promise<Response> {
@@ -77,13 +111,19 @@ async function ticketStream(): Promise<Response> {
 - SOPs: \`${POLICY_PATH}\` — JSONL file with standard operating procedures (10 policies)
 `;
 
+  const traceUnsubs: (() => void)[] = [];
   const { handler, sessions, clear } = createSessionHandler(
-    () => createAgent({
-      systemPrompt,
-      model: "claude-haiku-4-5-20251001",
-      tools: [],
-      thinkingLevel: "high",
-    }),
+    () => {
+      const created = createAgent({
+        systemPrompt,
+        model: "claude-haiku-4-5-20251001",
+        tools: [],
+        thinkingLevel: "high",
+      });
+      traceUnsubs.push(subscribeTrace(created.agent, "demo"));
+      created.agent.subscribe(logAgentEvent);
+      return created;
+    },
   );
   const lane = createLane(handler);
 
@@ -100,6 +140,8 @@ async function ticketStream(): Promise<Response> {
 
       const announced = new Set<string>();
 
+      log.info({ events: demoEvents.length }, "stream started");
+
       try {
         for (const event of demoEvents) {
           const ticketId = String(event.detail.id);
@@ -110,6 +152,7 @@ async function ticketStream(): Promise<Response> {
           if (!announced.has(ticketId)) {
             announced.add(ticketId);
             send({ type: "ticket", id: ticketId, subject });
+            log.debug({ ticketId, subject }, "ticket announced");
           }
 
           await lane.enqueue(ticketId, event);
@@ -123,11 +166,14 @@ async function ticketStream(): Promise<Response> {
           });
         }
 
+        log.info("stream completed");
         send({ type: "done" });
       } catch (err) {
+        log.error({ err }, "stream failed");
         send({ type: "error", message: err instanceof Error ? err.message : String(err) });
       } finally {
         clearInterval(keepalive);
+        for (const unsub of traceUnsubs) unsub();
         clear();
         controller.close();
       }
@@ -152,6 +198,7 @@ const server = Bun.serve({
     const url = new URL(req.url);
 
     if (url.pathname === "/api/stream") {
+      log.info("SSE stream requested");
       return ticketStream();
     }
 
@@ -163,8 +210,9 @@ const server = Bun.serve({
       return new Response(file);
     }
 
+    log.warn({ path: url.pathname }, "not found");
     return new Response("Not found", { status: 404 });
   },
 });
 
-console.log(`Demo server listening on http://localhost:${server.port}`);
+log.info({ port: server.port }, "demo server listening");
