@@ -10,60 +10,35 @@ const OPERATOR_PROMPT_PATH = join(import.meta.dir, "operator.md");
 const STATIC_DIR = import.meta.dir;
 const EVENT_DELAY_MS = 2_000;
 
-const TICKETS = [
-  { id: "4800019", subject: "Issue with my Pinterest account — appeal denied" },
-  { id: "4800027", subject: "Issue with my Pinterest account — ad account suspended" },
-  { id: "4800094", subject: "Unauthorized charge on my card from Pinterest Ads" },
-  { id: "4800099", subject: "Issue with my Pinterest account — board removed" },
-];
+const DATA_DIR = join(import.meta.dir, "..", "data", "pintest-v2", "smoke-tickets");
+const EVENTS_PATH = join(DATA_DIR, "smoke_events.jsonl");
+const TICKETS_PATH = join(DATA_DIR, "smoke_tickets.jsonl");
+const POLICY_PATH = join(DATA_DIR, "policy.jsonl");
 
-// ── Synthetic event generation ──────────────────────────────────────
+const DEMO_TICKET_IDS = new Set(["4800019", "4800027", "4800094", "4800099"]);
+const ALLOWED_EVENT_TYPES = new Set([
+  "zen:event-type:ticket.created",
+  "zen:event-type:ticket.group_assignment_changed",
+  "zen:event-type:ticket.agent_assignment_changed",
+  "zen:event-type:ticket.status_changed",
+]);
+
+// ── Data loading ────────────────────────────────────────────────────
 
 type ZenEvent = {
   type: string;
   detail: Record<string, unknown>;
+  [key: string]: unknown;
 };
 
-function generateEvents(): { event: ZenEvent; ticketId: string; subject: string }[] {
-  const events: { event: ZenEvent; ticketId: string; subject: string }[] = [];
-
-  for (const t of TICKETS) {
-    events.push({
-      ticketId: t.id,
-      subject: t.subject,
-      event: {
-        type: "zen:event-type:ticket.created",
-        detail: { id: t.id, subject: t.subject, status: "new" },
-      },
-    });
-    events.push({
-      ticketId: t.id,
-      subject: t.subject,
-      event: {
-        type: "zen:event-type:ticket.group_assignment_changed",
-        detail: { id: t.id, group_id: "support_tier1" },
-      },
-    });
-    events.push({
-      ticketId: t.id,
-      subject: t.subject,
-      event: {
-        type: "zen:event-type:ticket.agent_assignment_changed",
-        detail: { id: t.id, assignee_id: "agent_042" },
-      },
-    });
-    events.push({
-      ticketId: t.id,
-      subject: t.subject,
-      event: {
-        type: "zen:event-type:ticket.status_changed",
-        detail: { id: t.id, status: "open" },
-      },
-    });
-  }
-
-  return events;
+function parseJsonl<T>(text: string): T[] {
+  return text.trim().split("\n").map((line) => JSON.parse(line) as T);
 }
+
+const allEvents = parseJsonl<ZenEvent>(await Bun.file(EVENTS_PATH).text());
+const demoEvents = allEvents.filter(
+  (e) => ALLOWED_EVENT_TYPES.has(e.type) && DEMO_TICKET_IDS.has(String(e.detail.id)),
+);
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -93,7 +68,14 @@ function extractLastReasoning(msgs: AgentMessage[]): string {
 // ── SSE stream ──────────────────────────────────────────────────────
 
 async function ticketStream(): Promise<Response> {
-  const systemPrompt = await Bun.file(OPERATOR_PROMPT_PATH).text();
+  const operatorBase = await Bun.file(OPERATOR_PROMPT_PATH).text();
+  const systemPrompt = `${operatorBase}
+
+## Reference Data
+
+- Tickets: \`${TICKETS_PATH}\` — JSONL file with full ticket details (32 tickets)
+- SOPs: \`${POLICY_PATH}\` — JSONL file with standard operating procedures (10 policies)
+`;
 
   const { handler, sessions, clear } = createSessionHandler(
     () => createAgent({
@@ -104,7 +86,6 @@ async function ticketStream(): Promise<Response> {
     }),
   );
   const lane = createLane(handler);
-  const allEvents = generateEvents();
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -120,7 +101,10 @@ async function ticketStream(): Promise<Response> {
       const announced = new Set<string>();
 
       try {
-        for (const { event, ticketId, subject } of allEvents) {
+        for (const event of demoEvents) {
+          const ticketId = String(event.detail.id);
+          const subject = String(event.detail.subject ?? "");
+
           await new Promise((r) => setTimeout(r, EVENT_DELAY_MS));
 
           if (!announced.has(ticketId)) {
