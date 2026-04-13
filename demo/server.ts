@@ -107,7 +107,6 @@ async function ticketStream(): Promise<Response> {
 
 ## Reference Data
 
-- Tickets: \`${TICKETS_PATH}\` — JSONL file with full ticket details (32 tickets)
 - SOPs: \`${POLICY_PATH}\` — JSONL file with standard operating procedures (10 policies)
 `;
 
