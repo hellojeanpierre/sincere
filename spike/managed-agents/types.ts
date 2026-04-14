@@ -64,7 +64,7 @@ export async function apiGet<T = unknown>(path: string): Promise<T> {
 export async function apiUploadFile(filePath: string): Promise<{ id: string }> {
   const file = Bun.file(filePath);
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", file, filePath.split("/").pop()!);
   const res = await fetch(`${BASE}/files`, {
     method: "POST",
     headers: {
