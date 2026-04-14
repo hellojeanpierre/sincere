@@ -44,8 +44,19 @@
     .gradient-border {
       position: relative;
       padding: 1px;
+    }
+    .gradient-border::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
       background: conic-gradient(from var(--angle), #d4856a, #6b4c3b, #3a2d28, #d4856a);
       animation: rotate-gradient 4s linear infinite;
+      z-index: 0;
+    }
+    .gradient-border > div {
+      position: relative;
+      z-index: 1;
     }
     .gradient-border.rounded-lg > div { border-radius: calc(0.5rem - 1px); }
     .gradient-border.rounded-2xl > div { border-radius: calc(1rem - 1px); }
