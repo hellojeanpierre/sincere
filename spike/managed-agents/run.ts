@@ -12,6 +12,7 @@ import {
   ALLOWED_EVENT_TYPES,
   DEMO_TICKET_ORDER,
   type ZenEvent,
+  type SSEEvent,
 } from "./types";
 
 // ── Load & filter events (same logic as demo/server.ts) ─────────────
@@ -22,7 +23,6 @@ const filtered = allEvents.filter(
   (e) => ALLOWED_EVENT_TYPES.has(e.type) && DEMO_TICKET_IDS.has(String(e.detail.id)),
 );
 
-// Group by ticket, ordered by DEMO_TICKET_ORDER
 const byId = new Map<string, ZenEvent[]>();
 for (const e of filtered) {
   const id = String(e.detail.id);
@@ -37,44 +37,35 @@ for (const id of DEMO_TICKET_ORDER) {
 
 console.log(`Loaded ${filtered.length} events across ${ticketGroups.length} tickets\n`);
 
-// ── Session ─────────────────────────────────────────────────────────
+// ── Process one ticket per session ──────────────────────────────────
 
-const session = await apiPost<{ id: string }>("/sessions", {
-  agent: AGENT_ID,
-  environment_id: ENVIRONMENT_ID,
-});
-console.log("Session:", session.id);
+async function processTicket(events: ZenEvent[]): Promise<void> {
+  const ticketId = String(events[0].detail.id);
+  const subject = String(events[0].detail.subject ?? "");
+  console.log(`\n━━ Ticket ${ticketId}: ${subject} ━━`);
 
-// Single stream open for the whole run
-const streamRes = await apiStream(`/sessions/${session.id}/stream`);
-if (!streamRes.ok || !streamRes.body) {
-  throw new Error(`Stream failed: ${streamRes.status} ${await streamRes.text()}`);
-}
-const sseReader = parseSSE(streamRes.body.getReader());
+  const session = await apiPost<{ id: string }>("/sessions", {
+    agent: AGENT_ID,
+    environment_id: ENVIRONMENT_ID,
+  });
+  console.log(`  Session: ${session.id}`);
 
-// ── Process events (matches demo ticket→event ordering) ─────────────
-
-async function waitForIdle(): Promise<void> {
-  for await (const event of sseReader) {
-    if (event.type === "session.status_idle") return;
-    if (event.type === "session.status_terminated") throw new Error("Session terminated");
+  const streamRes = await apiStream(`/sessions/${session.id}/stream`);
+  if (!streamRes.ok || !streamRes.body) {
+    throw new Error(`Stream failed: ${streamRes.status} ${await streamRes.text()}`);
   }
-}
+  const sseReader = parseSSE(streamRes.body.getReader());
 
-const announced = new Set<string>();
+  async function waitForIdle(): Promise<void> {
+    for await (const event of sseReader) {
+      if (event.type === "session.status_idle") return;
+      if (event.type === "session.status_terminated") throw new Error("Session terminated");
+    }
+  }
 
-try {
-  for (const ticketEvents of ticketGroups) {
-    const ticketId = String(ticketEvents[0].detail.id);
-    const subject = String(ticketEvents[0].detail.subject ?? "");
-
-    for (const event of ticketEvents) {
-      if (!announced.has(ticketId)) {
-        announced.add(ticketId);
-        console.log(`\n━━ Ticket ${ticketId}: ${subject} ━━`);
-      }
-
-      console.log(`\n▸ ${makeEventLabel(event)}`);
+  try {
+    for (const event of events) {
+      console.log(`\n  ▸ ${makeEventLabel(event)}`);
 
       await apiPost(`/sessions/${session.id}/events`, {
         events: [
@@ -89,10 +80,14 @@ try {
 
       await waitForIdle();
     }
+  } finally {
+    console.log(`  Deleting session ${session.id}…`);
+    await apiDelete(`/sessions/${session.id}`);
   }
-
-  console.log("\n━━ done ━━");
-} finally {
-  console.log(`Deleting session ${session.id}…`);
-  await apiDelete(`/sessions/${session.id}`);
 }
+
+for (const ticketEvents of ticketGroups) {
+  await processTicket(ticketEvents);
+}
+
+console.log("\n━━ done ━━");
