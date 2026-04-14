@@ -1,0 +1,16 @@
+{
+  "name": "managed-agents-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "bun run setup.ts",
+    "run": "bun run run.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}
