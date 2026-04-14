@@ -13,13 +13,6 @@ import {
   type ZenEvent,
 } from "./types";
 
-// ── Load spike.env ──────────────────────────────────────────────────
-
-const envText = await Bun.file("spike.env").text();
-for (const line of envText.split("\n")) {
-  const [key, ...rest] = line.split("=");
-  if (key && rest.length) process.env[key] = rest.join("=");
-}
 const { AGENT_ID, ENVIRONMENT_ID } = loadSpikeEnv();
 
 // ── Load & filter events (same logic as demo/server.ts) ─────────────

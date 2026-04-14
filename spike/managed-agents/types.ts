@@ -9,7 +9,7 @@ export function loadSpikeEnv(): SpikeEnv {
   const AGENT_ID = process.env.AGENT_ID;
   const ENVIRONMENT_ID = process.env.ENVIRONMENT_ID;
   if (!AGENT_ID || !ENVIRONMENT_ID) {
-    throw new Error("Missing AGENT_ID or ENVIRONMENT_ID in spike.env — run setup.ts first");
+    throw new Error("Missing AGENT_ID or ENVIRONMENT_ID in .env — run setup.ts first");
   }
   return { AGENT_ID, ENVIRONMENT_ID };
 }

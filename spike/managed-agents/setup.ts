@@ -14,5 +14,5 @@ const environment = await apiPost<{ id: string }>("/environments", {
 });
 console.log("Environment created:", environment.id);
 
-await Bun.write("spike.env", `AGENT_ID=${AGENT_ID}\nENVIRONMENT_ID=${environment.id}\n`);
-console.log("Saved to spike.env");
+await Bun.write(".env", `AGENT_ID=${AGENT_ID}\nENVIRONMENT_ID=${environment.id}\n`);
+console.log("Saved to .env");
