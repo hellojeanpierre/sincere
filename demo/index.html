@@ -190,15 +190,15 @@
           <div class="ticket-body collapsed">
             <div>
               <div class="ticket-event-area" style="display:none">
-                <div class="event-content px-3 pb-2">
+                <div class="event-content px-3 pb-3">
                   <span class="event-label text-[11px] font-mono"></span>
                 </div>
               </div>
               <div class="thinking-area px-3 pb-2" style="display:none">
                 <pre class="thinking-text"></pre>
               </div>
-              <div class="ticket-tools px-3 pb-3" style="display:none">
-                <span class="tools-label text-[10px] text-stone-500 tracking-wider block mb-1">tools used</span>
+              <div class="ticket-tools px-3 py-3" style="display:none">
+                <span class="tools-label text-[11px] text-stone-500 tracking-wider block mb-1">tools used</span>
               </div>
             </div>
           </div>
@@ -259,7 +259,7 @@
         const border = document.getElementById('stream-border');
         if (border.classList.contains('gradient-border')) {
           border.classList.remove('gradient-border');
-          Object.assign(border.style, { border: '1px solid #3a2d28', borderRadius: '1rem' });
+          Object.assign(border.style, { border: '1px solid #57534e', borderRadius: '1rem' });
         }
         if (active && active !== t) deactivateTicketGradient(active);
         active = t;
