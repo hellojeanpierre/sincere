@@ -106,17 +106,6 @@
               <div id="stream-status" class="flex items-center gap-1.5 text-xs text-stone-500"></div>
             </div>
             <div id="ticket-list" class="space-y-2"></div>
-            <div id="btn-start-wrap" class="flex justify-center pt-1">
-              <button
-                id="btn-start"
-                class="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-surface text-sm font-medium px-4 py-2 rounded-full transition-colors"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/>
-                </svg>
-                Start
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -283,21 +272,10 @@
       },
     };
 
-    function triggerNext() {
-      fetch('/api/next', { method: 'POST' });
-    }
+    let streamStarted = false;
 
     function startStream() {
-      document.getElementById('btn-start-wrap').style.display = 'none';
-      const statusEl = document.getElementById('stream-status');
-      statusEl.innerHTML = ARROW_BTN_HTML;
-
-      // Wire up → button and keyboard
-      statusEl.querySelector('#btn-next').addEventListener('click', triggerNext);
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowRight') { e.preventDefault(); triggerNext(); }
-      });
-
+      streamStarted = true;
       fetch('/api/stream').then(res => {
         if (!res.ok || !res.body) return;
         const reader = res.body.getReader();
@@ -323,7 +301,18 @@
       });
     }
 
-    document.getElementById('btn-start').addEventListener('click', startStream);
+    function triggerNext() {
+      if (!streamStarted) startStream();
+      fetch('/api/next', { method: 'POST' });
+    }
+
+    // Show arrow button immediately
+    const statusEl = document.getElementById('stream-status');
+    statusEl.innerHTML = ARROW_BTN_HTML;
+    statusEl.querySelector('#btn-next').addEventListener('click', triggerNext);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') { e.preventDefault(); triggerNext(); }
+    });
   </script>
 </body>
 </html>
