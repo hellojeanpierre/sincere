@@ -47,6 +47,10 @@ console.log(`Uploaded policy.jsonl: ${policyFile.id}\n`);
 // ── Event processing ────────────────────────────────────────────────
 
 async function processEvent(sessionId: string, message: string): Promise<void> {
+  // Open the stream BEFORE posting so we don't miss events.
+  // Docs: "Only events emitted after the stream is opened are delivered."
+  const stream = apiStream(sessionId);
+
   try {
     await apiPost(`/sessions/${sessionId}/events`, {
       events: [
@@ -63,7 +67,7 @@ async function processEvent(sessionId: string, message: string): Promise<void> {
 
   const toolEvents = new Map<string, { name: string; input: unknown }>();
 
-  for await (const event of apiStream(sessionId)) {
+  for await (const event of stream) {
     if (event.type === "agent.custom_tool_use" && "id" in event) {
       const { id, name, input } = event as { id: string; name: string; input: unknown };
       toolEvents.set(id, { name, input });
