@@ -49,7 +49,7 @@ console.log(`Uploaded policy.jsonl: ${policyFile.id}\n`);
 async function processEvent(sessionId: string, message: string): Promise<void> {
   // Open the stream BEFORE posting so we don't miss events.
   // Docs: "Only events emitted after the stream is opened are delivered."
-  const stream = apiStream(sessionId);
+  const stream = await apiStream(sessionId);
 
   try {
     await apiPost(`/sessions/${sessionId}/events`, {
