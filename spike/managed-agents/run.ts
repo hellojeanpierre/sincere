@@ -66,13 +66,22 @@ async function processEvent(sessionId: string, message: string): Promise<void> {
   }
 
   const toolEvents = new Map<string, { name: string; input: unknown }>();
+  let running = false;
 
   for await (const event of stream) {
+    if (event.type === "session.status_running") {
+      running = true;
+      continue;
+    }
+
     if (event.type === "agent.custom_tool_use" && "id" in event) {
       const { id, name, input } = event as { id: string; name: string; input: unknown };
       toolEvents.set(id, { name, input });
       continue;
     }
+
+    // Ignore stale idle events from before our message was processed.
+    if (event.type === "session.status_idle" && !running) continue;
 
     if (event.type === "session.status_idle") {
       const reason = (event as { stop_reason?: { type: string; event_ids?: string[] } }).stop_reason;
