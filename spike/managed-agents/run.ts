@@ -59,7 +59,7 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
   const subject = String(events[0].detail.subject ?? "");
   console.log(`\n━━ Ticket ${ticketId}: ${subject} ━━`);
 
-  const session = await apiPost<{ id: string }>("/sessions", {
+  const session = await apiPost<{ id: string; resources?: { mount_path: string }[] }>("/sessions", {
     agent: AGENT_ID,
     environment_id: ENVIRONMENT_ID,
     resources: [
@@ -67,6 +67,7 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
     ],
   });
   console.log(`  Session: ${session.id}`);
+  console.log(`  Resources: ${JSON.stringify(session.resources)}`);
 
   for (const event of events) {
     console.log(`  ▸ ${makeEventLabel(event)}`);
