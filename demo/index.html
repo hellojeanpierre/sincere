@@ -125,11 +125,13 @@
   </div>
 
   <script>
-    const GREEN_DOT_HTML = `
-      <span class="relative flex h-2 w-2">
-        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-      </span>`;
+    const ARROW_BTN_HTML = `
+      <button id="btn-next" title="Next event (→)"
+        class="inline-flex items-center justify-center w-6 h-6 rounded bg-stone-700/60 hover:bg-stone-600/60 text-stone-400 transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/>
+        </svg>
+      </button>`;
 
     const SPINNER_HTML = `
       <svg class="w-4 h-4 text-stone-500 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -234,6 +236,10 @@
       event(ev) {
         const t = tickets.get(ev.ticketId);
         if (!t) return;
+        // Collapse previous active ticket's thinking
+        if (active && active !== t) {
+          active.thinkingWrap.style.display = 'none';
+        }
         active = t;
         showEventLabel(t, 'agent awakened: ' + ev.label);
         t.status.innerHTML = SPINNER_HTML;
@@ -268,13 +274,6 @@
         active.status.innerHTML = CHECKMARK_HTML;
       },
 
-      // ── Sleep: collapse, agent goes back to sleep ─────────────────
-      event_done(ev) {
-        const t = tickets.get(ev.ticketId);
-        if (!t) return;
-        t.thinkingWrap.style.display = 'none';
-      },
-
       done() {
         active = null;
         const statusEl = document.getElementById('stream-status');
@@ -283,9 +282,20 @@
       },
     };
 
+    function triggerNext() {
+      fetch('/api/next', { method: 'POST' });
+    }
+
     function startStream() {
       document.getElementById('btn-start-wrap').style.display = 'none';
-      document.getElementById('stream-status').innerHTML = GREEN_DOT_HTML + '<span style="color:#34d399">Streaming</span>';
+      const statusEl = document.getElementById('stream-status');
+      statusEl.innerHTML = ARROW_BTN_HTML;
+
+      // Wire up → button and keyboard
+      statusEl.querySelector('#btn-next').addEventListener('click', triggerNext);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight') { e.preventDefault(); triggerNext(); }
+      });
 
       fetch('/api/stream').then(res => {
         if (!res.ok || !res.body) return;
