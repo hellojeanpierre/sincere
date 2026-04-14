@@ -307,9 +307,10 @@
     }
 
     // Show arrow button immediately
-    const statusEl = document.getElementById('stream-status');
-    statusEl.innerHTML = ARROW_BTN_HTML;
-    statusEl.querySelector('#btn-next').addEventListener('click', triggerNext);
+    document.getElementById('stream-status').innerHTML = ARROW_BTN_HTML;
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-next')) triggerNext();
+    });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowRight') { e.preventDefault(); triggerNext(); }
     });
