@@ -65,7 +65,7 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
     agent: AGENT_ID,
     environment_id: ENVIRONMENT_ID,
     resources: [
-      { type: "file", file_id: policyFile.id, mount_path: "/policy.jsonl" },
+      { type: "file", file_id: policyFile.id, mount_path: "/workspace/policy.jsonl" },
     ],
   });
   console.log(`  Session: ${session.id}`);
