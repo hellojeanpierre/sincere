@@ -102,7 +102,7 @@ export type SessionEvent =
 export async function apiStream(sessionId: string): Promise<AsyncIterable<SessionEvent>> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/stream`, {
     method: "GET",
-    headers: { ...HEADERS, Accept: "text/event-stream" },
+    headers: { ...HEADERS, "anthropic-beta": "agent-api-2026-03-01", Accept: "text/event-stream" },
   });
   if (!res.ok) {
     const text = await res.text();
