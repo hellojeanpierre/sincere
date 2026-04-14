@@ -77,11 +77,11 @@
     .ticket-body > div {
       overflow: hidden;
     }
-    .thinking-area.streaming {
-      max-height: 200px;
-      overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: #78706c transparent;
+    .thinking-area.truncated pre {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     .thinking-area pre {
       margin: 0;
@@ -110,11 +110,8 @@
       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
       margin-top: 0.75rem;
     }
-    .tool-label code {
+    .tool-label span {
       color: #a8a29e;
-      background: rgba(0,0,0,0.3);
-      padding: 0.1rem 0.3rem;
-      border-radius: 0.25rem;
     }
     .thinking-area pre strong { color: #d4856a; font-weight: 600; }
     .thinking-area pre code {
@@ -317,19 +314,22 @@
         if (!active) return;
         if (!active.thinkingPre) startThinkingBlock(active);
         active.thinkingPre.textContent += ev.text;
-        active.thinkingPre.parentElement.scrollTop = active.thinkingPre.parentElement.scrollHeight;
       },
 
       // ── Working: agent uses a tool ────────────────────────────────
       tool_start(ev) {
         if (!active) return;
-        // End the current thinking block so next thinking creates a new one
+        // Truncate the previous thinking block to ~2-3 lines
+        if (active.thinkingPre) {
+          active.thinkingPre.parentElement.classList.remove('streaming');
+          active.thinkingPre.parentElement.classList.add('truncated');
+        }
         active.thinkingPre = null;
 
         // "Used <tool> tool" label
         const lbl = document.createElement('div');
         lbl.className = 'tool-label';
-        lbl.innerHTML = 'Used <code>' + esc(ev.tool) + '</code> tool';
+        lbl.innerHTML = 'Used <span>' + esc(ev.tool) + '</span> tool';
         active.timeline.appendChild(lbl);
 
         // Tool call preview
@@ -343,10 +343,12 @@
       // ── Decision: agent's final output ────────────────────────────
       agent_response(ev) {
         if (!active) return;
-        // End streaming on all thinking blocks
-        active.timeline.querySelectorAll('.thinking-area.streaming').forEach(
-          el => el.classList.remove('streaming')
-        );
+        // End streaming, truncate all thinking blocks except the last
+        const blocks = active.timeline.querySelectorAll('.thinking-area');
+        blocks.forEach((el, i) => {
+          el.classList.remove('streaming');
+          if (i < blocks.length - 1) el.classList.add('truncated');
+        });
         active.thinkingPre = null;
 
         const wrap = document.createElement('div');
