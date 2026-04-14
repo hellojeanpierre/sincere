@@ -10,7 +10,6 @@ import {
   ALLOWED_EVENT_TYPES,
   DEMO_TICKET_ORDER,
   type ZenEvent,
-  type SSEEvent,
 } from "./types";
 
 // ── Load spike.env ──────────────────────────────────────────────────
@@ -62,34 +61,10 @@ const sseReader = parseSSE(streamRes.body.getReader());
 
 // ── Process events (matches demo ticket→event ordering) ─────────────
 
-async function drainUntilIdle(sse: AsyncGenerator<SSEEvent>): Promise<void> {
-  for await (const event of sse) {
-    switch (event.type) {
-      case "agent.thinking":
-        for (const block of event.content ?? []) {
-          if (block.type === "text" && block.text) {
-            process.stderr.write(`  [thinking] ${block.text.slice(0, 200)}\n`);
-          }
-        }
-        break;
-      case "agent.tool_use":
-        console.log(`  [tool] ${event.name}`, JSON.stringify(event.input).slice(0, 200));
-        break;
-      case "agent.tool_result":
-        console.log(`  [result] ${event.name}:`, JSON.stringify(event.content).slice(0, 200));
-        break;
-      case "agent.message":
-        for (const block of event.content ?? []) {
-          if (block.type === "text" && block.text) {
-            console.log(`  [response] ${block.text}`);
-          }
-        }
-        break;
-      case "session.status_idle":
-        return;
-      case "session.status_terminated":
-        throw new Error("Session terminated");
-    }
+async function waitForIdle(): Promise<void> {
+  for await (const event of sseReader) {
+    if (event.type === "session.status_idle") return;
+    if (event.type === "session.status_terminated") throw new Error("Session terminated");
   }
 }
 
@@ -121,7 +96,7 @@ for (const ticketEvents of ticketGroups) {
       ],
     });
 
-    await drainUntilIdle(sseReader);
+    await waitForIdle();
   }
 }
 
