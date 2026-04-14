@@ -61,6 +61,8 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
       switch (event.type) {
         case "session.status_idle":
           return;
+        case "session.status_running":
+          break;
         case "session.status_terminated":
           throw new Error("Session terminated");
         case "session.error":
@@ -68,6 +70,19 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
           break;
         case "session.status_rescheduled":
           console.log("  [rescheduled] transient error, retrying…");
+          break;
+        case "agent.tool_use":
+          console.log(`    [tool] ${event.name}`);
+          break;
+        case "agent.message":
+          for (const block of event.content ?? []) {
+            if (block.type === "text" && block.text) {
+              console.log(`    ${block.text.slice(0, 200)}`);
+            }
+          }
+          break;
+        default:
+          process.stderr.write(".");
           break;
       }
     }
