@@ -4,8 +4,6 @@ import {
   ENVIRONMENT_ID,
   apiPost,
   apiGet,
-  apiDelete,
-  apiInterrupt,
   apiUploadFile,
   parseJsonl,
   makeEventLabel,
@@ -70,26 +68,21 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
   });
   console.log(`  Session: ${session.id}`);
 
-  try {
-    for (const event of events) {
-      console.log(`  ▸ ${makeEventLabel(event)}`);
+  for (const event of events) {
+    console.log(`  ▸ ${makeEventLabel(event)}`);
 
-      await apiPost(`/sessions/${session.id}/events`, {
-        events: [
-          {
-            type: "user.message",
-            content: [
-              { type: "text", text: `Incoming Zendesk event:\n\n${JSON.stringify(event, null, 2)}` },
-            ],
-          },
-        ],
-      });
+    await apiPost(`/sessions/${session.id}/events`, {
+      events: [
+        {
+          type: "user.message",
+          content: [
+            { type: "text", text: `Incoming Zendesk event:\n\n${JSON.stringify(event, null, 2)}` },
+          ],
+        },
+      ],
+    });
 
-      await waitForIdle(session.id);
-    }
-  } finally {
-    await apiInterrupt(session.id).catch(() => {});
-    await apiDelete(`/sessions/${session.id}`).catch(() => {});
+    await waitForIdle(session.id);
   }
 }
 
