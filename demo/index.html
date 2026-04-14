@@ -68,6 +68,23 @@
     .event-label {
       color: #d4856a;
     }
+    .ticket-body {
+      display: grid;
+      grid-template-rows: 1fr;
+      transition: grid-template-rows 0.4s ease;
+    }
+    .ticket-body.collapsed {
+      grid-template-rows: 0fr;
+    }
+    .ticket-body > div {
+      overflow: hidden;
+    }
+    .thinking-area {
+      max-height: 200px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #78706c transparent;
+    }
     .thinking-area pre {
       margin: 0;
       white-space: pre-wrap;
@@ -165,14 +182,19 @@
           </div>
           <div class="ticket-status ml-3 shrink-0">${SPINNER_HTML}</div>
         </div>
-        <div class="ticket-event-area" style="display:none">
-          <div class="event-content px-3 pb-3">
-            <span class="event-label text-[11px] font-mono"></span>
-          </div>
-        </div>
-        <div class="ticket-thinking" style="display:none">
-          <div class="thinking-area px-3 pb-3">
-            <pre class="thinking-text"></pre>
+        <div class="ticket-body collapsed">
+          <div>
+            <div class="ticket-event-area" style="display:none">
+              <div class="event-content px-3 pb-2">
+                <span class="event-label text-[11px] font-mono"></span>
+              </div>
+            </div>
+            <div class="thinking-area px-3 pb-2" style="display:none">
+              <pre class="thinking-text"></pre>
+            </div>
+            <div class="ticket-tools px-3 pb-3" style="display:none">
+              <span class="tools-label text-[10px] text-stone-500 uppercase tracking-wider block mb-1">tools used</span>
+            </div>
           </div>
         </div>`;
 
@@ -183,9 +205,10 @@
         eventContent: eventArea.querySelector('.event-content'),
         label: eventArea.querySelector('.event-label'),
         status: root.querySelector('.ticket-status'),
-        thinkingWrap: root.querySelector('.ticket-thinking'),
+        body: root.querySelector('.ticket-body'),
         thinkingArea: root.querySelector('.thinking-area'),
         thinkingPre: root.querySelector('.thinking-text'),
+        toolsWrap: root.querySelector('.ticket-tools'),
       };
 
       document.getElementById('ticket-list').appendChild(root);
@@ -212,9 +235,9 @@
 
     let active = null; // ticket entry currently being processed
 
-    function clearThinkingArea(t) {
-      t.thinkingPre.textContent = '';
-      while (t.thinkingArea.lastChild !== t.thinkingPre) t.thinkingArea.removeChild(t.thinkingArea.lastChild);
+    function clearTools(t) {
+      while (t.toolsWrap.children.length > 1) t.toolsWrap.removeChild(t.toolsWrap.lastChild);
+      t.toolsWrap.style.display = 'none';
     }
 
     const handlers = {
@@ -226,41 +249,39 @@
       event(ev) {
         const t = tickets.get(ev.ticketId);
         if (!t) return;
-        // Collapse previous active ticket's thinking
-        if (active && active !== t) {
-          active.thinkingWrap.style.display = 'none';
-        }
         active = t;
         showEventLabel(t, 'agent awakened: ' + ev.label);
         t.status.innerHTML = SPINNER_HTML;
-        clearThinkingArea(t);
-        t.thinkingWrap.style.display = 'none';
+        t.thinkingPre.textContent = '';
+        t.thinkingArea.style.display = 'none';
+        clearTools(t);
+        t.body.classList.remove('collapsed');
       },
 
       // ── Working: agent thinks ─────────────────────────────────────
       thinking_delta(ev) {
         if (!active) return;
-        active.thinkingWrap.style.display = '';
+        active.thinkingArea.style.display = '';
         active.thinkingPre.textContent += ev.text;
+        active.thinkingArea.scrollTop = active.thinkingArea.scrollHeight;
       },
 
       // ── Working: agent uses a tool ────────────────────────────────
       tool_start(ev) {
         if (!active) return;
-        active.thinkingWrap.style.display = '';
+        active.toolsWrap.style.display = '';
         const preview = ev.tool === 'bash' ? (ev.args?.command || '') : (ev.args?.path || ev.tool);
         const el = document.createElement('div');
         el.className = 'tool-call';
         el.textContent = (ev.tool === 'bash' ? '$ ' : '') + (preview.length > 200 ? preview.slice(0, 200) + '\u2026' : preview);
-        active.thinkingArea.appendChild(el);
+        active.toolsWrap.appendChild(el);
       },
 
       // ── Decision: agent's final output ────────────────────────────
       agent_response(ev) {
         if (!active) return;
-        clearThinkingArea(active);
         active.thinkingPre.textContent = ev.text;
-        active.thinkingWrap.style.display = '';
+        active.thinkingArea.style.display = '';
         active.status.innerHTML = CHECKMARK_HTML;
       },
 
@@ -301,9 +322,26 @@
       });
     }
 
+    let advancing = false;
+
     function triggerNext() {
-      if (!streamStarted) startStream();
-      fetch('/api/next', { method: 'POST' });
+      if (advancing) return;
+      if (!streamStarted) {
+        startStream();
+        fetch('/api/next', { method: 'POST' });
+        return;
+      }
+      // Collapse active ticket's body, wait 2s, then advance
+      if (active && !active.body.classList.contains('collapsed')) {
+        advancing = true;
+        active.body.classList.add('collapsed');
+        setTimeout(() => {
+          advancing = false;
+          fetch('/api/next', { method: 'POST' });
+        }, 2000);
+      } else {
+        fetch('/api/next', { method: 'POST' });
+      }
     }
 
     // Show arrow button immediately
