@@ -1,7 +1,7 @@
 import { join } from "path";
 import {
   AGENT_ID,
-  loadEnvironmentId,
+  ENVIRONMENT_ID,
   apiPost,
   apiDelete,
   apiStream,
@@ -13,8 +13,6 @@ import {
   DEMO_TICKET_ORDER,
   type ZenEvent,
 } from "./types";
-
-const ENVIRONMENT_ID = loadEnvironmentId();
 
 // ── Load & filter events (same logic as demo/server.ts) ─────────────
 

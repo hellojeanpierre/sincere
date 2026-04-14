@@ -14,14 +14,7 @@ try {
 // ── API client ──────────────────────────────────────────────────────
 
 export const AGENT_ID = "agent_011Ca3dfRMVdQFpUVvur2fFD";
-
-export function loadEnvironmentId(): string {
-  const id = process.env.ENVIRONMENT_ID;
-  if (!id) {
-    throw new Error("Missing ENVIRONMENT_ID in root .env — run setup.ts first");
-  }
-  return id;
-}
+export const ENVIRONMENT_ID = "env_01BeAimUGVuvGamH6fgfiUTa";
 
 const BASE = "https://api.anthropic.com/v1";
 
