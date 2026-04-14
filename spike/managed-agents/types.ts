@@ -18,21 +18,17 @@ export const ENVIRONMENT_ID = "env_01BeAimUGVuvGamH6fgfiUTa";
 
 const BASE = "https://api.anthropic.com/v1";
 
-// POST/DELETE endpoints require managed-agents-2026-04-01.
-// GET /stream requires agent-api-2026-03-01.
-// They cannot be combined in one request.
-const COMMON = {
+const HEADERS = {
   "x-api-key": process.env.ANTHROPIC_API_KEY!,
   "anthropic-version": "2023-06-01",
+  "anthropic-beta": "managed-agents-2026-04-01",
   "content-type": "application/json",
 };
-const REST_HEADERS = { ...COMMON, "anthropic-beta": "managed-agents-2026-04-01" };
-const STREAM_HEADERS = { ...COMMON, "anthropic-beta": "agent-api-2026-03-01" };
 
 export async function apiPost<T = unknown>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: REST_HEADERS,
+    headers: HEADERS,
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -45,7 +41,7 @@ export async function apiPost<T = unknown>(path: string, body: unknown): Promise
 export async function apiDelete(path: string): Promise<void> {
   const res = await fetch(`${BASE}${path}`, {
     method: "DELETE",
-    headers: REST_HEADERS,
+    headers: HEADERS,
   });
   if (!res.ok) {
     const text = await res.text();
@@ -53,11 +49,16 @@ export async function apiDelete(path: string): Promise<void> {
   }
 }
 
-export function apiStream(path: string): Promise<Response> {
-  return fetch(`${BASE}${path}`, {
+export async function apiGet<T = unknown>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
     method: "GET",
-    headers: { ...STREAM_HEADERS, Accept: "text/event-stream" },
+    headers: HEADERS,
   });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+  }
+  return res.json() as Promise<T>;
 }
 
 export async function apiUploadFile(filePath: string): Promise<{ id: string }> {
@@ -67,7 +68,7 @@ export async function apiUploadFile(filePath: string): Promise<{ id: string }> {
   const res = await fetch(`${BASE}/files`, {
     method: "POST",
     headers: {
-      "x-api-key": COMMON["x-api-key"],
+      "x-api-key": HEADERS["x-api-key"],
       "anthropic-version": "2023-06-01",
       "anthropic-beta": "files-api-2025-04-14",
     },
@@ -84,44 +85,6 @@ export async function apiInterrupt(sessionId: string): Promise<void> {
   await apiPost(`/sessions/${sessionId}/events`, {
     events: [{ type: "user.interrupt" }],
   });
-}
-
-// ── SSE parsing ─────────────────────────────────────────────────────
-
-export interface SSEEvent {
-  type: string;
-  content?: { type: string; text: string }[];
-  name?: string;
-  input?: unknown;
-  error?: { type: string; message: string; retry_status?: string };
-  stop_reason?: string;
-}
-
-export async function* parseSSE(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-): AsyncGenerator<SSEEvent> {
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    const lines = buffer.split("\n");
-    buffer = lines.pop()!;
-
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      const data = line.slice(6);
-      if (data === "[DONE]") continue;
-      try {
-        yield JSON.parse(data) as SSEEvent;
-      } catch {
-        // skip malformed frames
-      }
-    }
-  }
 }
 
 // ── Zendesk domain ──────────────────────────────────────────────────
