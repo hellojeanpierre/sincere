@@ -60,6 +60,26 @@ export function apiStream(path: string): Promise<Response> {
   });
 }
 
+export async function apiUploadFile(filePath: string): Promise<{ id: string }> {
+  const file = Bun.file(filePath);
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${BASE}/files`, {
+    method: "POST",
+    headers: {
+      "x-api-key": COMMON["x-api-key"],
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "files-api-2025-04-14",
+    },
+    body: formData,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`File upload failed: ${res.status} ${text}`);
+  }
+  return res.json() as Promise<{ id: string }>;
+}
+
 export async function apiInterrupt(sessionId: string): Promise<void> {
   await apiPost(`/sessions/${sessionId}/events`, {
     events: [{ type: "user.interrupt" }],

@@ -6,6 +6,7 @@ import {
   apiDelete,
   apiInterrupt,
   apiStream,
+  apiUploadFile,
   parseSSE,
   parseJsonl,
   makeEventLabel,
@@ -17,7 +18,9 @@ import {
 
 // ── Load & filter events (same logic as demo/server.ts) ─────────────
 
-const EVENTS_PATH = join(import.meta.dir, "..", "..", "data", "pintest-v2", "smoke-tickets", "smoke_events.jsonl");
+const DATA_DIR = join(import.meta.dir, "..", "..", "data", "pintest-v2", "smoke-tickets");
+const EVENTS_PATH = join(DATA_DIR, "smoke_events.jsonl");
+const POLICY_PATH = join(DATA_DIR, "policy.jsonl");
 const allEvents = parseJsonl<ZenEvent>(await Bun.file(EVENTS_PATH).text());
 const filtered = allEvents.filter(
   (e) => ALLOWED_EVENT_TYPES.has(e.type) && DEMO_TICKET_IDS.has(String(e.detail.id)),
@@ -35,7 +38,12 @@ for (const id of DEMO_TICKET_ORDER) {
   if (events) ticketGroups.push(events);
 }
 
-console.log(`Loaded ${filtered.length} events across ${ticketGroups.length} tickets\n`);
+console.log(`Loaded ${filtered.length} events across ${ticketGroups.length} tickets`);
+
+// ── Upload policy file once, mount into each session ────────────────
+
+const policyFile = await apiUploadFile(POLICY_PATH);
+console.log(`Uploaded policy.jsonl: ${policyFile.id}\n`);
 
 // ── Process one ticket per session ──────────────────────────────────
 
@@ -47,6 +55,9 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
   const session = await apiPost<{ id: string }>("/sessions", {
     agent: AGENT_ID,
     environment_id: ENVIRONMENT_ID,
+    resources: [
+      { type: "file", file_id: policyFile.id, mount_path: "/policy.jsonl" },
+    ],
   });
   console.log(`  Session: ${session.id}`);
 
