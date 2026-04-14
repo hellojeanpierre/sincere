@@ -43,14 +43,12 @@
     }
     .gradient-border {
       position: relative;
-      border-radius: 1rem;
       padding: 1px;
       background: conic-gradient(from var(--angle), #d4856a, #6b4c3b, #3a2d28, #d4856a);
       animation: rotate-gradient 4s linear infinite;
     }
-    .gradient-border > div {
-      border-radius: calc(1rem - 1px);
-    }
+    .gradient-border.rounded-lg > div { border-radius: calc(0.5rem - 1px); }
+    .gradient-border.rounded-2xl > div { border-radius: calc(1rem - 1px); }
     @keyframes slide-in {
       from { opacity: 0; transform: translateX(-12px); }
       to   { opacity: 1; transform: translateX(0); }
@@ -116,7 +114,7 @@
 
       <!-- Ticket stream card -->
       <div id="stream-card" class="relative z-10 w-full max-w-lg">
-        <div id="stream-border" class="gradient-border">
+        <div id="stream-border" class="rounded-2xl" style="border: 1px solid #3a2d28">
           <div class="bg-card p-6 space-y-3">
             <div class="flex items-center justify-between">
               <p class="text-xs uppercase tracking-wider text-stone-500">Zendesk tickets</p>
@@ -157,10 +155,16 @@
       return d.innerHTML;
     }
 
-    function deactivateGradient(el) {
-      el.classList.remove('gradient-border');
-      Object.assign(el.style, { background: 'none', border: '1px solid #3a2d28', borderRadius: '1rem' });
-      el.querySelector(':scope > div').style.borderRadius = 'calc(1rem - 1px)';
+    function activateTicketGradient(t) {
+      t.root.classList.add('gradient-border');
+      t.root.style.border = 'none';
+      t.root.style.padding = '1px';
+    }
+
+    function deactivateTicketGradient(t) {
+      t.root.classList.remove('gradient-border');
+      t.root.style.border = '1px solid #44403c';
+      t.root.style.padding = '';
     }
 
     // ── Row management ──────────────────────────────────────────────
@@ -172,28 +176,30 @@
 
     function createTicketRow(id, subject) {
       const root = document.createElement('div');
-      root.className = 'finding-card rounded-lg border overflow-hidden bg-stone-900/60 border-stone-700/50';
-      root.style.animationDelay = '0ms';
+      root.className = 'finding-card rounded-lg';
+      root.style.cssText = 'animation-delay:0ms; border: 1px solid #44403c';
       root.innerHTML = `
-        <div class="flex items-center justify-between p-3">
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="text-xs font-mono text-stone-500 shrink-0">${esc(id)}</span>
-            <span class="text-sm text-stone-300 truncate">${esc(subject)}</span>
+        <div class="rounded-lg overflow-hidden bg-stone-900/60">
+          <div class="flex items-center justify-between p-3">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-xs font-mono text-stone-500 shrink-0">${esc(id)}</span>
+              <span class="text-sm text-stone-300 truncate">${esc(subject)}</span>
+            </div>
+            <div class="ticket-status ml-3 shrink-0">${SPINNER_HTML}</div>
           </div>
-          <div class="ticket-status ml-3 shrink-0">${SPINNER_HTML}</div>
-        </div>
-        <div class="ticket-body collapsed">
-          <div>
-            <div class="ticket-event-area" style="display:none">
-              <div class="event-content px-3 pb-2">
-                <span class="event-label text-[11px] font-mono"></span>
+          <div class="ticket-body collapsed">
+            <div>
+              <div class="ticket-event-area" style="display:none">
+                <div class="event-content px-3 pb-2">
+                  <span class="event-label text-[11px] font-mono"></span>
+                </div>
               </div>
-            </div>
-            <div class="thinking-area px-3 pb-2" style="display:none">
-              <pre class="thinking-text"></pre>
-            </div>
-            <div class="ticket-tools px-3 pb-3" style="display:none">
-              <span class="tools-label text-[10px] text-stone-500 uppercase tracking-wider block mb-1">tools used</span>
+              <div class="thinking-area px-3 pb-2" style="display:none">
+                <pre class="thinking-text"></pre>
+              </div>
+              <div class="ticket-tools px-3 pb-3" style="display:none">
+                <span class="tools-label text-[10px] text-stone-500 uppercase tracking-wider block mb-1">tools used</span>
+              </div>
             </div>
           </div>
         </div>`;
@@ -249,7 +255,9 @@
       event(ev) {
         const t = tickets.get(ev.ticketId);
         if (!t) return;
+        if (active && active !== t) deactivateTicketGradient(active);
         active = t;
+        activateTicketGradient(t);
         showEventLabel(t, 'agent awakened: ' + ev.label);
         t.status.innerHTML = SPINNER_HTML;
         t.thinkingPre.textContent = '';
@@ -286,10 +294,10 @@
       },
 
       done() {
+        if (active) deactivateTicketGradient(active);
         active = null;
-        const statusEl = document.getElementById('stream-status');
-        statusEl.innerHTML = CHECKMARK_HTML + '<span class="text-emerald-400">Complete</span>';
-        deactivateGradient(document.getElementById('stream-border'));
+        document.getElementById('stream-status').innerHTML =
+          CHECKMARK_HTML + '<span class="text-emerald-400">Complete</span>';
       },
     };
 
@@ -334,6 +342,7 @@
       // Collapse active ticket's body, wait 2s, then advance
       if (active && !active.body.classList.contains('collapsed')) {
         advancing = true;
+        deactivateTicketGradient(active);
         active.body.classList.add('collapsed');
         setTimeout(() => {
           advancing = false;
