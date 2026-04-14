@@ -66,13 +66,11 @@ async function processEvent(sessionId: string, message: string): Promise<void> {
   }
 
   const toolEvents = new Map<string, { name: string; input: unknown }>();
-  let running = false;
+  let agentActive = false;
 
   for await (const event of stream) {
-    if (event.type === "session.status_running") {
-      running = true;
-      continue;
-    }
+    // Any agent event means the session is processing our message.
+    if (event.type.startsWith("agent.")) agentActive = true;
 
     if (event.type === "agent.custom_tool_use" && "id" in event) {
       const { id, name, input } = event as { id: string; name: string; input: unknown };
@@ -80,11 +78,11 @@ async function processEvent(sessionId: string, message: string): Promise<void> {
       continue;
     }
 
-    // Ignore stale idle events from before our message was processed.
-    if (event.type === "session.status_idle" && !running) continue;
-
     if (event.type === "session.status_idle") {
       const reason = (event as { stop_reason?: { type: string; event_ids?: string[] } }).stop_reason;
+
+      // Skip stale end_turn from before our message — but NEVER skip requires_action.
+      if (reason?.type === "end_turn" && !agentActive) continue;
 
       if (reason?.type === "requires_action") {
         const results = [];
