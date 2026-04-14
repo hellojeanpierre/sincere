@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 // Bun auto-loads .env from the nearest package.json — which is this spike's.
-// ANTHROPIC_API_KEY and ENVIRONMENT_ID live in the project root .env.
+// ANTHROPIC_API_KEY lives in the project root .env.
 try {
   const text = readFileSync(join(import.meta.dir, "..", "..", ".env"), "utf8");
   for (const line of text.split("\n")) {
@@ -18,17 +18,21 @@ export const ENVIRONMENT_ID = "env_01BeAimUGVuvGamH6fgfiUTa";
 
 const BASE = "https://api.anthropic.com/v1";
 
-const HEADERS = {
+// The managed-agents and agent-api beta headers are incompatible —
+// the API rejects requests that include both. REST endpoints (sessions,
+// events, delete) use managed-agents; the SSE stream uses agent-api.
+const COMMON = {
   "x-api-key": process.env.ANTHROPIC_API_KEY!,
   "anthropic-version": "2023-06-01",
-  "anthropic-beta": "managed-agents-2026-04-01,agent-api-2026-03-01",
   "content-type": "application/json",
 };
+const REST_HEADERS = { ...COMMON, "anthropic-beta": "managed-agents-2026-04-01" };
+const STREAM_HEADERS = { ...COMMON, "anthropic-beta": "agent-api-2026-03-01" };
 
 export async function apiPost<T = unknown>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: HEADERS,
+    headers: REST_HEADERS,
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -41,7 +45,7 @@ export async function apiPost<T = unknown>(path: string, body: unknown): Promise
 export async function apiDelete(path: string): Promise<void> {
   const res = await fetch(`${BASE}${path}`, {
     method: "DELETE",
-    headers: HEADERS,
+    headers: REST_HEADERS,
   });
   if (!res.ok) {
     const text = await res.text();
@@ -50,14 +54,14 @@ export async function apiDelete(path: string): Promise<void> {
 }
 
 export function apiStream(path: string): Promise<Response> {
-  return fetch(`${BASE}${path}?beta=true`, {
+  return fetch(`${BASE}${path}`, {
     method: "GET",
-    headers: { ...HEADERS, Accept: "text/event-stream" },
+    headers: { ...STREAM_HEADERS, Accept: "text/event-stream" },
   });
 }
 
 export async function apiInterrupt(sessionId: string): Promise<void> {
-  await apiPost(`/sessions/${sessionId}/events?beta=true`, {
+  await apiPost(`/sessions/${sessionId}/events`, {
     events: [{ type: "user.interrupt" }],
   });
 }

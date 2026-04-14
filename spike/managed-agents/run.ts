@@ -77,7 +77,7 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
     for (const event of events) {
       console.log(`\n  ▸ ${makeEventLabel(event)}`);
 
-      await apiPost(`/sessions/${session.id}/events?beta=true`, {
+      await apiPost(`/sessions/${session.id}/events`, {
         events: [
           {
             type: "user.message",
