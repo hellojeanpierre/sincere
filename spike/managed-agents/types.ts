@@ -110,10 +110,15 @@ export async function apiStream(sessionId: string): Promise<AsyncIterable<Sessio
   }
 
   async function* events(): AsyncGenerator<SessionEvent> {
+    const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let buf = "";
-    for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
-      buf += decoder.decode(chunk, { stream: true });
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const text = decoder.decode(value, { stream: true });
+      console.error(`  [sse] chunk (${value.byteLength}b): ${text.slice(0, 120).replace(/\n/g, "\\n")}`);
+      buf += text;
       const blocks = buf.split("\n\n");
       buf = blocks.pop()!;
       for (const block of blocks) {
@@ -124,7 +129,9 @@ export async function apiStream(sessionId: string): Promise<AsyncIterable<Sessio
           .join("\n");
         if (!data) continue;
         try {
-          yield JSON.parse(data) as SessionEvent;
+          const parsed = JSON.parse(data) as SessionEvent;
+          console.error(`  [sse] event: ${parsed.type}`);
+          yield parsed;
         } catch {
           // skip unparseable SSE frames
         }
