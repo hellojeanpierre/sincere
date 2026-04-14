@@ -4,7 +4,7 @@ import { createAgent, createSessionHandler } from "../src/agent.ts";
 import { createLane } from "../src/lane.ts";
 import { logger, startTraceSink } from "../src/lib/logger.ts";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
-import type { AgentMessage, AgentEvent } from "@mariozechner/pi-agent-core";
+import type { AgentEvent } from "@mariozechner/pi-agent-core";
 
 const TRACES_DIR = join(import.meta.dir, "..", "data", "traces");
 
@@ -72,19 +72,6 @@ function makeEventLabel(event: ZenEvent): string {
   return type.split(":").pop() || "event";
 }
 
-function extractLastReasoning(msgs: AgentMessage[]): string {
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    if (msgs[i].role !== "assistant") continue;
-    const text = ((msgs[i] as AssistantMessage).content)
-      .filter((b): b is { type: "text"; text: string } => b.type === "text")
-      .map((b) => b.text)
-      .join("\n")
-      .trim();
-    if (text) return text;
-  }
-  return "";
-}
-
 // ── Agent event logging ─────────────────────────────────────────────
 
 function logAgentEvent(event: AgentEvent): void {
@@ -129,7 +116,7 @@ async function ticketStream(): Promise<Response> {
   // Shared SSE send — set once the stream starts, used by agent subscriptions.
   let send: (data: Record<string, unknown>) => void = () => {};
 
-  const { handler, sessions, clear } = createSessionHandler(
+  const { handler, clear } = createSessionHandler(
     () => {
       const created = createAgent({
         systemPrompt,
@@ -138,10 +125,24 @@ async function ticketStream(): Promise<Response> {
         thinkingLevel: "high",
       });
       created.agent.subscribe(logAgentEvent);
-      // Forward tool calls to SSE
+      // Forward agent lifecycle events to SSE
       created.agent.subscribe((e: AgentEvent) => {
+        if (e.type === "message_update") {
+          const me = e.assistantMessageEvent as { type: string; delta?: string };
+          if (me.type === "thinking_delta" && me.delta) {
+            send({ type: "thinking_delta", text: me.delta });
+          }
+        }
         if (e.type === "tool_execution_start") {
           send({ type: "tool_start", tool: e.toolName, args: e.args });
+        }
+        if (e.type === "message_end" && e.message.role === "assistant") {
+          const text = ((e.message as AssistantMessage).content)
+            .filter((b): b is { type: "text"; text: string } => b.type === "text")
+            .map((b) => b.text)
+            .join("\n")
+            .trim();
+          if (text) send({ type: "agent_response", text });
         }
       });
       return created;
@@ -181,25 +182,21 @@ async function ticketStream(): Promise<Response> {
           }
 
           for (const event of ticketEvents) {
-            // Send event label before agent processes (awake moment)
+            // Awake: show event label
             send({
               type: "event",
               ticketId,
               label: makeEventLabel(event),
             });
 
+            // Work: agent processes (thinking_delta, tool_start, agent_response stream via subscription)
             await startTraceSink({ workItemId: ticketId, write: (line) => traceWriter.write(line) }, () =>
               lane.enqueue(ticketId, event),
             );
 
-            const msgs = sessions(ticketId) ?? [];
-            const reasoning = extractLastReasoning(msgs);
-            log.debug({ ticketId, reasoningLen: reasoning.length, msgCount: msgs.length }, "event_done reasoning");
-            send({
-              type: "event_done",
-              ticketId,
-              reasoning,
-            });
+            // Sleep: collapse after a pause so the audience can read the decision
+            await new Promise((r) => setTimeout(r, EVENT_DELAY_MS));
+            send({ type: "event_done", ticketId });
           }
         }
 
