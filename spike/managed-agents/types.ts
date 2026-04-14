@@ -21,7 +21,7 @@ const BASE = "https://api.anthropic.com/v1";
 const HEADERS = {
   "x-api-key": process.env.ANTHROPIC_API_KEY!,
   "anthropic-version": "2023-06-01",
-  "anthropic-beta": "managed-agents-2026-04-01,agent-api-2026-03-01",
+  "anthropic-beta": "managed-agents-2026-04-01",
   "content-type": "application/json",
 };
 
@@ -102,7 +102,7 @@ export type SessionEvent =
 export async function* apiStream(sessionId: string): AsyncGenerator<SessionEvent> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/stream`, {
     method: "GET",
-    headers: { ...HEADERS, Accept: "text/event-stream" },
+    headers: { ...HEADERS, "anthropic-beta": "agent-api-2026-03-01", Accept: "text/event-stream" },
   });
   if (!res.ok) {
     const text = await res.text();
