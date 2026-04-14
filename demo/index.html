@@ -220,23 +220,35 @@
 
     let active = null; // ticket entry currently being processed
 
+    function clearThinkingArea(t) {
+      t.thinkingPre.textContent = '';
+      while (t.thinkingArea.lastChild !== t.thinkingPre) t.thinkingArea.removeChild(t.thinkingArea.lastChild);
+    }
+
     const handlers = {
       ticket(ev) {
         createTicketRow(ev.id, ev.subject);
       },
 
+      // ── Awake: event arrived, agent wakes up ──────────────────────
       event(ev) {
         const t = tickets.get(ev.ticketId);
         if (!t) return;
         active = t;
         showEventLabel(t, 'agent awakened: ' + ev.label);
         t.status.innerHTML = SPINNER_HTML;
-        // Clear previous event's outputs
-        t.thinkingPre.textContent = '';
-        while (t.thinkingArea.lastChild !== t.thinkingPre) t.thinkingArea.removeChild(t.thinkingArea.lastChild);
+        clearThinkingArea(t);
         t.thinkingWrap.style.display = 'none';
       },
 
+      // ── Working: agent thinks ─────────────────────────────────────
+      thinking_delta(ev) {
+        if (!active) return;
+        active.thinkingWrap.style.display = '';
+        active.thinkingPre.textContent += ev.text;
+      },
+
+      // ── Working: agent uses a tool ────────────────────────────────
       tool_start(ev) {
         if (!active) return;
         active.thinkingWrap.style.display = '';
@@ -247,15 +259,20 @@
         active.thinkingArea.appendChild(el);
       },
 
+      // ── Decision: agent's final output ────────────────────────────
+      agent_response(ev) {
+        if (!active) return;
+        clearThinkingArea(active);
+        active.thinkingPre.textContent = ev.text;
+        active.thinkingWrap.style.display = '';
+        active.status.innerHTML = CHECKMARK_HTML;
+      },
+
+      // ── Sleep: collapse, agent goes back to sleep ─────────────────
       event_done(ev) {
         const t = tickets.get(ev.ticketId);
         if (!t) return;
-        t.status.innerHTML = CHECKMARK_HTML;
-        // Show final reasoning instead of streaming deltas
-        if (ev.reasoning) {
-          t.thinkingPre.textContent = ev.reasoning;
-          t.thinkingWrap.style.display = '';
-        }
+        t.thinkingWrap.style.display = 'none';
       },
 
       done() {
