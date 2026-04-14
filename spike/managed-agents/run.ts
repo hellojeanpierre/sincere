@@ -81,14 +81,17 @@ async function processEvent(sessionId: string, message: string): Promise<void> {
       agentActive = true;
     }
 
-    if (event.type === "custom_tool_use" && "id" in event) {
+    // Capture custom tool calls — log type to discover the raw name.
+    if ("name" in event && "input" in event && "id" in event) {
       const { id, name, input } = event as { id: string; name: string; input: unknown };
+      console.log(`  🔧 tool_use [type=${event.type}] id=${id} name=${name}`);
       toolEvents.set(id, { name, input });
       continue;
     }
 
     if (event.type === "status_idle") {
       const reason = (event as { stop_reason?: { type: string; event_ids?: string[] } }).stop_reason;
+      console.log(`  ◼ idle stop_reason=${JSON.stringify(reason)}`);
 
       // Skip stale end_turn from before our message — but NEVER skip requires_action.
       if (reason?.type === "end_turn" && !agentActive) continue;
