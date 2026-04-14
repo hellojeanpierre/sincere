@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Managed Agents — Event Stepper</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #0f0f0f; color: #e0e0e0; padding: 2rem; }
+    h1 { font-size: 1.1rem; font-weight: 500; color: #888; margin-bottom: 1.5rem; }
+
+    #next-btn {
+      padding: 0.6rem 2rem;
+      font-size: 1rem;
+      background: #2a2a2a;
+      color: #e0e0e0;
+      border: 1px solid #444;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    #next-btn:hover:not(:disabled) { background: #3a3a3a; }
+    #next-btn:disabled { opacity: 0.3; cursor: default; }
+
+    #status {
+      display: inline-block;
+      margin-left: 1rem;
+      font-size: 0.85rem;
+      color: #888;
+    }
+
+    #log {
+      margin-top: 1.5rem;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.85rem;
+      line-height: 1.6;
+    }
+
+    .ticket { color: #f0c674; margin-top: 1.2rem; }
+    .event  { color: #81a2be; margin-left: 1rem; }
+    .idle   { color: #555; margin-left: 1rem; }
+    .done   { color: #b5bd68; margin-top: 1rem; }
+    .error  { color: #cc6666; }
+  </style>
+</head>
+<body>
+  <h1>Managed Agents — Event Stepper</h1>
+  <button id="next-btn">Next →</button>
+  <span id="status">ready</span>
+  <div id="log"></div>
+
+  <script>
+    const btn = document.getElementById("next-btn");
+    const status = document.getElementById("status");
+    const log = document.getElementById("log");
+
+    function append(cls, text) {
+      const div = document.createElement("div");
+      div.className = cls;
+      div.textContent = text;
+      log.appendChild(div);
+      div.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+
+    // SSE stream
+    const es = new EventSource("/api/stream");
+
+    es.addEventListener("ticket", (e) => {
+      const d = JSON.parse(e.data);
+      append("ticket", `━━ Ticket ${d.id}: ${d.subject} ━━`);
+    });
+
+    es.addEventListener("event", (e) => {
+      const d = JSON.parse(e.data);
+      append("event", `▸ ${d.label}`);
+      status.textContent = "working…";
+      btn.disabled = true;
+    });
+
+    es.addEventListener("idle", () => {
+      append("idle", "— idle —");
+      status.textContent = "ready";
+      btn.disabled = false;
+    });
+
+    es.addEventListener("done", () => {
+      append("done", "━━ done ━━");
+      status.textContent = "finished";
+      btn.disabled = true;
+      es.close();
+    });
+
+    es.addEventListener("error_msg", (e) => {
+      const d = JSON.parse(e.data);
+      append("error", `Error: ${d.message}`);
+      status.textContent = "error";
+      btn.disabled = true;
+    });
+
+    // Button fires next event
+    btn.addEventListener("click", () => {
+      btn.disabled = true;
+      status.textContent = "sending…";
+      fetch("/api/next", { method: "POST" });
+    });
+  </script>
+</body>
+</html>
