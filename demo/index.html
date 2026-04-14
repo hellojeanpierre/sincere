@@ -77,7 +77,7 @@
     .ticket-body > div {
       overflow: hidden;
     }
-    .thinking-area {
+    .thinking-area.streaming {
       max-height: 200px;
       overflow-y: auto;
       scrollbar-width: thin;
@@ -190,15 +190,15 @@
           <div class="ticket-body collapsed">
             <div>
               <div class="ticket-event-area" style="display:none">
-                <div class="event-content px-3 pb-2">
+                <div class="event-content px-3 pb-3">
                   <span class="event-label text-[11px] font-mono"></span>
                 </div>
               </div>
               <div class="thinking-area px-3 pb-2" style="display:none">
                 <pre class="thinking-text"></pre>
               </div>
-              <div class="ticket-tools px-3 pb-3" style="display:none">
-                <span class="tools-label text-[10px] text-stone-500 uppercase tracking-wider block mb-1">tools used</span>
+              <div class="ticket-tools px-3 py-3" style="display:none">
+                <span class="tools-label text-[11px] text-stone-500 tracking-wider block mb-1">tools used</span>
               </div>
             </div>
           </div>
@@ -259,7 +259,7 @@
         const border = document.getElementById('stream-border');
         if (border.classList.contains('gradient-border')) {
           border.classList.remove('gradient-border');
-          Object.assign(border.style, { border: '1px solid #3a2d28', borderRadius: '1rem' });
+          Object.assign(border.style, { border: '1px solid #57534e', borderRadius: '1rem' });
         }
         if (active && active !== t) deactivateTicketGradient(active);
         active = t;
@@ -268,6 +268,7 @@
         t.status.innerHTML = SPINNER_HTML;
         t.thinkingPre.textContent = '';
         t.thinkingArea.style.display = 'none';
+        t.thinkingArea.classList.remove('streaming');
         clearTools(t);
         t.body.classList.remove('collapsed');
       },
@@ -275,6 +276,7 @@
       // ── Working: agent thinks ─────────────────────────────────────
       thinking_delta(ev) {
         if (!active) return;
+        active.thinkingArea.classList.add('streaming');
         active.thinkingArea.style.display = '';
         active.thinkingPre.textContent += ev.text;
         active.thinkingArea.scrollTop = active.thinkingArea.scrollHeight;
@@ -294,6 +296,7 @@
       // ── Decision: agent's final output ────────────────────────────
       agent_response(ev) {
         if (!active) return;
+        active.thinkingArea.classList.remove('streaming');
         active.thinkingPre.textContent = ev.text;
         active.thinkingArea.style.display = '';
         active.status.innerHTML = CHECKMARK_HTML;
