@@ -38,7 +38,6 @@ export function handleCronTool(
   const firesAt = new Date(Date.now() + ms).toISOString();
 
   const timer = setTimeout(async () => {
-    timers.delete(cronId);
     try {
       await processEvent(
         sessionId,
@@ -46,6 +45,8 @@ export function handleCronTool(
       );
     } catch (err) {
       console.error(`  !! cron ${cronId} fire failed:`, err);
+    } finally {
+      timers.delete(cronId);
     }
   }, ms);
 

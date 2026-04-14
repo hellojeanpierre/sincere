@@ -118,8 +118,8 @@ export async function* apiStream(sessionId: string): AsyncGenerator<SessionEvent
     for (const block of blocks) {
       const data = block
         .split("\n")
-        .filter((l) => l.startsWith("data: "))
-        .map((l) => l.slice(6))
+        .filter((l) => l.startsWith("data:"))
+        .map((l) => (l[5] === " " ? l.slice(6) : l.slice(5)))
         .join("\n");
       if (!data) continue;
       try {

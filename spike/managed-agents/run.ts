@@ -47,14 +47,19 @@ console.log(`Uploaded policy.jsonl: ${policyFile.id}\n`);
 // ── Event processing ────────────────────────────────────────────────
 
 async function processEvent(sessionId: string, message: string): Promise<void> {
-  await apiPost(`/sessions/${sessionId}/events`, {
-    events: [
-      {
-        type: "user.message",
-        content: [{ type: "text", text: message }],
-      },
-    ],
-  });
+  try {
+    await apiPost(`/sessions/${sessionId}/events`, {
+      events: [
+        {
+          type: "user.message",
+          content: [{ type: "text", text: message }],
+        },
+      ],
+    });
+  } catch (err) {
+    console.error(`  !! processEvent POST failed for session ${sessionId}:`, err);
+    throw err;
+  }
 
   const toolEvents = new Map<string, { name: string; input: unknown }>();
 
@@ -69,6 +74,7 @@ async function processEvent(sessionId: string, message: string): Promise<void> {
       const reason = (event as { stop_reason?: { type: string; event_ids?: string[] } }).stop_reason;
 
       if (reason?.type === "requires_action") {
+        const results = [];
         for (const eventId of reason.event_ids ?? []) {
           const tool = toolEvents.get(eventId);
           let resultText: string;
@@ -84,21 +90,21 @@ async function processEvent(sessionId: string, message: string): Promise<void> {
             resultText = `Error: unknown custom tool "${tool.name}"`;
           }
 
-          await apiPost(`/sessions/${sessionId}/events`, {
-            events: [
-              {
-                type: "user.custom_tool_result",
-                custom_tool_use_id: eventId,
-                content: [{ type: "text", text: resultText }],
-              },
-            ],
+          results.push({
+            type: "user.custom_tool_result",
+            custom_tool_use_id: eventId,
+            content: [{ type: "text", text: resultText }],
           });
         }
+        await apiPost(`/sessions/${sessionId}/events`, { events: results });
         toolEvents.clear();
         continue;
       }
 
       if (reason?.type === "end_turn") return;
+
+      console.error(`  !! unexpected stop_reason: ${reason?.type ?? "none"}`);
+      return;
     }
 
     if (event.type === "session.status_terminated") {
