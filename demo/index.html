@@ -114,7 +114,7 @@
 
       <!-- Ticket stream card -->
       <div id="stream-card" class="relative z-10 w-full max-w-lg">
-        <div id="stream-border" class="rounded-2xl" style="border: 1px solid #3a2d28; border-radius: 1rem">
+        <div id="stream-border" class="gradient-border rounded-2xl">
           <div class="bg-card p-6 space-y-3 rounded-2xl">
             <div class="flex items-center justify-between">
               <p class="text-xs uppercase tracking-wider text-stone-500">Zendesk tickets</p>
@@ -255,6 +255,12 @@
       event(ev) {
         const t = tickets.get(ev.ticketId);
         if (!t) return;
+        // First event: move gradient from outer card to ticket
+        const border = document.getElementById('stream-border');
+        if (border.classList.contains('gradient-border')) {
+          border.classList.remove('gradient-border');
+          Object.assign(border.style, { border: '1px solid #3a2d28', borderRadius: '1rem' });
+        }
         if (active && active !== t) deactivateTicketGradient(active);
         active = t;
         activateTicketGradient(t);
