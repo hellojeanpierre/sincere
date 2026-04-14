@@ -1,27 +1,26 @@
+import { readFileSync } from "fs";
 import { join } from "path";
 
 // Bun auto-loads .env from the nearest package.json — which is this spike's.
-// ANTHROPIC_API_KEY (and possibly AGENT_ID/ENVIRONMENT_ID) live in the project root.
-const rootEnvText = await Bun.file(join(import.meta.dir, "..", "..", ".env")).text().catch(() => "");
-for (const line of rootEnvText.split("\n")) {
-  const m = line.match(/^([^#=\s]+)\s*=\s*(.*)$/);
-  if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
-}
+// ANTHROPIC_API_KEY and ENVIRONMENT_ID live in the project root .env.
+try {
+  const text = readFileSync(join(import.meta.dir, "..", "..", ".env"), "utf8");
+  for (const line of text.split("\n")) {
+    const m = line.match(/^([^#=\s]+)\s*=\s*(.*)$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+  }
+} catch {}
 
 // ── API client ──────────────────────────────────────────────────────
 
-export interface SpikeEnv {
-  AGENT_ID: string;
-  ENVIRONMENT_ID: string;
-}
+export const AGENT_ID = "agent_011Ca3dfRMVdQFpUVvur2fFD";
 
-export function loadSpikeEnv(): SpikeEnv {
-  const AGENT_ID = process.env.AGENT_ID;
-  const ENVIRONMENT_ID = process.env.ENVIRONMENT_ID;
-  if (!AGENT_ID || !ENVIRONMENT_ID) {
-    throw new Error("Missing AGENT_ID or ENVIRONMENT_ID in .env — run setup.ts first");
+export function loadEnvironmentId(): string {
+  const id = process.env.ENVIRONMENT_ID;
+  if (!id) {
+    throw new Error("Missing ENVIRONMENT_ID in root .env — run setup.ts first");
   }
-  return { AGENT_ID, ENVIRONMENT_ID };
+  return id;
 }
 
 const BASE = "https://api.anthropic.com/v1";

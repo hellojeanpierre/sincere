@@ -1,6 +1,7 @@
 import { join } from "path";
 import {
-  loadSpikeEnv,
+  AGENT_ID,
+  loadEnvironmentId,
   apiPost,
   apiDelete,
   apiStream,
@@ -13,7 +14,7 @@ import {
   type ZenEvent,
 } from "./types";
 
-const { AGENT_ID, ENVIRONMENT_ID } = loadSpikeEnv();
+const ENVIRONMENT_ID = loadEnvironmentId();
 
 // ── Load & filter events (same logic as demo/server.ts) ─────────────
 

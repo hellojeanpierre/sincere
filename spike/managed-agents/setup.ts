@@ -1,7 +1,5 @@
 import { join } from "path";
-import { apiPost } from "./types";
-
-const AGENT_ID = "agent_011Ca3dfRMVdQFpUVvur2fFD";
+import { apiPost, AGENT_ID } from "./types";
 
 const environment = await apiPost<{ id: string }>("/environments", {
   name: `spike-env-${Date.now()}`,
@@ -14,12 +12,12 @@ const environment = await apiPost<{ id: string }>("/environments", {
   },
 });
 console.log("Environment created:", environment.id);
+console.log("Agent:", AGENT_ID);
 
-// Append to root .env so all scripts (spike and project) can read the values.
+// Append ENVIRONMENT_ID to root .env (AGENT_ID is hardcoded in types.ts).
 const rootEnv = join(import.meta.dir, "..", "..", ".env");
 const existing = await Bun.file(rootEnv).text().catch(() => "");
-const lines = existing.split("\n");
-const filtered = lines.filter((l) => !l.startsWith("AGENT_ID=") && !l.startsWith("ENVIRONMENT_ID="));
-filtered.push(`AGENT_ID=${AGENT_ID}`, `ENVIRONMENT_ID=${environment.id}`, "");
-await Bun.write(rootEnv, filtered.join("\n"));
-console.log("Saved AGENT_ID and ENVIRONMENT_ID to root .env");
+const lines = existing.split("\n").filter((l) => !l.startsWith("ENVIRONMENT_ID="));
+lines.push(`ENVIRONMENT_ID=${environment.id}`, "");
+await Bun.write(rootEnv, lines.join("\n"));
+console.log("Saved ENVIRONMENT_ID to root .env");
