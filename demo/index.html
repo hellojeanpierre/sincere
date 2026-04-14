@@ -104,6 +104,35 @@
       white-space: pre-wrap;
       word-break: break-all;
     }
+    .tool-label {
+      font-size: 0.65rem;
+      color: #78706c;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      margin-top: 0.75rem;
+    }
+    .tool-label code {
+      color: #a8a29e;
+      background: rgba(0,0,0,0.3);
+      padding: 0.1rem 0.3rem;
+      border-radius: 0.25rem;
+    }
+    .thinking-area pre strong { color: #d4856a; font-weight: 600; }
+    .thinking-area pre code {
+      color: #a8a29e;
+      background: rgba(0,0,0,0.3);
+      padding: 0.1rem 0.3rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+    }
+    .agent-response strong { color: #d4856a; font-weight: 600; }
+    .agent-response code {
+      color: #a8a29e;
+      background: rgba(0,0,0,0.3);
+      padding: 0.1rem 0.3rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    }
   </style>
 </head>
 <body class="bg-surface text-stone-200 min-h-screen antialiased">
@@ -172,7 +201,13 @@
     // ── Ticket rows ─────────────────────────────────────────────────
     // Each entry caches its DOM handles so event handlers never querySelector.
 
-    const tickets = new Map(); // ticketId → { root, eventArea, eventContent, label, thinkingWrap, thinkingArea, thinkingPre }
+    const tickets = new Map(); // ticketId → { root, eventArea, eventContent, label, timeline, thinkingPre }
+
+    function renderInline(text) {
+      return esc(text)
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+    }
 
     function createTicketRow(id, subject) {
       const root = document.createElement('div');
@@ -194,12 +229,7 @@
                   <span class="event-label text-[11px] font-mono"></span>
                 </div>
               </div>
-              <div class="thinking-area px-3 pb-2" style="display:none">
-                <pre class="thinking-text"></pre>
-              </div>
-              <div class="ticket-tools px-3 py-3" style="display:none">
-                <span class="tools-label text-[11px] text-stone-500 tracking-wider block mb-1">tools used</span>
-              </div>
+              <div class="ticket-timeline px-3 pb-3"></div>
             </div>
           </div>
         </div>`;
@@ -212,9 +242,8 @@
         label: eventArea.querySelector('.event-label'),
         status: root.querySelector('.ticket-status'),
         body: root.querySelector('.ticket-body'),
-        thinkingArea: root.querySelector('.thinking-area'),
-        thinkingPre: root.querySelector('.thinking-text'),
-        toolsWrap: root.querySelector('.ticket-tools'),
+        timeline: root.querySelector('.ticket-timeline'),
+        thinkingPre: null, // created lazily per thinking block
       };
 
       document.getElementById('ticket-list').appendChild(root);
@@ -241,9 +270,22 @@
 
     let active = null; // ticket entry currently being processed
 
-    function clearTools(t) {
-      while (t.toolsWrap.children.length > 1) t.toolsWrap.removeChild(t.toolsWrap.lastChild);
-      t.toolsWrap.style.display = 'none';
+    function clearTimeline(t) {
+      t.timeline.innerHTML = '';
+      t.thinkingPre = null;
+    }
+
+    /** Append a new thinking <pre> block to the timeline (ends current one). */
+    function startThinkingBlock(t) {
+      const wrap = document.createElement('div');
+      wrap.className = 'thinking-area streaming';
+      wrap.style.marginTop = '0.5rem';
+      const pre = document.createElement('pre');
+      pre.className = 'thinking-text';
+      wrap.appendChild(pre);
+      t.timeline.appendChild(wrap);
+      t.thinkingPre = pre;
+      return wrap;
     }
 
     const handlers = {
@@ -264,41 +306,54 @@
         if (active && active !== t) deactivateTicketGradient(active);
         active = t;
         activateTicketGradient(t);
-        showEventLabel(t, 'agent awakened: ' + ev.label);
+        showEventLabel(t, ev.label + ': agent awakened');
         t.status.innerHTML = SPINNER_HTML;
-        t.thinkingPre.textContent = '';
-        t.thinkingArea.style.display = 'none';
-        t.thinkingArea.classList.remove('streaming');
-        clearTools(t);
+        clearTimeline(t);
         t.body.classList.remove('collapsed');
       },
 
       // ── Working: agent thinks ─────────────────────────────────────
       thinking_delta(ev) {
         if (!active) return;
-        active.thinkingArea.classList.add('streaming');
-        active.thinkingArea.style.display = '';
+        if (!active.thinkingPre) startThinkingBlock(active);
         active.thinkingPre.textContent += ev.text;
-        active.thinkingArea.scrollTop = active.thinkingArea.scrollHeight;
+        active.thinkingPre.parentElement.scrollTop = active.thinkingPre.parentElement.scrollHeight;
       },
 
       // ── Working: agent uses a tool ────────────────────────────────
       tool_start(ev) {
         if (!active) return;
-        active.toolsWrap.style.display = '';
+        // End the current thinking block so next thinking creates a new one
+        active.thinkingPre = null;
+
+        // "Used <tool> tool" label
+        const lbl = document.createElement('div');
+        lbl.className = 'tool-label';
+        lbl.innerHTML = 'Used <code>' + esc(ev.tool) + '</code> tool';
+        active.timeline.appendChild(lbl);
+
+        // Tool call preview
         const preview = ev.tool === 'bash' ? (ev.args?.command || '') : (ev.args?.path || ev.tool);
         const el = document.createElement('div');
         el.className = 'tool-call';
         el.textContent = (ev.tool === 'bash' ? '$ ' : '') + (preview.length > 200 ? preview.slice(0, 200) + '\u2026' : preview);
-        active.toolsWrap.appendChild(el);
+        active.timeline.appendChild(el);
       },
 
       // ── Decision: agent's final output ────────────────────────────
       agent_response(ev) {
         if (!active) return;
-        active.thinkingArea.classList.remove('streaming');
-        active.thinkingPre.textContent = ev.text;
-        active.thinkingArea.style.display = '';
+        // End streaming on all thinking blocks
+        active.timeline.querySelectorAll('.thinking-area.streaming').forEach(
+          el => el.classList.remove('streaming')
+        );
+        active.thinkingPre = null;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'agent-response';
+        wrap.style.cssText = 'margin-top:0.75rem; font-size:0.8rem; line-height:1.4; color:#d6d3d1;';
+        wrap.innerHTML = renderInline(ev.text);
+        active.timeline.appendChild(wrap);
         active.status.innerHTML = CHECKMARK_HTML;
       },
 
