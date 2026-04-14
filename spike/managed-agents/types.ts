@@ -1,3 +1,13 @@
+import { join } from "path";
+
+// Bun auto-loads .env from the nearest package.json — which is this spike's.
+// ANTHROPIC_API_KEY (and possibly AGENT_ID/ENVIRONMENT_ID) live in the project root.
+const rootEnvText = await Bun.file(join(import.meta.dir, "..", "..", ".env")).text().catch(() => "");
+for (const line of rootEnvText.split("\n")) {
+  const m = line.match(/^([^#=\s]+)\s*=\s*(.*)$/);
+  if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+}
+
 // ── API client ──────────────────────────────────────────────────────
 
 export interface SpikeEnv {
