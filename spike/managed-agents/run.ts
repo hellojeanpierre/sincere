@@ -61,6 +61,12 @@ async function processEvent(sessionId: string, message: string): Promise<void> {
       ],
     });
   } catch (err) {
+    // Session is busy (waiting for tool results or already running).
+    // Cron check-ins are best-effort — skip if the session is already active.
+    if (err instanceof Error && err.message.includes("waiting on responses to events")) {
+      console.log(`  ⏭ skipped (session busy): ${message.slice(0, 60)}`);
+      return;
+    }
     console.error(`  !! processEvent POST failed for session ${sessionId}:`, err);
     throw err;
   }
