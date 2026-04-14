@@ -69,16 +69,19 @@ async function processEvent(sessionId: string, message: string): Promise<void> {
   let agentActive = false;
 
   for await (const event of stream) {
-    // Any agent event means the session is processing our message.
-    if (event.type.startsWith("agent.")) agentActive = true;
+    // Any agent-originated event means the session is processing our message.
+    // Raw SSE types: "agent", "agent_tool_use", "custom_tool_use", etc.
+    if (event.type === "agent" || event.type.startsWith("agent_") || event.type === "custom_tool_use") {
+      agentActive = true;
+    }
 
-    if (event.type === "agent.custom_tool_use" && "id" in event) {
+    if (event.type === "custom_tool_use" && "id" in event) {
       const { id, name, input } = event as { id: string; name: string; input: unknown };
       toolEvents.set(id, { name, input });
       continue;
     }
 
-    if (event.type === "session.status_idle") {
+    if (event.type === "status_idle") {
       const reason = (event as { stop_reason?: { type: string; event_ids?: string[] } }).stop_reason;
 
       // Skip stale end_turn from before our message — but NEVER skip requires_action.
@@ -118,7 +121,7 @@ async function processEvent(sessionId: string, message: string): Promise<void> {
       return;
     }
 
-    if (event.type === "session.status_terminated") {
+    if (event.type === "status_terminated") {
       throw new Error("Session terminated unexpectedly");
     }
   }
