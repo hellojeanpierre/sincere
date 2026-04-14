@@ -2,6 +2,7 @@ import { join } from "path";
 import {
   loadSpikeEnv,
   apiPost,
+  apiDelete,
   apiStream,
   parseSSE,
   parseJsonl,
@@ -70,34 +71,36 @@ async function waitForIdle(): Promise<void> {
 
 const announced = new Set<string>();
 
-for (const ticketEvents of ticketGroups) {
-  const ticketId = String(ticketEvents[0].detail.id);
-  const subject = String(ticketEvents[0].detail.subject ?? "");
+try {
+  for (const ticketEvents of ticketGroups) {
+    const ticketId = String(ticketEvents[0].detail.id);
+    const subject = String(ticketEvents[0].detail.subject ?? "");
 
-  for (const event of ticketEvents) {
-    // Announce ticket on first event (matches demo SSE { type: "ticket" })
-    if (!announced.has(ticketId)) {
-      announced.add(ticketId);
-      console.log(`\n━━ Ticket ${ticketId}: ${subject} ━━`);
+    for (const event of ticketEvents) {
+      if (!announced.has(ticketId)) {
+        announced.add(ticketId);
+        console.log(`\n━━ Ticket ${ticketId}: ${subject} ━━`);
+      }
+
+      console.log(`\n▸ ${makeEventLabel(event)}`);
+
+      await apiPost(`/sessions/${session.id}/events`, {
+        events: [
+          {
+            type: "user.message",
+            content: [
+              { type: "text", text: `Incoming Zendesk event:\n\n${JSON.stringify(event, null, 2)}` },
+            ],
+          },
+        ],
+      });
+
+      await waitForIdle();
     }
-
-    // Event label (matches demo SSE { type: "event" })
-    console.log(`\n▸ ${makeEventLabel(event)}`);
-
-    // Send Zendesk event as user message (matches intake.ts prompt format)
-    await apiPost(`/sessions/${session.id}/events`, {
-      events: [
-        {
-          type: "user.message",
-          content: [
-            { type: "text", text: `Incoming Zendesk event:\n\n${JSON.stringify(event, null, 2)}` },
-          ],
-        },
-      ],
-    });
-
-    await waitForIdle();
   }
-}
 
-console.log("\n━━ done ━━");
+  console.log("\n━━ done ━━");
+} finally {
+  console.log(`Deleting session ${session.id}…`);
+  await apiDelete(`/sessions/${session.id}`);
+}

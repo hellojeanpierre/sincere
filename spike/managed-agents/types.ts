@@ -36,6 +36,17 @@ export async function apiPost<T = unknown>(path: string, body: unknown): Promise
   return res.json() as Promise<T>;
 }
 
+export async function apiDelete(path: string): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "DELETE",
+    headers: HEADERS,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+  }
+}
+
 export function apiStream(path: string): Promise<Response> {
   return fetch(`${BASE}${path}`, {
     method: "GET",
