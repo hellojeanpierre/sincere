@@ -87,6 +87,50 @@ export async function apiInterrupt(sessionId: string): Promise<void> {
   });
 }
 
+// ── Session event types ─────────────────────────────────────────────
+
+export type SessionEvent =
+  | { type: "agent.custom_tool_use"; id: string; name: string; input: unknown }
+  | { type: "agent.message"; content: { type: string; text?: string }[] }
+  | { type: "session.status_idle"; stop_reason?: { type: string; event_ids?: string[] } }
+  | { type: "session.status_running" }
+  | { type: "session.status_terminated" }
+  | { type: string; [key: string]: unknown };
+
+// ── SSE streaming ───────────────────────────────────────────────────
+
+export async function* apiStream(sessionId: string): AsyncGenerator<SessionEvent> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/stream`, {
+    method: "GET",
+    headers: { ...HEADERS, Accept: "text/event-stream" },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Stream failed: ${res.status} ${res.statusText}: ${text}`);
+  }
+
+  const decoder = new TextDecoder();
+  let buf = "";
+  for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
+    buf += decoder.decode(chunk, { stream: true });
+    const blocks = buf.split("\n\n");
+    buf = blocks.pop()!;
+    for (const block of blocks) {
+      const data = block
+        .split("\n")
+        .filter((l) => l.startsWith("data:"))
+        .map((l) => (l[5] === " " ? l.slice(6) : l.slice(5)))
+        .join("\n");
+      if (!data) continue;
+      try {
+        yield JSON.parse(data) as SessionEvent;
+      } catch {
+        // skip unparseable SSE frames
+      }
+    }
+  }
+}
+
 // ── Zendesk domain ──────────────────────────────────────────────────
 
 export type ZenEvent = {
