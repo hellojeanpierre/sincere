@@ -14,7 +14,6 @@ const log = logger.child({ component: "demo" });
 
 const OPERATOR_PROMPT_PATH = join(import.meta.dir, "../src/operator.md");
 const STATIC_DIR = import.meta.dir;
-const EVENT_DELAY_MS = 2_000;
 
 const DATA_DIR = join(import.meta.dir, "..", "data", "pintest-v2", "smoke-tickets");
 const EVENTS_PATH = join(DATA_DIR, "smoke_events.jsonl");
@@ -102,6 +101,23 @@ function logAgentEvent(event: AgentEvent): void {
   }
 }
 
+// ── Keyboard-gated progression ──────────────────────────────────────
+// Each → press resolves one gate. Presses that arrive while the agent
+// is still working are queued so rapid tapping doesn't drop events.
+
+let resolveNext: (() => void) | null = null;
+let pendingNext = 0;
+
+function waitForNext(): Promise<void> {
+  if (pendingNext > 0) { pendingNext--; return Promise.resolve(); }
+  return new Promise((r) => { resolveNext = r; });
+}
+
+function signalNext(): void {
+  if (resolveNext) { const r = resolveNext; resolveNext = null; r(); }
+  else { pendingNext++; }
+}
+
 // ── SSE stream ──────────────────────────────────────────────────────
 
 async function ticketStream(): Promise<Response> {
@@ -150,6 +166,10 @@ async function ticketStream(): Promise<Response> {
   );
   const lane = createLane(handler);
 
+  // Reset gate state for this stream session.
+  resolveNext = null;
+  pendingNext = 0;
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -173,16 +193,18 @@ async function ticketStream(): Promise<Response> {
           const ticketId = String(ticketEvents[0].detail.id);
           const subject = String(ticketEvents[0].detail.subject ?? "");
 
-          await new Promise((r) => setTimeout(r, EVENT_DELAY_MS));
-
-          if (!announced.has(ticketId)) {
-            announced.add(ticketId);
-            send({ type: "ticket", id: ticketId, subject });
-            log.debug({ ticketId, subject }, "ticket announced");
-          }
-
           for (const event of ticketEvents) {
-            // Awake: show event label
+            // ── Gate: wait for → press ──────────────────────────────
+            await waitForNext();
+
+            // Announce ticket on first event
+            if (!announced.has(ticketId)) {
+              announced.add(ticketId);
+              send({ type: "ticket", id: ticketId, subject });
+              log.debug({ ticketId, subject }, "ticket announced");
+            }
+
+            // Awake
             send({
               type: "event",
               ticketId,
@@ -193,10 +215,6 @@ async function ticketStream(): Promise<Response> {
             await startTraceSink({ workItemId: ticketId, write: (line) => traceWriter.write(line) }, () =>
               lane.enqueue(ticketId, event),
             );
-
-            // Sleep: collapse after a pause so the audience can read the decision
-            await new Promise((r) => setTimeout(r, EVENT_DELAY_MS));
-            send({ type: "event_done", ticketId });
           }
         }
 
@@ -234,6 +252,11 @@ const server = Bun.serve({
     if (url.pathname === "/api/stream") {
       log.info("SSE stream requested");
       return ticketStream();
+    }
+
+    if (url.pathname === "/api/next" && req.method === "POST") {
+      signalNext();
+      return new Response("ok");
     }
 
     // Static file serving
