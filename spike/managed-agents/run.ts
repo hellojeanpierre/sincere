@@ -3,8 +3,8 @@ import {
   AGENT_ID,
   ENVIRONMENT_ID,
   apiPost,
-  apiGet,
   apiUploadFile,
+  apiStream,
   parseJsonl,
   makeEventLabel,
   DEMO_TICKET_IDS,
@@ -12,6 +12,7 @@ import {
   DEMO_TICKET_ORDER,
   type ZenEvent,
 } from "./types";
+import { handleCronTool } from "./cron";
 
 // ── Load & filter events (same logic as demo/server.ts) ─────────────
 
@@ -43,16 +44,70 @@ console.log(`Loaded ${filtered.length} events across ${ticketGroups.length} tick
 const policyFile = await apiUploadFile(POLICY_PATH);
 console.log(`Uploaded policy.jsonl: ${policyFile.id}\n`);
 
-// ── Process one ticket per session ──────────────────────────────────
+// ── Event processing ────────────────────────────────────────────────
 
-async function waitForIdle(sessionId: string): Promise<void> {
-  while (true) {
-    await Bun.sleep(3000);
-    const session = await apiGet<{ status: string }>(`/sessions/${sessionId}`);
-    if (session.status === "idle") return;
-    if (session.status === "terminated") throw new Error("Session terminated");
+async function processEvent(sessionId: string, message: string): Promise<void> {
+  await apiPost(`/sessions/${sessionId}/events`, {
+    events: [
+      {
+        type: "user.message",
+        content: [{ type: "text", text: message }],
+      },
+    ],
+  });
+
+  const toolEvents = new Map<string, { name: string; input: unknown }>();
+
+  for await (const event of apiStream(sessionId)) {
+    if (event.type === "agent.custom_tool_use" && "id" in event) {
+      const { id, name, input } = event as { id: string; name: string; input: unknown };
+      toolEvents.set(id, { name, input });
+      continue;
+    }
+
+    if (event.type === "session.status_idle") {
+      const reason = (event as { stop_reason?: { type: string; event_ids?: string[] } }).stop_reason;
+
+      if (reason?.type === "requires_action") {
+        for (const eventId of reason.event_ids ?? []) {
+          const tool = toolEvents.get(eventId);
+          let resultText: string;
+          if (!tool) {
+            resultText = `Error: unknown tool event ${eventId}`;
+          } else if (tool.name === "cron") {
+            resultText = handleCronTool(
+              sessionId,
+              tool.input as { delay?: string },
+              processEvent,
+            );
+          } else {
+            resultText = `Error: unknown custom tool "${tool.name}"`;
+          }
+
+          await apiPost(`/sessions/${sessionId}/events`, {
+            events: [
+              {
+                type: "user.custom_tool_result",
+                custom_tool_use_id: eventId,
+                content: [{ type: "text", text: resultText }],
+              },
+            ],
+          });
+        }
+        toolEvents.clear();
+        continue;
+      }
+
+      if (reason?.type === "end_turn") return;
+    }
+
+    if (event.type === "session.status_terminated") {
+      throw new Error("Session terminated unexpectedly");
+    }
   }
 }
+
+// ── Process one ticket per session ──────────────────────────────────
 
 async function processTicket(events: ZenEvent[]): Promise<void> {
   const ticketId = String(events[0].detail.id);
@@ -71,19 +126,7 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
 
   for (const event of events) {
     console.log(`  ▸ ${makeEventLabel(event)}`);
-
-    await apiPost(`/sessions/${session.id}/events`, {
-      events: [
-        {
-          type: "user.message",
-          content: [
-            { type: "text", text: `Incoming Zendesk event:\n\n${JSON.stringify(event, null, 2)}` },
-          ],
-        },
-      ],
-    });
-
-    await waitForIdle(session.id);
+    await processEvent(session.id, `Incoming Zendesk event:\n\n${JSON.stringify(event, null, 2)}`);
   }
 }
 
