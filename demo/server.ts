@@ -45,18 +45,21 @@ const demoEventsRaw = allEvents.filter(
   (e) => ALLOWED_EVENT_TYPES.has(e.type) && DEMO_TICKET_IDS.has(String(e.detail.id)),
 );
 
-// Group events by ticket so we process all events for one ticket before
-// moving to the next — lets the audience follow one ticket's reasoning at a time.
+// Group events by ticket, streamed in explicit narrative order:
+// 1. Clean baseline (good CSAT) → 2–4. Progressively complex failures.
+const DEMO_TICKET_ORDER = ["4800019", "4800027", "4800094", "4800099"];
 const demoEventsByTicket: ZenEvent[][] = [];
 {
   const byId = new Map<string, ZenEvent[]>();
-  const order: string[] = [];
   for (const e of demoEventsRaw) {
     const id = String(e.detail.id);
-    if (!byId.has(id)) { byId.set(id, []); order.push(id); }
+    if (!byId.has(id)) byId.set(id, []);
     byId.get(id)!.push(e);
   }
-  for (const id of order) demoEventsByTicket.push(byId.get(id)!);
+  for (const id of DEMO_TICKET_ORDER) {
+    const events = byId.get(id);
+    if (events) demoEventsByTicket.push(events);
+  }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
