@@ -58,24 +58,17 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
 
   async function waitForIdle(): Promise<void> {
     for await (const event of sseReader) {
-      switch (event.type) {
-        case "session.status_idle":
-          return;
-        case "session.status_terminated":
-          throw new Error("Session terminated");
-        case "session.error":
-          console.error(`  [error] ${event.error?.message ?? "unknown"}`);
-          break;
-        case "session.status_rescheduled":
-          console.log("  [rescheduled] transient error, retrying…");
-          break;
+      if (event.type === "session.status_idle") return;
+      if (event.type === "session.status_terminated") throw new Error("Session terminated");
+      if (event.type === "session.error") {
+        console.error(`  [error] ${event.error?.message ?? "unknown"}`);
       }
     }
   }
 
   try {
     for (const event of events) {
-      console.log(`\n  ▸ ${makeEventLabel(event)}`);
+      console.log(`  ▸ ${makeEventLabel(event)}`);
 
       await apiPost(`/sessions/${session.id}/events`, {
         events: [
@@ -91,7 +84,6 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
       await waitForIdle();
     }
   } finally {
-    console.log(`  Cleaning up session ${session.id}…`);
     await apiInterrupt(session.id).catch(() => {});
     await apiDelete(`/sessions/${session.id}`).catch(() => {});
   }
