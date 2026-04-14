@@ -99,7 +99,7 @@ export type SessionEvent =
 
 // ── SSE streaming ───────────────────────────────────────────────────
 
-export async function* apiStream(sessionId: string): AsyncGenerator<SessionEvent> {
+export async function apiStream(sessionId: string): Promise<AsyncIterable<SessionEvent>> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/stream`, {
     method: "GET",
     headers: { ...HEADERS, "anthropic-beta": "agent-api-2026-03-01", Accept: "text/event-stream" },
@@ -109,26 +109,30 @@ export async function* apiStream(sessionId: string): AsyncGenerator<SessionEvent
     throw new Error(`Stream failed: ${res.status} ${res.statusText}: ${text}`);
   }
 
-  const decoder = new TextDecoder();
-  let buf = "";
-  for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
-    buf += decoder.decode(chunk, { stream: true });
-    const blocks = buf.split("\n\n");
-    buf = blocks.pop()!;
-    for (const block of blocks) {
-      const data = block
-        .split("\n")
-        .filter((l) => l.startsWith("data:"))
-        .map((l) => (l[5] === " " ? l.slice(6) : l.slice(5)))
-        .join("\n");
-      if (!data) continue;
-      try {
-        yield JSON.parse(data) as SessionEvent;
-      } catch {
-        // skip unparseable SSE frames
+  async function* events(): AsyncGenerator<SessionEvent> {
+    const decoder = new TextDecoder();
+    let buf = "";
+    for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
+      buf += decoder.decode(chunk, { stream: true });
+      const blocks = buf.split("\n\n");
+      buf = blocks.pop()!;
+      for (const block of blocks) {
+        const data = block
+          .split("\n")
+          .filter((l) => l.startsWith("data:"))
+          .map((l) => (l[5] === " " ? l.slice(6) : l.slice(5)))
+          .join("\n");
+        if (!data) continue;
+        try {
+          yield JSON.parse(data) as SessionEvent;
+        } catch {
+          // skip unparseable SSE frames
+        }
       }
     }
   }
+
+  return events();
 }
 
 // ── Zendesk domain ──────────────────────────────────────────────────
