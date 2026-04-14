@@ -4,6 +4,7 @@ import {
   ENVIRONMENT_ID,
   apiPost,
   apiDelete,
+  apiInterrupt,
   apiStream,
   parseSSE,
   parseJsonl,
@@ -12,7 +13,6 @@ import {
   ALLOWED_EVENT_TYPES,
   DEMO_TICKET_ORDER,
   type ZenEvent,
-  type SSEEvent,
 } from "./types";
 
 // ── Load & filter events (same logic as demo/server.ts) ─────────────
@@ -58,8 +58,18 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
 
   async function waitForIdle(): Promise<void> {
     for await (const event of sseReader) {
-      if (event.type === "session.status_idle") return;
-      if (event.type === "session.status_terminated") throw new Error("Session terminated");
+      switch (event.type) {
+        case "session.status_idle":
+          return;
+        case "session.status_terminated":
+          throw new Error("Session terminated");
+        case "session.error":
+          console.error(`  [error] ${event.error?.message ?? "unknown"}`);
+          break;
+        case "session.status_rescheduled":
+          console.log("  [rescheduled] transient error, retrying…");
+          break;
+      }
     }
   }
 
@@ -67,7 +77,7 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
     for (const event of events) {
       console.log(`\n  ▸ ${makeEventLabel(event)}`);
 
-      await apiPost(`/sessions/${session.id}/events`, {
+      await apiPost(`/sessions/${session.id}/events?beta=true`, {
         events: [
           {
             type: "user.message",
@@ -81,8 +91,9 @@ async function processTicket(events: ZenEvent[]): Promise<void> {
       await waitForIdle();
     }
   } finally {
-    console.log(`  Deleting session ${session.id}…`);
-    await apiDelete(`/sessions/${session.id}`);
+    console.log(`  Cleaning up session ${session.id}…`);
+    await apiInterrupt(session.id).catch(() => {});
+    await apiDelete(`/sessions/${session.id}`).catch(() => {});
   }
 }
 

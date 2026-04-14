@@ -21,7 +21,7 @@ const BASE = "https://api.anthropic.com/v1";
 const HEADERS = {
   "x-api-key": process.env.ANTHROPIC_API_KEY!,
   "anthropic-version": "2023-06-01",
-  "anthropic-beta": "managed-agents-2026-04-01,agent-api-2026-03-01",
+  "anthropic-beta": "managed-agents-2026-04-01",
   "content-type": "application/json",
 };
 
@@ -50,9 +50,15 @@ export async function apiDelete(path: string): Promise<void> {
 }
 
 export function apiStream(path: string): Promise<Response> {
-  return fetch(`${BASE}${path}`, {
+  return fetch(`${BASE}${path}?beta=true`, {
     method: "GET",
     headers: { ...HEADERS, Accept: "text/event-stream" },
+  });
+}
+
+export async function apiInterrupt(sessionId: string): Promise<void> {
+  await apiPost(`/sessions/${sessionId}/events?beta=true`, {
+    events: [{ type: "user.interrupt" }],
   });
 }
 
@@ -63,6 +69,8 @@ export interface SSEEvent {
   content?: { type: string; text: string }[];
   name?: string;
   input?: unknown;
+  error?: { type: string; message: string; retry_status?: string };
+  stop_reason?: string;
 }
 
 export async function* parseSSE(
