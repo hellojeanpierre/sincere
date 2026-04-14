@@ -166,10 +166,6 @@ async function ticketStream(): Promise<Response> {
   );
   const lane = createLane(handler);
 
-  // Reset gate state for this stream session.
-  resolveNext = null;
-  pendingNext = 0;
-
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
