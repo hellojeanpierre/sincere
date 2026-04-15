@@ -1,8 +1,10 @@
 import { join, resolve } from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Beta } from "@anthropic-ai/sdk/resources/beta";
+import { ensureCronTool } from "./cron";
 
 type StreamEvent = Beta.Sessions.Events.BetaManagedAgentsStreamSessionEvents;
+type EventParams = Beta.Sessions.Events.BetaManagedAgentsEventParams;
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -61,6 +63,8 @@ for (const e of filtered) {
 
 console.log(`Loaded ${filtered.length} events across ${byTicket.size} tickets`);
 
+await ensureCronTool(client, AGENT_ID);
+
 // ── Demo handler ──────────────────────────────────────────────────
 
 async function runDemo(): Promise<Response> {
@@ -88,6 +92,8 @@ async function runDemo(): Promise<Response> {
 
   let agentActive = false;
   let staleSkipped = false;
+  const toolEvents = new Map<string, { name: string; input: Record<string, unknown> }>();
+  let scheduledCron = false;
 
   const encoder = new TextEncoder();
   const readable = new ReadableStream({
@@ -98,9 +104,12 @@ async function runDemo(): Promise<Response> {
 
       try {
         for await (const event of stream) {
-          console.log(`[event] ${event.type}  ${JSON.stringify(event).slice(0, 300)}`);
-
           if (event.type.startsWith("agent.")) agentActive = true;
+
+          if (event.type === "agent.custom_tool_use") {
+            const e = event as { id: string; name: string; input: Record<string, unknown> };
+            toolEvents.set(e.id, { name: e.name, input: e.input });
+          }
 
           if (event.type === "agent.message") {
             const data = JSON.stringify({ type: event.type, content: (event as { content: unknown }).content });
@@ -121,11 +130,45 @@ async function runDemo(): Promise<Response> {
 
             if (event.stop_reason.type === "requires_action") {
               const ids = (event.stop_reason as { event_ids?: string[] }).event_ids ?? [];
-              console.log(`  requires_action — blocking event IDs: ${ids.join(", ")}`);
+              const results: EventParams[] = [];
+              for (const id of ids) {
+                const tool = toolEvents.get(id);
+                let text: string;
+                if (!tool) {
+                  console.error(`Unknown event ID in requires_action: ${id}`);
+                  text = `Error: unknown event ${id}`;
+                } else if (tool.name === "cron") {
+                  scheduledCron = true;
+                  text = "Acknowledged. Check-in registered.";
+                } else {
+                  console.error(`Unknown custom tool: ${tool.name}`);
+                  text = `Error: unknown tool "${tool.name}"`;
+                }
+                toolEvents.delete(id);
+                results.push({
+                  type: "user.custom_tool_result",
+                  custom_tool_use_id: id,
+                  content: [{ type: "text", text }],
+                });
+              }
+              await client.beta.sessions.events.send(session.id, { events: results });
               continue;
             }
 
-            console.log("Session idle — done.");
+            if (scheduledCron) {
+              scheduledCron = false;
+              await client.beta.sessions.events.send(session.id, {
+                events: [{
+                  type: "user.message",
+                  content: [{
+                    type: "text",
+                    text: "Cron fired — reassess this ticket's current state.\n\n"
+                      + JSON.stringify(ticketEvents, null, 2),
+                  }],
+                }],
+              });
+              continue;
+            }
             break;
           }
         }
