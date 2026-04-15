@@ -1,4 +1,4 @@
-import { join } from "path";
+import { join, resolve } from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Beta } from "@anthropic-ai/sdk/resources/beta";
 
@@ -160,7 +160,9 @@ const server = Bun.serve({
     if (url.pathname === "/api/stream") return runDemo();
 
     const filePath = url.pathname === "/" ? "/index.html" : url.pathname;
-    const file = Bun.file(join(STATIC_DIR, filePath));
+    const resolved = resolve(join(STATIC_DIR, filePath));
+    if (!resolved.startsWith(STATIC_DIR + "/") && resolved !== STATIC_DIR) return new Response("Forbidden", { status: 403 });
+    const file = Bun.file(resolved);
     if (await file.exists()) return new Response(file);
 
     return new Response("Not found", { status: 404 });
