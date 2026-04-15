@@ -171,12 +171,17 @@ async function fireNextEvent(ticketId: string): Promise<FireResult> {
   const event = ticketEvents[eventIndex];
   ts.status = "running";
 
-  await client.beta.sessions.events.send(ts.sessionId, {
-    events: [{
-      type: "user.message",
-      content: [{ type: "text", text: JSON.stringify(event, null, 2) }],
-    }],
-  });
+  try {
+    await client.beta.sessions.events.send(ts.sessionId, {
+      events: [{
+        type: "user.message",
+        content: [{ type: "text", text: JSON.stringify(event, null, 2) }],
+      }],
+    });
+  } catch (err) {
+    ts.status = "idle";
+    throw err;
+  }
   ts.cursor++;
 
   return { fired: true, eventIndex, eventType: event.type };
