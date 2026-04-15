@@ -14,17 +14,17 @@ function replayEventLoop(
   let toolResultsSent = 0;
 
   for (const event of events) {
-    if (event.type === "agent" || event.type.startsWith("agent_") || event.type === "custom_tool_use") {
+    if (event.type.startsWith("agent.")) {
       agentActive = true;
     }
 
-    if (event.type === "custom_tool_use" && "id" in event) {
+    if (event.type === "agent.custom_tool_use" && "id" in event) {
       const { id, name, input } = event as { id: string; name: string; input: unknown };
       toolEvents.set(id, { name, input });
       continue;
     }
 
-    if (event.type === "status_idle") {
+    if (event.type === "session.status_idle") {
       const reason = (event as { stop_reason?: { type: string; event_ids?: string[] } }).stop_reason;
 
       if (reason?.type === "end_turn" && !agentActive) continue;
@@ -39,7 +39,7 @@ function replayEventLoop(
       return { outcome: `unexpected:${reason?.type}`, toolResultsSent };
     }
 
-    if (event.type === "status_terminated") {
+    if (event.type === "session.status_terminated") {
       return { outcome: "terminated", toolResultsSent };
     }
   }
@@ -51,31 +51,31 @@ function replayEventLoop(
 
 const STREAM_WITH_CRON: SessionEvent[] = [
   // Stale idle on connect
-  { type: "status_idle", stop_reason: { type: "end_turn" } },
+  { type: "session.status_idle", stop_reason: { type: "end_turn" } },
   // Agent processes (status_running may or may not appear)
-  { type: "status_running" },
-  { type: "agent", content: [{ type: "text", text: "Analyzing ticket..." }] },
-  { type: "custom_tool_use", id: "evt_abc", name: "cron", input: { delay: "24h" } },
+  { type: "session.status_running" },
+  { type: "agent.message", content: [{ type: "text", text: "Analyzing ticket..." }] },
+  { type: "agent.custom_tool_use", id: "evt_abc", name: "cron", input: { delay: "24h" } },
   // Session idles for tool result
-  { type: "status_idle", stop_reason: { type: "requires_action", event_ids: ["evt_abc"] } },
+  { type: "session.status_idle", stop_reason: { type: "requires_action", event_ids: ["evt_abc"] } },
   // After tool result, agent finishes
-  { type: "status_idle", stop_reason: { type: "end_turn" } },
+  { type: "session.status_idle", stop_reason: { type: "end_turn" } },
 ];
 
 const STREAM_NO_STATUS_RUNNING: SessionEvent[] = [
-  { type: "status_idle", stop_reason: { type: "end_turn" } },
+  { type: "session.status_idle", stop_reason: { type: "end_turn" } },
   // No status_running event
-  { type: "agent", content: [{ type: "text", text: "Analyzing ticket..." }] },
-  { type: "custom_tool_use", id: "evt_abc", name: "cron", input: { delay: "24h" } },
-  { type: "status_idle", stop_reason: { type: "requires_action", event_ids: ["evt_abc"] } },
-  { type: "status_idle", stop_reason: { type: "end_turn" } },
+  { type: "agent.message", content: [{ type: "text", text: "Analyzing ticket..." }] },
+  { type: "agent.custom_tool_use", id: "evt_abc", name: "cron", input: { delay: "24h" } },
+  { type: "session.status_idle", stop_reason: { type: "requires_action", event_ids: ["evt_abc"] } },
+  { type: "session.status_idle", stop_reason: { type: "end_turn" } },
 ];
 
 const STREAM_NO_TOOLS: SessionEvent[] = [
-  { type: "status_idle", stop_reason: { type: "end_turn" } },
-  { type: "status_running" },
-  { type: "agent", content: [{ type: "text", text: "All on track." }] },
-  { type: "status_idle", stop_reason: { type: "end_turn" } },
+  { type: "session.status_idle", stop_reason: { type: "end_turn" } },
+  { type: "session.status_running" },
+  { type: "agent.message", content: [{ type: "text", text: "All on track." }] },
+  { type: "session.status_idle", stop_reason: { type: "end_turn" } },
 ];
 
 test("handles cron tool call with status_running present", () => {
@@ -98,7 +98,7 @@ test("skips stale idle, returns on real end_turn (no tools)", () => {
 
 test("stale idle alone causes hang (no agent activity)", () => {
   const staleOnly: SessionEvent[] = [
-    { type: "status_idle", stop_reason: { type: "end_turn" } },
+    { type: "session.status_idle", stop_reason: { type: "end_turn" } },
   ];
   const result = replayEventLoop(staleOnly);
   expect(result.outcome).toBe("hung");

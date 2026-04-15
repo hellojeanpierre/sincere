@@ -75,23 +75,18 @@ async function processEvent(sessionId: string, message: string): Promise<void> {
   let agentActive = false;
 
   for await (const event of stream) {
-    // Any agent-originated event means the session is processing our message.
-    // Raw SSE types: "agent", "agent_tool_use", "custom_tool_use", etc.
-    if (event.type === "agent" || event.type.startsWith("agent_") || event.type === "custom_tool_use") {
-      agentActive = true;
-    }
+    // Any agent event means the session is processing our message.
+    if (event.type.startsWith("agent.")) agentActive = true;
 
-    // Capture custom tool calls — log type to discover the raw name.
-    if ("name" in event && "input" in event && "id" in event) {
+    if (event.type === "agent.custom_tool_use" && "id" in event) {
       const { id, name, input } = event as { id: string; name: string; input: unknown };
-      console.log(`  🔧 tool_use [type=${event.type}] id=${id} name=${name}`);
+      console.log(`  🔧 custom_tool_use id=${id} name=${name}`);
       toolEvents.set(id, { name, input });
       continue;
     }
 
-    if (event.type === "status_idle") {
+    if (event.type === "session.status_idle") {
       const reason = (event as { stop_reason?: { type: string; event_ids?: string[] } }).stop_reason;
-      console.log(`  ◼ idle stop_reason=${JSON.stringify(reason)}`);
 
       // Skip stale end_turn from before our message — but NEVER skip requires_action.
       if (reason?.type === "end_turn" && !agentActive) continue;
@@ -130,7 +125,7 @@ async function processEvent(sessionId: string, message: string): Promise<void> {
       return;
     }
 
-    if (event.type === "status_terminated") {
+    if (event.type === "session.status_terminated") {
       throw new Error("Session terminated unexpectedly");
     }
   }
