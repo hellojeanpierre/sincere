@@ -89,21 +89,18 @@ export async function apiInterrupt(sessionId: string): Promise<void> {
 
 // ── Session event types ─────────────────────────────────────────────
 
-// Raw SSE types differ from SDK-transformed types in the docs:
-//   docs: session.status_idle  → raw: status_idle
-//   docs: agent.custom_tool_use → raw: custom_tool_use
 export type SessionEvent =
-  | { type: "custom_tool_use"; id: string; name: string; input: unknown }
-  | { type: "agent"; content: { type: string; text?: string }[] }
-  | { type: "status_idle"; stop_reason?: { type: string; event_ids?: string[] } }
-  | { type: "status_running" }
-  | { type: "status_terminated" }
+  | { type: "agent.custom_tool_use"; id: string; name: string; input: unknown }
+  | { type: "agent.message"; content: { type: string; text?: string }[] }
+  | { type: "session.status_idle"; stop_reason?: { type: string; event_ids?: string[] } }
+  | { type: "session.status_running" }
+  | { type: "session.status_terminated" }
   | { type: string; [key: string]: unknown };
 
 // ── SSE streaming ───────────────────────────────────────────────────
 
 export async function apiStream(sessionId: string): Promise<AsyncIterable<SessionEvent>> {
-  const res = await fetch(`${BASE}/sessions/${sessionId}/stream`, {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/events/stream`, {
     method: "GET",
     headers: { ...HEADERS, "anthropic-beta": "agent-api-2026-03-01", Accept: "text/event-stream" },
   });
