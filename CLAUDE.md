@@ -5,7 +5,7 @@ Bun-based AI agent project using `@mariozechner/pi-agent-core` and `@mariozechne
 ## Runtime
 
 - Bun, not Node.js. Use `bun run`, `bun test`, `bun:sqlite`, `Bun.file`, etc.
-- Bun auto-loads `.env` — no dotenv needed.
+- Bun auto-loads `.env` from the working directory (project root). All scripts run from root. Do not add manual `.env` loaders — `process.env` already has everything.
 
 ## Architectural Invariants
 
