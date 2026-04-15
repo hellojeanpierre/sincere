@@ -20,6 +20,14 @@ interface TicketSession {
   cursor: number;
   cronMap: Map<string, { name: string; input: Record<string, unknown> }>;
   scheduledCron: boolean;
+  status: "idle" | "running";
+}
+
+interface FireResult {
+  fired: boolean;
+  eventIndex?: number;
+  eventType?: string;
+  reason?: string;
 }
 
 // ── Config ────────────────────────────────────────────────────────
@@ -77,6 +85,22 @@ await ensureCronTool(client, AGENT_ID);
 
 const sessions = new Map<string, TicketSession>();
 
+// ── SSE broadcast ───────────────────────────────────────────────
+
+type SSEWriter = WritableStreamDefaultWriter<Uint8Array>;
+const sseClients = new Set<SSEWriter>();
+const encoder = new TextEncoder();
+
+function broadcast(data: Record<string, unknown>): void {
+  const chunk = encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
+  for (const writer of sseClients) {
+    writer.write(chunk).catch(() => {
+      sseClients.delete(writer);
+      writer.close().catch(() => {});
+    });
+  }
+}
+
 let cachedFileId: string | null = null;
 
 async function ensurePolicyFile(): Promise<string> {
@@ -92,7 +116,7 @@ async function ensurePolicyFile(): Promise<string> {
 
 // ── Session lifecycle ────────────────────────────────────────────
 
-async function createTicketSession(ticketId: string): Promise<void> {
+async function createTicketSession(ticketId: string): Promise<FireResult> {
   const ticketEvents = byTicket.get(ticketId);
   if (!ticketEvents) throw new Error(`No events for ticket ${ticketId}`);
 
@@ -115,6 +139,7 @@ async function createTicketSession(ticketId: string): Promise<void> {
     cursor: 1,
     cronMap: new Map(),
     scheduledCron: false,
+    status: "running",
   };
   sessions.set(ticketId, ts);
 
@@ -125,28 +150,41 @@ async function createTicketSession(ticketId: string): Promise<void> {
     }],
   });
   console.log(`Sent ticket ${ticketId} first event`);
+
+  consumeStream(ticketId).catch((err) =>
+    console.error(`consumeStream error for ${ticketId}:`, err),
+  );
+
+  return { fired: true, eventIndex: 0, eventType: ticketEvents[0].type };
 }
 
-async function fireNextEvent(ticketId: string): Promise<void> {
+async function fireNextEvent(ticketId: string): Promise<FireResult> {
   const ts = sessions.get(ticketId);
-  if (!ts) throw new Error(`No session for ticket ${ticketId}`);
+  if (!ts) return { fired: false, reason: "no session" };
+  if (ts.status === "running") return { fired: false, reason: "agent is processing" };
+
   const ticketEvents = byTicket.get(ticketId);
-  if (!ticketEvents || ts.cursor >= ticketEvents.length) return;
+  if (!ticketEvents || ts.cursor >= ticketEvents.length)
+    return { fired: false, reason: "no more events" };
+
+  const eventIndex = ts.cursor;
+  const event = ticketEvents[eventIndex];
+  ts.status = "running";
 
   await client.beta.sessions.events.send(ts.sessionId, {
     events: [{
       type: "user.message",
-      content: [{ type: "text", text: JSON.stringify(ticketEvents[ts.cursor], null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(event, null, 2) }],
     }],
   });
   ts.cursor++;
+
+  return { fired: true, eventIndex, eventType: event.type };
 }
 
 // ── Stream consumer ──────────────────────────────────────────────
 
-type StreamCallback = (data: string) => void;
-
-async function consumeStream(ticketId: string, onSSE?: StreamCallback): Promise<void> {
+async function consumeStream(ticketId: string): Promise<void> {
   const ts = sessions.get(ticketId);
   if (!ts) throw new Error(`No session for ticket ${ticketId}`);
 
@@ -163,9 +201,8 @@ async function consumeStream(ticketId: string, onSSE?: StreamCallback): Promise<
         ts.cronMap.set(e.id, { name: e.name, input: e.input });
       }
 
-      if (event.type === "agent.message" && onSSE) {
-        const data = JSON.stringify({ type: event.type, content: (event as { content: unknown }).content });
-        onSSE(`data: ${data}\n\n`);
+      if (event.type === "agent.message") {
+        broadcast({ ticketId, type: event.type, content: (event as { content: unknown }).content });
       }
 
       if (event.type === "session.status_idle") {
@@ -220,41 +257,54 @@ async function consumeStream(ticketId: string, onSSE?: StreamCallback): Promise<
           });
           continue;
         }
-        break;
+
+        // Normal end_turn: agent finished this fire cycle — stay alive for next
+        ts.status = "idle";
+        agentActive = false;
+        staleSkipped = false;
+        continue;
       }
     }
   } catch (err) {
+    ts.status = "idle";
     console.error("Stream error:", err);
   }
 }
 
-// ── Demo handler ──────────────────────────────────────────────────
+// ── Route handlers ───────────────────────────────────────────────
 
-async function runDemo(): Promise<Response> {
-  const ticketId = TICKET_ORDER[0];
-  if (!byTicket.has(ticketId)) {
-    console.error(`No events found for ticket ${ticketId}`);
-    return new Response("No events for target ticket", { status: 500 });
+async function handleFire(ticketId: string): Promise<Response> {
+  if (!TICKET_IDS.has(ticketId)) {
+    return Response.json({ error: "Unknown ticket" }, { status: 404 });
   }
 
-  await createTicketSession(ticketId);
+  try {
+    const result = sessions.has(ticketId)
+      ? await fireNextEvent(ticketId)
+      : await createTicketSession(ticketId);
+    return Response.json(result);
+  } catch (err) {
+    console.error(`Fire error for ${ticketId}:`, err);
+    return Response.json(
+      { fired: false, reason: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
+  }
+}
 
-  const encoder = new TextEncoder();
-  const readable = new ReadableStream({
-    async start(controller) {
-      const keepalive = setInterval(() => {
-        controller.enqueue(encoder.encode(": keepalive\n\n"));
-      }, 5_000);
+function handleEvents(req: Request): Response {
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
+  sseClients.add(writer);
 
-      try {
-        await consumeStream(ticketId, (data) => {
-          controller.enqueue(encoder.encode(data));
-        });
-      } finally {
-        clearInterval(keepalive);
-        controller.close();
-      }
-    },
+  const keepalive = setInterval(() => {
+    writer.write(encoder.encode(": keepalive\n\n")).catch(() => {});
+  }, 5_000);
+
+  req.signal.addEventListener("abort", () => {
+    clearInterval(keepalive);
+    sseClients.delete(writer);
+    writer.close().catch(() => {});
   });
 
   return new Response(readable, {
@@ -276,7 +326,10 @@ const server = Bun.serve({
   async fetch(req) {
     const url = new URL(req.url);
 
-    if (url.pathname === "/api/stream") return runDemo();
+    const fireMatch = url.pathname.match(/^\/tickets\/(\d+)\/fire$/);
+    if (fireMatch && req.method === "POST") return handleFire(fireMatch[1]);
+
+    if (url.pathname === "/events") return handleEvents(req);
 
     const filePath = url.pathname === "/" ? "/index.html" : url.pathname;
     const resolved = resolve(join(STATIC_DIR, filePath));
