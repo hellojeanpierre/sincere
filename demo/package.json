@@ -1,0 +1,8 @@
+{
+  "name": "sincere-demo",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest"
+  }
+}

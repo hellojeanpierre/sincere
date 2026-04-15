@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sincere Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: '#1a1614',
+            card: '#242020',
+            accent: '#d4856a',
+            'accent-hover': '#c07058',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      border: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      background-size: 512px 512px;
+      opacity: 0.14;
+    }
+    body > * { position: relative; z-index: 1; }
+    @property --angle {
+      syntax: '<angle>';
+      initial-value: 0deg;
+      inherits: false;
+    }
+    @keyframes rotate-gradient {
+      to { --angle: 360deg; }
+    }
+    .gradient-border {
+      position: relative;
+      padding: 1px;
+    }
+    .gradient-border::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: conic-gradient(from var(--angle), #d4856a, #6b4c3b, #3a2d28, #d4856a);
+      animation: rotate-gradient 4s linear infinite;
+      z-index: 0;
+    }
+    .gradient-border > div {
+      position: relative;
+      z-index: 1;
+    }
+    .gradient-border.rounded-lg > div { border-radius: calc(0.5rem - 1px); }
+    .gradient-border.rounded-2xl > div { border-radius: calc(1rem - 1px); }
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateX(-12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .finding-card {
+      opacity: 0;
+      animation: slide-in 0.3s ease-out forwards;
+    }
+    .event-content {
+      transition: opacity 0.15s ease;
+    }
+    .event-content.fading {
+      opacity: 0;
+    }
+    .event-label {
+      color: #d4856a;
+    }
+    .ticket-body {
+      display: grid;
+      grid-template-rows: 1fr;
+      transition: grid-template-rows 0.4s ease;
+    }
+    .ticket-body.collapsed {
+      grid-template-rows: 0fr;
+    }
+    .ticket-body > div {
+      overflow: hidden;
+    }
+    .thinking-area.truncated pre {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .thinking-area pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.8rem;
+      line-height: 1.4;
+      color: #a8a29e;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    }
+    .tool-call {
+      font-size: 0.7rem;
+      color: #78706c;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      background: rgba(0,0,0,0.3);
+      border-radius: 0.375rem;
+      overflow: hidden;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .tool-label {
+      font-size: 0.65rem;
+      color: #78706c;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      margin-top: 0.75rem;
+    }
+    .tool-label span {
+      color: #a8a29e;
+    }
+    .thinking-area pre strong { color: #d4856a; font-weight: 600; }
+    .thinking-area pre code {
+      color: #a8a29e;
+      background: rgba(0,0,0,0.3);
+      padding: 0.1rem 0.3rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+    }
+    .agent-response strong { color: #d4856a; font-weight: 600; }
+    .agent-response code {
+      color: #a8a29e;
+      background: rgba(0,0,0,0.3);
+      padding: 0.1rem 0.3rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    }
+  </style>
+</head>
+<body class="bg-surface text-stone-200 min-h-screen antialiased">
+  <div class="max-w-2xl mx-auto px-4 py-12">
+
+    <div class="relative flex flex-col items-center">
+      <div class="absolute top-0 bottom-0 w-px bg-accent/30"></div>
+
+      <!-- Ticket stream card -->
+      <div id="stream-card" class="relative z-10 w-full max-w-lg">
+        <div id="stream-border" class="gradient-border rounded-2xl">
+          <div class="bg-card p-6 space-y-3 rounded-2xl">
+            <div class="flex items-center justify-between">
+              <p class="text-xs uppercase tracking-wider text-stone-500">Zendesk tickets</p>
+              <div id="stream-status" class="flex items-center gap-1.5 text-xs text-stone-500"></div>
+            </div>
+            <div id="ticket-list" class="space-y-2"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const ARROW_BTN_HTML = `
+      <span class="text-[10px] text-stone-600 mr-1">press</span>
+      <button id="btn-next" title="Next event (→)"
+        class="inline-flex items-center justify-center w-6 h-6 rounded bg-stone-700/60 hover:bg-stone-600/60 text-stone-400 transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/>
+        </svg>
+      </button>`;
+
+    const SPINNER_HTML = `
+      <svg class="w-4 h-4 text-stone-500 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>`;
+
+    const CHECKMARK_HTML = `
+      <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+      </svg>`;
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    function activateTicketGradient(t) {
+      t.root.classList.add('gradient-border');
+      t.root.style.border = 'none';
+      t.root.style.padding = '1px';
+    }
+
+    function deactivateTicketGradient(t) {
+      t.root.classList.remove('gradient-border');
+      t.root.style.border = '1px solid #44403c';
+      t.root.style.padding = '';
+    }
+
+    // ── Row management ──────────────────────────────────────────────
+
+    // ── Ticket rows ─────────────────────────────────────────────────
+    // Each entry caches its DOM handles so event handlers never querySelector.
+
+    const tickets = new Map(); // ticketId → { root, eventArea, eventContent, label, timeline, thinkingPre }
+
+    function renderInline(text) {
+      return esc(text)
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+    }
+
+    function createTicketRow(id, subject) {
+      const root = document.createElement('div');
+      root.className = 'finding-card rounded-lg';
+      root.style.cssText = 'animation-delay:0ms; border: 1px solid #44403c';
+      root.innerHTML = `
+        <div class="rounded-lg overflow-hidden" style="background:#1c1917">
+          <div class="flex items-center justify-between p-3">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-xs font-mono text-stone-500 shrink-0">${esc(id)}</span>
+              <span class="text-sm text-stone-300 truncate">${esc(subject)}</span>
+            </div>
+            <div class="ticket-status ml-3 shrink-0">${SPINNER_HTML}</div>
+          </div>
+          <div class="ticket-body collapsed">
+            <div>
+              <div class="ticket-event-area" style="display:none">
+                <div class="event-content px-3 pb-3">
+                  <span class="event-label text-[11px] font-mono"></span>
+                </div>
+              </div>
+              <div class="ticket-timeline px-3 pb-3"></div>
+            </div>
+          </div>
+        </div>`;
+
+      const eventArea = root.querySelector('.ticket-event-area');
+      const t = {
+        root,
+        eventArea,
+        eventContent: eventArea.querySelector('.event-content'),
+        label: eventArea.querySelector('.event-label'),
+        status: root.querySelector('.ticket-status'),
+        body: root.querySelector('.ticket-body'),
+        timeline: root.querySelector('.ticket-timeline'),
+        thinkingPre: null, // created lazily per thinking block
+      };
+
+      document.getElementById('ticket-list').appendChild(root);
+      tickets.set(id, t);
+      return t;
+    }
+
+    function showEventLabel(t, label) {
+      if (t.eventArea.style.display === 'none') {
+        t.label.textContent = label;
+        t.eventArea.style.display = '';
+        t.eventContent.classList.add('fading');
+        requestAnimationFrame(() => t.eventContent.classList.remove('fading'));
+      } else {
+        t.eventContent.classList.add('fading');
+        setTimeout(() => {
+          t.label.textContent = label;
+          t.eventContent.classList.remove('fading');
+        }, 150);
+      }
+    }
+
+    // ── SSE stream ──────────────────────────────────────────────────
+
+    let active = null; // ticket entry currently being processed
+
+    function clearTimeline(t) {
+      t.timeline.innerHTML = '';
+      t.thinkingPre = null;
+    }
+
+    /** Append a new thinking <pre> block to the timeline (ends current one). */
+    function startThinkingBlock(t) {
+      const wrap = document.createElement('div');
+      wrap.className = 'thinking-area streaming';
+      wrap.style.marginTop = '0.5rem';
+      const pre = document.createElement('pre');
+      pre.className = 'thinking-text';
+      wrap.appendChild(pre);
+      t.timeline.appendChild(wrap);
+      t.thinkingPre = pre;
+      return wrap;
+    }
+
+    const handlers = {
+      ticket(ev) {
+        createTicketRow(ev.id, ev.subject);
+      },
+
+      // ── Awake: event arrived, agent wakes up ──────────────────────
+      event(ev) {
+        const t = tickets.get(ev.ticketId);
+        if (!t) return;
+        // First event: move gradient from outer card to ticket
+        const border = document.getElementById('stream-border');
+        if (border.classList.contains('gradient-border')) {
+          border.classList.remove('gradient-border');
+          Object.assign(border.style, { border: '1px solid #4a3628', borderRadius: '1rem' });
+        }
+        if (active && active !== t) deactivateTicketGradient(active);
+        active = t;
+        activateTicketGradient(t);
+        showEventLabel(t, ev.label + ': agent awakened');
+        t.status.innerHTML = SPINNER_HTML;
+        clearTimeline(t);
+        t.body.classList.remove('collapsed');
+      },
+
+      // ── Working: agent thinks ─────────────────────────────────────
+      thinking_delta(ev) {
+        if (!active) return;
+        if (!active.thinkingPre) startThinkingBlock(active);
+        active.thinkingPre.textContent += ev.text;
+      },
+
+      // ── Working: agent uses a tool ────────────────────────────────
+      tool_start(ev) {
+        if (!active) return;
+        // Truncate the previous thinking block to ~2-3 lines
+        if (active.thinkingPre) {
+          active.thinkingPre.parentElement.classList.remove('streaming');
+          active.thinkingPre.parentElement.classList.add('truncated');
+        }
+        active.thinkingPre = null;
+
+        // "Used <tool> tool" label
+        const lbl = document.createElement('div');
+        lbl.className = 'tool-label';
+        lbl.innerHTML = 'Used <span>' + esc(ev.tool) + '</span> tool';
+        active.timeline.appendChild(lbl);
+
+        // Tool call preview
+        const preview = ev.tool === 'bash' ? (ev.args?.command || '') : (ev.args?.path || ev.tool);
+        const el = document.createElement('div');
+        el.className = 'tool-call';
+        el.textContent = (ev.tool === 'bash' ? '$ ' : '') + (preview.length > 200 ? preview.slice(0, 200) + '\u2026' : preview);
+        active.timeline.appendChild(el);
+      },
+
+      // ── Decision: agent's final output ────────────────────────────
+      agent_response(ev) {
+        if (!active) return;
+        // End streaming, truncate all thinking blocks except the last
+        const blocks = active.timeline.querySelectorAll('.thinking-area');
+        blocks.forEach((el, i) => {
+          el.classList.remove('streaming');
+          if (i < blocks.length - 1) el.classList.add('truncated');
+        });
+        active.thinkingPre = null;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'agent-response';
+        wrap.style.cssText = 'margin-top:0.75rem; font-size:0.8rem; line-height:1.4; color:#d6d3d1;';
+        wrap.innerHTML = renderInline(ev.text);
+        active.timeline.appendChild(wrap);
+        active.status.innerHTML = CHECKMARK_HTML;
+      },
+
+      done() {
+        if (active) deactivateTicketGradient(active);
+        active = null;
+        document.getElementById('stream-status').innerHTML =
+          CHECKMARK_HTML + '<span class="text-emerald-400">Complete</span>';
+      },
+    };
+
+    let streamStarted = false;
+
+    function startStream() {
+      streamStarted = true;
+      fetch('/api/stream').then(res => {
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        (function pump() {
+          reader.read().then(({ done, value }) => {
+            if (done) return;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              try {
+                const ev = JSON.parse(line.slice(6));
+                handlers[ev.type]?.(ev);
+              } catch {}
+            }
+            pump();
+          });
+        })();
+      });
+    }
+
+    let advancing = false;
+
+    function triggerNext() {
+      if (advancing) return;
+      if (!streamStarted) {
+        startStream();
+        fetch('/api/next', { method: 'POST' });
+        return;
+      }
+      // Collapse active ticket's body, wait 2s, then advance
+      if (active && !active.body.classList.contains('collapsed')) {
+        advancing = true;
+        deactivateTicketGradient(active);
+        active.body.classList.add('collapsed');
+        setTimeout(() => {
+          advancing = false;
+          fetch('/api/next', { method: 'POST' });
+        }, 2000);
+      } else {
+        fetch('/api/next', { method: 'POST' });
+      }
+    }
+
+    // Show arrow button immediately
+    document.getElementById('stream-status').innerHTML = ARROW_BTN_HTML;
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-next')) triggerNext();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') { e.preventDefault(); triggerNext(); }
+    });
+  </script>
+</body>
+</html>
