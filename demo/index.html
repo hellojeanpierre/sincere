@@ -302,6 +302,19 @@
       }
     }
 
+    function handleError(ev) {
+      const t = tickets.get(ev.ticketId);
+      if (!t) return;
+
+      t.actions.innerHTML = FIRE_BTN_HTML;
+      deactivateTicketGradient(t);
+
+      const errEl = document.createElement('div');
+      errEl.className = 'mt-3 text-[11px] font-mono text-red-400';
+      errEl.textContent = ev.message || 'Unknown error';
+      t.timeline.appendChild(errEl);
+    }
+
     function connectSSE() {
       fetch('/events').then(res => {
         if (!res.ok || !res.body) { setTimeout(connectSSE, 2000); return; }
@@ -322,7 +335,10 @@
                 if (ev.type === 'agent.message') handleAgentMessage(ev);
                 else if (ev.type === 'tool_use') handleToolUse(ev);
                 else if (ev.type === 'session.status_idle') handleIdle(ev);
-              } catch {}
+                else if (ev.type === 'error') handleError(ev);
+              } catch (e) {
+                console.error('SSE handler error:', e);
+              }
             }
             pump();
           });
