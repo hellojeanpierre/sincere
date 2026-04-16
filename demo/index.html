@@ -197,7 +197,6 @@
               <span class="text-sm text-stone-300 truncate">${esc(subject)}</span>
             </div>
             <div class="flex items-center gap-2 ml-3 shrink-0">
-              <span class="next-event-label text-[10px] font-mono text-stone-500"></span>
               <div class="ticket-actions">${FIRE_BTN_HTML}</div>
             </div>
           </div>
@@ -211,7 +210,6 @@
       const t = {
         root,
         actions: root.querySelector('.ticket-actions'),
-        nextEventLabel: root.querySelector('.next-event-label'),
         body: root.querySelector('.ticket-body'),
         timeline: root.querySelector('.ticket-timeline'),
         messagePre: null,
@@ -344,12 +342,10 @@
         result = await res.json();
       } catch (err) {
         t.actions.innerHTML = FIRE_BTN_HTML;
-        t.nextEventLabel.textContent = 'error';
         return;
       }
 
       if (result.fired) {
-        t.nextEventLabel.textContent = humanizeEventType(result.nextEventType);
         // Move gradient to this ticket
         const border = document.getElementById('stream-border');
         if (border.classList.contains('gradient-border')) {
@@ -361,14 +357,12 @@
         t.body.classList.remove('collapsed');
         clearTimeline(t);
         const awake = document.createElement('div');
-        awake.className = 'agent-awake text-[11px] font-mono text-accent';
-        awake.textContent = 'agent awake';
+        awake.innerHTML = `<span class="text-[10px] font-mono text-stone-500">${esc(humanizeEventType(result.eventType))}</span> <span class="agent-awake text-[11px] font-mono text-accent">&rarr; agent awake</span>`;
         t.timeline.appendChild(awake);
       } else {
         // Re-enable if not processing (e.g. no more events)
         if (result.reason !== 'agent is processing') {
           t.actions.innerHTML = FIRE_BTN_HTML;
-          t.nextEventLabel.textContent = result.reason || '';
         }
       }
     }
@@ -378,9 +372,8 @@
     fetch('/tickets')
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(list => {
-        for (const { ticketId, subject, firstEventType } of list) {
-          const t = createTicketRow(ticketId, subject);
-          t.nextEventLabel.textContent = humanizeEventType(firstEventType);
+        for (const { ticketId, subject } of list) {
+          createTicketRow(ticketId, subject);
         }
       })
       .catch(err => console.error('Failed to load tickets:', err));
