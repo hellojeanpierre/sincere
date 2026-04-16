@@ -16,11 +16,7 @@ interface ZenEvent {
 
 interface TicketSession {
   sessionId: string;
-  stream: AsyncIterable<StreamEvent>;
-  cursor: number;
-  cronMap: Map<string, { name: string; input: Record<string, unknown> }>;
-  scheduledCron: boolean;
-  status: "idle" | "running";
+  nextEventIndex: number;
 }
 
 interface FireResult {
@@ -85,6 +81,7 @@ await ensureCronTool(client, AGENT_ID);
 // ── Session state ────────────────────────────────────────────────
 
 const sessions = new Map<string, TicketSession>();
+const inFlight = new Set<string>();
 
 // ── SSE broadcast ───────────────────────────────────────────────
 
@@ -115,188 +112,118 @@ async function ensurePolicyFile(): Promise<string> {
   return meta.id;
 }
 
-// ── Session lifecycle ────────────────────────────────────────────
+// ── Per-fire stream ─────────────────────────────────────────────
 
-async function createTicketSession(ticketId: string): Promise<FireResult> {
-  const ticketEvents = byTicket.get(ticketId);
-  if (!ticketEvents) throw new Error(`No events for ticket ${ticketId}`);
-
-  const fileId = await ensurePolicyFile();
-
-  const session = await client.beta.sessions.create({
-    agent: AGENT_ID,
-    environment_id: ENVIRONMENT_ID,
-    resources: [
-      { type: "file", file_id: fileId, mount_path: "/mnt/session/uploads/policy.jsonl" },
-    ],
-  });
-  console.log(`Session created: ${session.id}`);
-
-  const stream = await client.beta.sessions.events.stream(session.id);
-
-  const ts: TicketSession = {
-    sessionId: session.id,
-    stream,
-    cursor: 1,
-    cronMap: new Map(),
-    scheduledCron: false,
-    status: "running",
-  };
-  sessions.set(ticketId, ts);
-
-  await client.beta.sessions.events.send(session.id, {
-    events: [{
-      type: "user.message",
-      content: [{ type: "text", text: JSON.stringify(ticketEvents[0], null, 2) }],
-    }],
-  });
-  console.log(`Sent ticket ${ticketId} first event`);
-
-  consumeStream(ticketId).catch((err) =>
-    console.error(`consumeStream error for ${ticketId}:`, err),
-  );
-
-  return { fired: true, eventIndex: 0, eventType: ticketEvents[0].type, nextEventType: ticketEvents[1]?.type };
-}
-
-async function fireNextEvent(ticketId: string): Promise<FireResult> {
-  const ts = sessions.get(ticketId);
-  if (!ts) return { fired: false, reason: "no session" };
-  if (ts.status === "running") return { fired: false, reason: "agent is processing" };
-
-  const ticketEvents = byTicket.get(ticketId);
-  if (!ticketEvents || ts.cursor >= ticketEvents.length)
-    return { fired: false, reason: "no more events" };
-
-  const eventIndex = ts.cursor;
-  const event = ticketEvents[eventIndex];
-  ts.status = "running";
-
-  try {
-    await client.beta.sessions.events.send(ts.sessionId, {
-      events: [{
-        type: "user.message",
-        content: [{ type: "text", text: JSON.stringify(event, null, 2) }],
-      }],
-    });
-  } catch (err) {
-    ts.status = "idle";
-    throw err;
-  }
-  ts.cursor++;
-
-  return { fired: true, eventIndex, eventType: event.type, nextEventType: ticketEvents[ts.cursor]?.type };
-}
-
-// ── Stream consumer ──────────────────────────────────────────────
-
-async function consumeStream(ticketId: string): Promise<void> {
+async function consumeTurn(ticketId: string, stream: AsyncIterable<StreamEvent>): Promise<void> {
   const ts = sessions.get(ticketId);
   if (!ts) throw new Error(`No session for ticket ${ticketId}`);
 
-  const ticketEvents = byTicket.get(ticketId)!;
-  let agentActive = false;
-  let staleSkipped = false;
+  const toolNames = new Map<string, string>();
 
-  try {
-    for await (const event of ts.stream) {
-      if (event.type.startsWith("agent.")) agentActive = true;
+  for await (const event of stream) {
+    if (event.type === "agent.custom_tool_use") {
+      const e = event as { id: string; name: string; input: Record<string, unknown> };
+      toolNames.set(e.id, e.name);
+      broadcast({ ticketId, type: "tool_use", name: e.name, input: e.input });
+    }
 
-      if (event.type === "agent.custom_tool_use") {
-        const e = event as { id: string; name: string; input: Record<string, unknown> };
-        ts.cronMap.set(e.id, { name: e.name, input: e.input });
-        broadcast({ ticketId, type: "tool_use", name: e.name, input: e.input });
-      }
+    if (event.type === "agent.tool_use") {
+      const e = event as { name: string; input: Record<string, unknown> };
+      broadcast({ ticketId, type: "tool_use", name: e.name, input: e.input });
+    }
 
-      if (event.type === "agent.tool_use") {
-        const e = event as { name: string; input: Record<string, unknown> };
-        broadcast({ ticketId, type: "tool_use", name: e.name, input: e.input });
-      }
+    if (event.type === "agent.message") {
+      broadcast({ ticketId, type: event.type, content: (event as { content: unknown }).content });
+    }
 
-      if (event.type === "agent.message") {
-        broadcast({ ticketId, type: event.type, content: (event as { content: unknown }).content });
-      }
+    if (event.type === "session.status_idle") {
+      broadcast({ ticketId, type: "session.status_idle", stopReason: event.stop_reason.type });
 
-      if (event.type === "session.status_idle") {
-        broadcast({ ticketId, type: "session.status_idle", stopReason: event.stop_reason.type });
+      if (event.stop_reason.type === "end_turn") break;
 
-        if (event.stop_reason.type === "end_turn" && !agentActive) {
-          if (staleSkipped) {
-            console.error("Multiple stale idles — aborting");
-            break;
+      if (event.stop_reason.type === "requires_action") {
+        const ids = (event.stop_reason as { event_ids?: string[] }).event_ids ?? [];
+        const results: EventParams[] = [];
+        for (const id of ids) {
+          const name = toolNames.get(id);
+          if (name !== "cron") {
+            throw new Error(`Unexpected custom tool "${name ?? "unknown"}" (id ${id}) — only "cron" is handled`);
           }
-          console.log("Skipped stale idle");
-          staleSkipped = true;
-          continue;
-        }
-
-        if (event.stop_reason.type === "requires_action") {
-          const ids = (event.stop_reason as { event_ids?: string[] }).event_ids ?? [];
-          const results: EventParams[] = [];
-          for (const id of ids) {
-            const tool = ts.cronMap.get(id);
-            let text: string;
-            if (!tool) {
-              console.error(`Unknown event ID in requires_action: ${id}`);
-              text = `Error: unknown event ${id}`;
-            } else if (tool.name === "cron") {
-              ts.scheduledCron = true;
-              text = "Acknowledged. Check-in registered.";
-            } else {
-              console.error(`Unknown custom tool: ${tool.name}`);
-              text = `Error: unknown tool "${tool.name}"`;
-            }
-            ts.cronMap.delete(id);
-            results.push({
-              type: "user.custom_tool_result",
-              custom_tool_use_id: id,
-              content: [{ type: "text", text }],
-            });
-          }
-          await client.beta.sessions.events.send(ts.sessionId, { events: results });
-          continue;
-        }
-
-        if (ts.scheduledCron) {
-          ts.scheduledCron = false;
-          await client.beta.sessions.events.send(ts.sessionId, {
-            events: [{
-              type: "user.message",
-              content: [{
-                type: "text",
-                text: "Cron fired — reassess this ticket's current state.\n\n"
-                  + JSON.stringify(ticketEvents, null, 2),
-              }],
-            }],
+          results.push({
+            type: "user.custom_tool_result",
+            custom_tool_use_id: id,
+            content: [{ type: "text", text: "scheduled" }],
           });
-          continue;
         }
-
-        // Normal end_turn: agent finished this fire cycle — stay alive for next
-        ts.status = "idle";
-        agentActive = false;
-        staleSkipped = false;
+        await client.beta.sessions.events.send(ts.sessionId, { events: results });
         continue;
       }
+
+      if (event.stop_reason.type === "retries_exhausted") break;
     }
-  } catch (err) {
-    ts.status = "idle";
-    broadcast({ ticketId, type: "session.status_idle", stopReason: "error" });
-    console.error("Stream error:", err);
   }
+}
+
+async function fireTicket(ticketId: string): Promise<FireResult> {
+  const ticketEvents = byTicket.get(ticketId);
+  if (!ticketEvents) throw new Error(`No events for ticket ${ticketId}`);
+
+  let ts = sessions.get(ticketId);
+
+  if (!ts) {
+    const fileId = await ensurePolicyFile();
+    const session = await client.beta.sessions.create({
+      agent: AGENT_ID,
+      environment_id: ENVIRONMENT_ID,
+      resources: [
+        { type: "file", file_id: fileId, mount_path: "/mnt/session/uploads/policy.jsonl" },
+      ],
+    });
+    console.log(`Session created: ${session.id}`);
+    ts = { sessionId: session.id, nextEventIndex: 0 };
+    sessions.set(ticketId, ts);
+  }
+
+  if (ts.nextEventIndex >= ticketEvents.length) {
+    return { fired: false, reason: "no more events" };
+  }
+
+  const eventIndex = ts.nextEventIndex;
+  const event = ticketEvents[eventIndex];
+
+  const stream = await client.beta.sessions.events.stream(ts.sessionId);
+
+  await client.beta.sessions.events.send(ts.sessionId, {
+    events: [{
+      type: "user.message",
+      content: [{ type: "text", text: JSON.stringify(event, null, 2) }],
+    }],
+  });
+  console.log(`Sent ticket ${ticketId} event ${eventIndex}`);
+
+  ts.nextEventIndex++;
+  const result: FireResult = {
+    fired: true,
+    eventIndex,
+    eventType: event.type,
+    nextEventType: ticketEvents[ts.nextEventIndex]?.type,
+  };
+
+  await consumeTurn(ticketId, stream);
+  return result;
 }
 
 // ── Route handlers ───────────────────────────────────────────────
 
 async function handleFire(ticketId: string): Promise<Response> {
-  if (!TICKET_IDS.has(ticketId)) {
+  if (!TICKET_IDS.has(ticketId))
     return Response.json({ error: "Unknown ticket" }, { status: 404 });
-  }
+  if (inFlight.has(ticketId))
+    return Response.json({ fired: false, reason: "agent is processing" });
 
+  inFlight.add(ticketId);
   try {
-    const result = sessions.has(ticketId)
-      ? await fireNextEvent(ticketId)
-      : await createTicketSession(ticketId);
+    const result = await fireTicket(ticketId);
     return Response.json(result);
   } catch (err) {
     console.error(`Fire error for ${ticketId}:`, err);
@@ -304,6 +231,8 @@ async function handleFire(ticketId: string): Promise<Response> {
       { fired: false, reason: err instanceof Error ? err.message : String(err) },
       { status: 500 },
     );
+  } finally {
+    inFlight.delete(ticketId);
   }
 }
 
