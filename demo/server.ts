@@ -91,6 +91,15 @@ await ensureCronTool(client, AGENT_ID);
 const sessions = new Map<string, TicketSession>();
 const queue = new Map<string, Promise<void>>();
 
+interface ScheduledCron {
+  ticketId: string;
+  toolUseEventId: string;
+  delayMinutes: number;
+  scheduledAt: number;
+}
+
+const crons = new Map<string, ScheduledCron>();
+
 // ── SSE broadcast ───────────────────────────────────────────────
 
 type SSEWriter = WritableStreamDefaultWriter<Uint8Array>;
@@ -129,6 +138,7 @@ async function consumeTurn(ticketId: string, stream: AsyncIterable<StreamEvent>)
   if (!ts) throw new Error(`No session for ticket ${ticketId}`);
 
   const toolNames = new Map<string, string>();
+  const toolInputs = new Map<string, Record<string, unknown>>();
   const iter = stream[Symbol.asyncIterator]();
   let pending: Promise<IteratorResult<StreamEvent>> | null = null;
   let deadline = Date.now() + TURN_TIMEOUT_MS;
@@ -182,6 +192,7 @@ async function consumeTurn(ticketId: string, stream: AsyncIterable<StreamEvent>)
       if (event.type === "agent.custom_tool_use") {
         const e = event as { id: string; name: string; input: Record<string, unknown> };
         toolNames.set(e.id, e.name);
+        toolInputs.set(e.id, e.input);
         broadcast({ ticketId, type: "tool_use", name: e.name, input: e.input });
       }
 
@@ -226,10 +237,23 @@ async function consumeTurn(ticketId: string, stream: AsyncIterable<StreamEvent>)
             if (name !== "cron") {
               throw new Error(`Unexpected custom tool "${name ?? "unknown"}" (id ${id}) — only "cron" is handled`);
             }
+            const input = toolInputs.get(id) ?? {};
+            const delayMinutes = Number(input.delay_minutes) || 0;
+            const cronId = crypto.randomUUID();
+            crons.set(cronId, {
+              ticketId,
+              toolUseEventId: id,
+              delayMinutes,
+              scheduledAt: Date.now(),
+            });
+            broadcast({ type: "cron_scheduled", cronId, ticketId, delayMinutes });
             results.push({
               type: "user.custom_tool_result",
               custom_tool_use_id: id,
-              content: [{ type: "text", text: "scheduled" }],
+              content: [{
+                type: "text",
+                text: `Cron scheduled. Will fire after ${delayMinutes} minutes. You will receive a follow-up message when it fires.`,
+              }],
             });
           }
           await client.beta.sessions.events.send(ts.sessionId, { events: results });
@@ -306,7 +330,64 @@ async function fireTicket(ticketId: string): Promise<{ result: FireResult; drain
   return { result, drain };
 }
 
+async function fireCron(cronId: string, cron: ScheduledCron): Promise<TurnResult> {
+  const ts = sessions.get(cron.ticketId);
+  if (!ts) {
+    return { status: "error", message: `No session for ticket ${cron.ticketId}` };
+  }
+
+  const stream = await client.beta.sessions.events.stream(ts.sessionId);
+
+  await client.beta.sessions.events.send(ts.sessionId, {
+    events: [{
+      type: "user.message",
+      content: [{
+        type: "text",
+        text: `Your cron fired (originally scheduled with delay_minutes=${cron.delayMinutes}). Assess the current ticket state against what you expected when you scheduled it.`,
+      }],
+    }],
+  });
+  console.log(`Fired cron ${cronId} for ticket ${cron.ticketId}`);
+
+  broadcast({ ticketId: cron.ticketId, type: "turn_start", eventType: "cron" });
+
+  return consumeTurn(cron.ticketId, stream);
+}
+
 // ── Route handlers ───────────────────────────────────────────────
+
+async function handleCronFire(cronId: string): Promise<Response> {
+  const cron = crons.get(cronId);
+  if (!cron) return Response.json({ error: "Unknown cron" }, { status: 404 });
+
+  let resolve!: (r: Response) => void;
+  const response = new Promise<Response>((r) => { resolve = r; });
+
+  const prev = queue.get(cron.ticketId) ?? Promise.resolve();
+  const next = prev.then(async () => {
+    try {
+      const result = await fireCron(cronId, cron);
+      if (result.status !== "ok") {
+        resolve(Response.json({ fired: false, reason: result.message }, { status: 500 }));
+      } else {
+        resolve(Response.json({ fired: true }));
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`Cron fire error for ${cronId}:`, err);
+      broadcast({ ticketId: cron.ticketId, type: "error", message });
+      resolve(Response.json({ fired: false, reason: message }, { status: 500 }));
+    } finally {
+      crons.delete(cronId);
+      broadcast({ type: "cron_fired", cronId });
+    }
+  }).finally(() => {
+    if (queue.get(cron.ticketId) === next) queue.delete(cron.ticketId);
+  });
+  queue.set(cron.ticketId, next);
+
+  return response;
+}
 
 async function handleFire(ticketId: string): Promise<Response> {
   if (!TICKET_IDS.has(ticketId))
@@ -375,6 +456,9 @@ const server = Bun.serve({
 
     const fireMatch = url.pathname.match(/^\/tickets\/(\d+)\/fire$/);
     if (fireMatch && req.method === "POST") return handleFire(fireMatch[1]);
+
+    const cronFireMatch = url.pathname.match(/^\/crons\/([^/]+)\/fire$/);
+    if (cronFireMatch && req.method === "POST") return handleCronFire(cronFireMatch[1]);
 
     if (url.pathname === "/tickets" && req.method === "GET") {
       const list = TICKET_ORDER.map((id) => {
