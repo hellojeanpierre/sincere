@@ -85,8 +85,8 @@
       margin: 0;
       white-space: pre-wrap;
       word-break: break-word;
-      font-size: 0.8rem;
-      line-height: 1.4;
+      font-size: 0.875rem;
+      line-height: 1.5;
       color: #a8a29e;
       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
     }
@@ -136,21 +136,19 @@
 
   <script>
     const FIRE_BTN_HTML = `
-      <button class="btn-fire inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono bg-accent/20 hover:bg-accent/30 text-accent transition-colors"
-        title="Fire next event">
-        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+      <button class="btn-fire inline-flex items-center justify-center w-7 h-7 rounded bg-accent/20 hover:bg-accent/30 text-accent transition-colors"
+        title="Fire next event" aria-label="Fire next event">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/>
         </svg>
-        fire
       </button>`;
 
     const FIRE_BTN_DISABLED_HTML = `
-      <button class="btn-fire inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono bg-stone-700/40 text-stone-500 cursor-not-allowed" disabled>
-        <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+      <button class="btn-fire inline-flex items-center justify-center w-7 h-7 rounded bg-stone-700/40 text-stone-500 cursor-not-allowed" disabled title="Processing" aria-label="Processing">
+        <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
         </svg>
-        processing
       </button>`;
 
     function esc(s) {
@@ -195,9 +193,9 @@
       root.style.cssText = 'animation-delay:0ms; border: 1px solid #44403c';
       root.innerHTML = `
         <div class="rounded-lg overflow-hidden" style="background:#1c1917">
-          <div class="flex items-center justify-between p-3">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="text-xs font-mono text-stone-500 shrink-0">${esc(id)}</span>
+          <div class="flex items-center justify-between px-4 py-3">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="text-sm font-mono text-stone-500 shrink-0">${esc(id)}</span>
               <span class="text-sm text-stone-300 truncate">${esc(subject)}</span>
             </div>
             <div class="flex items-center gap-2 ml-3 shrink-0">
@@ -206,7 +204,7 @@
           </div>
           <div class="ticket-body collapsed">
             <div>
-              <div class="ticket-timeline px-3 pb-3"></div>
+              <div class="ticket-timeline px-4 pb-4 space-y-3"></div>
             </div>
           </div>
         </div>`;
@@ -233,7 +231,7 @@
 
     function startMessageBlock(t) {
       const pre = document.createElement('pre');
-      pre.className = 'message-text mt-2 [&_code]:bg-black/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded';
+      pre.className = 'message-text [&_code]:bg-black/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded';
       t.timeline.appendChild(pre);
       t.messagePre = pre;
     }
@@ -255,8 +253,8 @@
       clearTimeline(t);
 
       const awake = document.createElement('div');
-      awake.className = '-mt-1 mb-2';
-      awake.innerHTML = `<span class="text-sm font-mono text-stone-500">${esc(humanizeEventType(ev.eventType))} &rarr;</span> <span class="agent-awake text-sm font-mono text-accent">agent awake</span>`;
+      awake.className = 'flex items-center gap-1.5 text-xs font-mono';
+      awake.innerHTML = `<span class="text-stone-500">Ticket ${esc(humanizeEventType(ev.eventType))}</span><span class="text-stone-600" aria-hidden="true">&rarr;</span><span class="agent-awake text-accent">agent awake</span>`;
       t.timeline.appendChild(awake);
     }
 
@@ -280,17 +278,22 @@
       }
       t.messagePre = null;
 
+      const group = document.createElement('div');
+      group.className = 'space-y-1.5';
+
       const lbl = document.createElement('div');
-      lbl.className = 'mt-3 text-[0.65rem] font-mono text-tool-muted';
+      lbl.className = 'text-xs font-mono text-tool-muted';
       lbl.innerHTML = 'Used <span class="text-stone-400">' + esc(ev.name) + '</span> tool';
-      t.timeline.appendChild(lbl);
+      group.appendChild(lbl);
 
       const input = ev.input || {};
       const preview = ev.name === 'bash' ? '$ ' + (input.command || '') : (input.path || JSON.stringify(input));
       const el = document.createElement('div');
-      el.className = 'mt-2 p-2 rounded-md bg-black/30 font-mono text-[0.7rem] text-tool-muted whitespace-pre-wrap break-all max-h-32 overflow-auto';
+      el.className = 'p-2 rounded-md bg-black/30 font-mono text-xs text-tool-muted whitespace-pre-wrap break-all max-h-32 overflow-auto';
       el.textContent = preview;
-      t.timeline.appendChild(el);
+      group.appendChild(el);
+
+      t.timeline.appendChild(group);
     }
 
     function handleIdle(ev) {
@@ -366,7 +369,7 @@
       deactivateTicketGradient(t);
 
       const errEl = document.createElement('div');
-      errEl.className = 'mt-3 text-[11px] font-mono text-red-400';
+      errEl.className = 'text-sm font-mono text-red-400';
       errEl.textContent = ev.message || 'Unknown error';
       t.timeline.appendChild(errEl);
     }
