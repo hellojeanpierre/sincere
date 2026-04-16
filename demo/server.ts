@@ -357,8 +357,12 @@ async function fireCron(cronId: string, cron: ScheduledCron): Promise<TurnResult
 // ── Route handlers ───────────────────────────────────────────────
 
 async function handleCronFire(cronId: string): Promise<Response> {
+  // Atomic claim: delete the cron from the map before queuing so a
+  // concurrent POST (another tab, an external curl, etc.) gets 404
+  // instead of enqueuing a second user.message on the same session.
   const cron = crons.get(cronId);
   if (!cron) return Response.json({ error: "Unknown cron" }, { status: 404 });
+  crons.delete(cronId);
 
   let resolve!: (r: Response) => void;
   const response = new Promise<Response>((r) => { resolve = r; });
@@ -378,7 +382,6 @@ async function handleCronFire(cronId: string): Promise<Response> {
       broadcast({ ticketId: cron.ticketId, type: "error", message });
       resolve(Response.json({ fired: false, reason: message }, { status: 500 }));
     } finally {
-      crons.delete(cronId);
       broadcast({ type: "cron_fired", cronId });
     }
   }).finally(() => {
