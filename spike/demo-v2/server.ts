@@ -1,21 +1,21 @@
 import { join } from "path";
 import { mkdirSync } from "fs";
-import { createAgent, createSessionHandler } from "../src/agent.ts";
-import { createLane } from "../src/lane.ts";
-import { logger, startTraceSink } from "../src/lib/logger.ts";
+import { createAgent, createSessionHandler } from "../../src/agent.ts";
+import { createLane } from "../../src/lane.ts";
+import { logger, startTraceSink } from "../../src/lib/logger.ts";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
 
-const TRACES_DIR = join(import.meta.dir, "..", "data", "traces");
+const TRACES_DIR = join(import.meta.dir, "../..", "data", "traces");
 
 const log = logger.child({ component: "demo" });
 
 // ── Constants ───────────────────────────────────────────────────────
 
-const OPERATOR_PROMPT_PATH = join(import.meta.dir, "../src/operator.md");
+const OPERATOR_PROMPT_PATH = join(import.meta.dir, "../../src/operator.md");
 const STATIC_DIR = import.meta.dir;
 
-const DATA_DIR = join(import.meta.dir, "..", "data", "pintest-v2", "smoke-tickets");
+const DATA_DIR = join(import.meta.dir, "../..", "data", "pintest-v2", "smoke-tickets");
 const EVENTS_PATH = join(DATA_DIR, "smoke_events.jsonl");
 const TICKETS_PATH = join(DATA_DIR, "smoke_tickets.jsonl");
 const POLICY_PATH = join(DATA_DIR, "policy.jsonl");
