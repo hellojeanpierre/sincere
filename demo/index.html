@@ -151,6 +151,11 @@
       return d.innerHTML;
     }
 
+    function humanizeEventType(raw) {
+      if (!raw) return '';
+      return raw.replace('zen:event-type:', '').replace('ticket.', '').replaceAll('_', ' ');
+    }
+
     function activateTicketGradient(t) {
       t.root.classList.add('gradient-border');
       t.root.style.border = 'none';
@@ -168,7 +173,7 @@
     // ── Ticket rows ─────────────────────────────────────────────────
     // Each entry caches its DOM handles so event handlers never querySelector.
 
-    const tickets = new Map(); // ticketId → { root, actions, fireLabel, body, timeline, messagePre, pendingClear }
+    const tickets = new Map(); // ticketId → { root, actions, nextEventLabel, body, timeline, messagePre, pendingClear }
 
     function createTicketRow(id, subject) {
       const root = document.createElement('div');
@@ -182,7 +187,7 @@
               <span class="text-sm text-stone-300 truncate">${esc(subject)}</span>
             </div>
             <div class="flex items-center gap-2 ml-3 shrink-0">
-              <span class="fire-label text-[10px] font-mono text-stone-500"></span>
+              <span class="next-event-label text-[10px] font-mono text-stone-500"></span>
               <div class="ticket-actions">${FIRE_BTN_HTML}</div>
             </div>
           </div>
@@ -196,7 +201,7 @@
       const t = {
         root,
         actions: root.querySelector('.ticket-actions'),
-        fireLabel: root.querySelector('.fire-label'),
+        nextEventLabel: root.querySelector('.next-event-label'),
         body: root.querySelector('.ticket-body'),
         timeline: root.querySelector('.ticket-timeline'),
         messagePre: null,
@@ -298,14 +303,12 @@
         result = await res.json();
       } catch (err) {
         t.actions.innerHTML = FIRE_BTN_HTML;
-        t.fireLabel.textContent = 'error';
+        t.nextEventLabel.textContent = 'error';
         return;
       }
 
       if (result.fired) {
-        // Show what event type was sent
-        const shortType = (result.eventType || '').replace('zen:event-type:', '');
-        t.fireLabel.textContent = shortType;
+        t.nextEventLabel.textContent = humanizeEventType(result.nextEventType);
         // Move gradient to this ticket
         const border = document.getElementById('stream-border');
         if (border.classList.contains('gradient-border')) {
@@ -319,18 +322,22 @@
         // Re-enable if not processing (e.g. no more events)
         if (result.reason !== 'agent is processing') {
           t.actions.innerHTML = FIRE_BTN_HTML;
-          t.fireLabel.textContent = result.reason || '';
+          t.nextEventLabel.textContent = result.reason || '';
         }
       }
     }
 
     // ── Init ────────────────────────────────────────────────────────
 
-    // Create ticket rows from known ticket IDs
-    const TICKET_ORDER = ['4800019', '4800027', '4800094', '4800099'];
-    for (const id of TICKET_ORDER) {
-      createTicketRow(id, `Ticket ${id}`);
-    }
+    fetch('/tickets')
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(list => {
+        for (const { ticketId, subject, firstEventType } of list) {
+          const t = createTicketRow(ticketId, subject);
+          t.nextEventLabel.textContent = humanizeEventType(firstEventType);
+        }
+      })
+      .catch(err => console.error('Failed to load tickets:', err));
 
     connectSSE();
 

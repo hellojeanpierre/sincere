@@ -27,6 +27,7 @@ interface FireResult {
   fired: boolean;
   eventIndex?: number;
   eventType?: string;
+  nextEventType?: string;
   reason?: string;
 }
 
@@ -155,7 +156,7 @@ async function createTicketSession(ticketId: string): Promise<FireResult> {
     console.error(`consumeStream error for ${ticketId}:`, err),
   );
 
-  return { fired: true, eventIndex: 0, eventType: ticketEvents[0].type };
+  return { fired: true, eventIndex: 0, eventType: ticketEvents[0].type, nextEventType: ticketEvents[1]?.type };
 }
 
 async function fireNextEvent(ticketId: string): Promise<FireResult> {
@@ -184,7 +185,7 @@ async function fireNextEvent(ticketId: string): Promise<FireResult> {
   }
   ts.cursor++;
 
-  return { fired: true, eventIndex, eventType: event.type };
+  return { fired: true, eventIndex, eventType: event.type, nextEventType: ticketEvents[ts.cursor]?.type };
 }
 
 // ── Stream consumer ──────────────────────────────────────────────
@@ -333,6 +334,20 @@ const server = Bun.serve({
 
     const fireMatch = url.pathname.match(/^\/tickets\/(\d+)\/fire$/);
     if (fireMatch && req.method === "POST") return handleFire(fireMatch[1]);
+
+    if (url.pathname === "/tickets" && req.method === "GET") {
+      const list = TICKET_ORDER.map((id) => {
+        const events = byTicket.get(id);
+        return {
+          ticketId: id,
+          subject: typeof events?.[0]?.detail?.subject === "string" && events[0].detail.subject
+            ? events[0].detail.subject
+            : `Ticket ${id}`,
+          firstEventType: events?.[0]?.type,
+        };
+      });
+      return Response.json(list);
+    }
 
     if (url.pathname === "/events") return handleEvents(req);
 
