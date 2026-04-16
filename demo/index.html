@@ -359,6 +359,7 @@
         activateTicketGradient(t);
         t.pendingClear = true;
         t.body.classList.remove('collapsed');
+        clearTimeline(t);
         const awake = document.createElement('div');
         awake.className = 'agent-awake text-[11px] font-mono text-accent';
         awake.textContent = 'agent awake';
