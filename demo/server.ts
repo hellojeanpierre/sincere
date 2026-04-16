@@ -349,6 +349,8 @@ async function fireCron(cronId: string, cron: ScheduledCron): Promise<TurnResult
   });
   console.log(`Fired cron ${cronId} for ticket ${cron.ticketId}`);
 
+  broadcast({ ticketId: cron.ticketId, type: "turn_start", eventType: "cron" });
+
   return consumeTurn(cron.ticketId, stream);
 }
 
