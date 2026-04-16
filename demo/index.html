@@ -255,7 +255,8 @@
       clearTimeline(t);
 
       const awake = document.createElement('div');
-      awake.innerHTML = `<span class="text-[10px] font-mono text-stone-500">${esc(humanizeEventType(ev.eventType))}</span> <span class="agent-awake text-[11px] font-mono text-accent">&rarr; agent awake</span>`;
+      awake.className = '-mt-1 mb-2';
+      awake.innerHTML = `<span class="text-sm font-mono text-stone-500">${esc(humanizeEventType(ev.eventType))} &rarr;</span> <span class="agent-awake text-sm font-mono text-accent">agent awake</span>`;
       t.timeline.appendChild(awake);
     }
 
