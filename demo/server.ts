@@ -279,7 +279,7 @@ async function consumeTurn(ticketId: string, stream: AsyncIterable<StreamEvent>)
   return { status: "ok" };
 }
 
-async function fireTicket(ticketId: string): Promise<FireResult> {
+async function fireTicket(ticketId: string): Promise<{ result: FireResult; drain: Promise<void> }> {
   const ticketEvents = byTicket.get(ticketId);
   if (!ticketEvents) throw new Error(`No events for ticket ${ticketId}`);
 
@@ -300,7 +300,7 @@ async function fireTicket(ticketId: string): Promise<FireResult> {
   }
 
   if (ts.nextEventIndex >= ticketEvents.length) {
-    return { fired: false, reason: "no more events" };
+    return { result: { fired: false, reason: "no more events" }, drain: Promise.resolve() };
   }
 
   const eventIndex = ts.nextEventIndex;
@@ -316,6 +316,8 @@ async function fireTicket(ticketId: string): Promise<FireResult> {
   });
   console.log(`Sent ticket ${ticketId} event ${eventIndex}`);
 
+  broadcast({ ticketId, type: "turn_start", eventType: event.type });
+
   ts.nextEventIndex++;
   const result: FireResult = {
     fired: true,
@@ -324,9 +326,8 @@ async function fireTicket(ticketId: string): Promise<FireResult> {
     nextEventType: ticketEvents[ts.nextEventIndex]?.type,
   };
 
-  const turn = await consumeTurn(ticketId, stream);
-  if (turn.status !== "ok") result.reason = turn.message;
-  return result;
+  const drain = consumeTurn(ticketId, stream).then(() => {});
+  return { result, drain };
 }
 
 async function fireCron(cronId: string, cron: ScheduledCron): Promise<TurnResult> {
@@ -395,15 +396,20 @@ async function handleFire(ticketId: string): Promise<Response> {
 
   const prev = queue.get(ticketId) ?? Promise.resolve();
   const next = prev.then(async () => {
+    let drain: Promise<void> = Promise.resolve();
     try {
-      const result = await fireTicket(ticketId);
-      resolve(Response.json(result));
+      const r = await fireTicket(ticketId);
+      drain = r.drain;
+      resolve(Response.json(r.result));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`Fire error for ${ticketId}:`, err);
       broadcast({ ticketId, type: "error", message });
       resolve(Response.json({ fired: false, reason: message }, { status: 500 }));
     }
+    await drain.catch((err) => {
+      console.error(`Drain error for ${ticketId}:`, err);
+    });
   }).finally(() => {
     if (queue.get(ticketId) === next) queue.delete(ticketId);
   });
