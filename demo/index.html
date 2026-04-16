@@ -81,13 +81,7 @@
     .ticket-body > div {
       overflow: hidden;
     }
-    .message-area.truncated pre {
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-    .message-area pre {
+    pre.message-text {
       margin: 0;
       white-space: pre-wrap;
       word-break: break-word;
@@ -96,13 +90,11 @@
       color: #a8a29e;
       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
     }
-    .message-area pre strong { color: #d4856a; font-weight: 600; }
-    .message-area pre code {
-      color: #a8a29e;
-      background: rgba(0,0,0,0.3);
-      padding: 0.1rem 0.3rem;
-      border-radius: 0.25rem;
-      font-size: 0.75rem;
+    pre.message-text.truncated {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     @keyframes dots {
       0%   { content: ''; }
@@ -239,15 +231,10 @@
     }
 
     function startMessageBlock(t) {
-      const wrap = document.createElement('div');
-      wrap.className = 'message-area streaming';
-      wrap.style.marginTop = '0.5rem';
       const pre = document.createElement('pre');
-      pre.className = 'message-text';
-      wrap.appendChild(pre);
-      t.timeline.appendChild(wrap);
+      pre.className = 'message-text mt-2';
+      t.timeline.appendChild(pre);
       t.messagePre = pre;
-      return wrap;
     }
 
     // ── Handle SSE agent.message events ─────────────────────────────
@@ -272,8 +259,7 @@
       if (!t) return;
 
       if (t.messagePre) {
-        t.messagePre.parentElement.classList.remove('streaming');
-        t.messagePre.parentElement.classList.add('truncated');
+        t.messagePre.classList.add('truncated');
       }
       t.messagePre = null;
 
@@ -297,10 +283,9 @@
       t.actions.innerHTML = FIRE_BTN_HTML;
 
       if (ev.stopReason === 'end_turn') {
-        const blocks = t.timeline.querySelectorAll('.message-area');
+        const blocks = t.timeline.querySelectorAll('pre.message-text');
         blocks.forEach((el, i) => {
           if (i === blocks.length - 1) return;
-          el.classList.remove('streaming');
           el.classList.add('truncated');
         });
 
