@@ -14,6 +14,8 @@
             card: '#242020',
             accent: '#d4856a',
             'accent-hover': '#c07058',
+            'tool-muted': '#78706c',
+            'tool-accent': '#d4856a',
           },
         },
       },
@@ -161,6 +163,12 @@
       return d.innerHTML;
     }
 
+    function renderInline(text) {
+      return esc(text)
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+    }
+
     function humanizeEventType(raw) {
       if (!raw) return '';
       return raw.replace('zen:event-type:', '').replace('ticket.', '').replaceAll('_', ' ');
@@ -248,29 +256,65 @@
       const t = tickets.get(ev.ticketId);
       if (!t) return;
 
-      // Extract text from content blocks
-      const texts = (ev.content || [])
-        .filter(b => b.type === 'text')
-        .map(b => b.text);
+      const texts = (ev.content || []).filter(b => b.type === 'text').map(b => b.text);
       if (!texts.length) return;
 
-      const text = texts.join('\n');
-
-      // Clear timeline on first message of a new turn
-      if (t.pendingClear) {
-        t.pendingClear = false;
-        clearTimeline(t);
-      }
-
-      // Expand body, show activity
+      if (t.pendingClear) { t.pendingClear = false; clearTimeline(t); }
       t.body.classList.remove('collapsed');
       activateTicketGradient(t);
 
-      if (!t.messagePre) startMessageBlock(t);
-      t.messagePre.textContent += text;
+      startMessageBlock(t);
+      t.messagePre.textContent = texts.join('\n');
+    }
 
-      // Re-enable fire button — agent sent a message, so it's alive
+    function handleToolUse(ev) {
+      const t = tickets.get(ev.ticketId);
+      if (!t) return;
+
+      if (t.messagePre) {
+        t.messagePre.parentElement.classList.remove('streaming');
+        t.messagePre.parentElement.classList.add('truncated');
+      }
+      t.messagePre = null;
+
+      const lbl = document.createElement('div');
+      lbl.className = 'mt-3 text-[0.65rem] font-mono text-tool-muted';
+      lbl.innerHTML = 'Used <span class="text-stone-400">' + esc(ev.name) + '</span> tool';
+      t.timeline.appendChild(lbl);
+
+      const input = ev.input || {};
+      const preview = ev.name === 'bash' ? '$ ' + (input.command || '') : (input.path || JSON.stringify(input));
+      const el = document.createElement('div');
+      el.className = 'mt-2 p-2 rounded-md bg-black/30 font-mono text-[0.7rem] text-tool-muted whitespace-pre-wrap break-all max-h-32 overflow-auto';
+      el.textContent = preview;
+      t.timeline.appendChild(el);
+    }
+
+    function handleIdle(ev) {
+      const t = tickets.get(ev.ticketId);
+      if (!t) return;
+
       t.actions.innerHTML = FIRE_BTN_HTML;
+
+      if (ev.stopReason === 'end_turn') {
+        const blocks = t.timeline.querySelectorAll('.message-area');
+        blocks.forEach((el, i) => {
+          if (i === blocks.length - 1) return;
+          el.classList.remove('streaming');
+          el.classList.add('truncated');
+        });
+
+        const last = blocks[blocks.length - 1];
+        if (last) {
+          const text = last.querySelector('pre').textContent;
+          const wrap = document.createElement('div');
+          wrap.className = 'mt-3 text-sm leading-relaxed text-stone-300 [&_strong]:text-tool-accent [&_strong]:font-semibold [&_code]:bg-black/30 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono';
+          wrap.innerHTML = renderInline(text);
+          last.replaceWith(wrap);
+        }
+
+        deactivateTicketGradient(t);
+      }
     }
 
     function connectSSE() {
@@ -291,6 +335,8 @@
               try {
                 const ev = JSON.parse(line.slice(6));
                 if (ev.type === 'agent.message') handleAgentMessage(ev);
+                else if (ev.type === 'tool_use') handleToolUse(ev);
+                else if (ev.type === 'session.status_idle') handleIdle(ev);
               } catch {}
             }
             pump();

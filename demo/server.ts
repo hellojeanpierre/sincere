@@ -205,6 +205,12 @@ async function consumeStream(ticketId: string): Promise<void> {
       if (event.type === "agent.custom_tool_use") {
         const e = event as { id: string; name: string; input: Record<string, unknown> };
         ts.cronMap.set(e.id, { name: e.name, input: e.input });
+        broadcast({ ticketId, type: "tool_use", name: e.name, input: e.input });
+      }
+
+      if (event.type === "agent.tool_use") {
+        const e = event as { name: string; input: Record<string, unknown> };
+        broadcast({ ticketId, type: "tool_use", name: e.name, input: e.input });
       }
 
       if (event.type === "agent.message") {
@@ -212,6 +218,8 @@ async function consumeStream(ticketId: string): Promise<void> {
       }
 
       if (event.type === "session.status_idle") {
+        broadcast({ ticketId, type: "session.status_idle", stopReason: event.stop_reason.type });
+
         if (event.stop_reason.type === "end_turn" && !agentActive) {
           if (staleSkipped) {
             console.error("Multiple stale idles — aborting");
@@ -273,6 +281,7 @@ async function consumeStream(ticketId: string): Promise<void> {
     }
   } catch (err) {
     ts.status = "idle";
+    broadcast({ ticketId, type: "session.status_idle", stopReason: "error" });
     console.error("Stream error:", err);
   }
 }
