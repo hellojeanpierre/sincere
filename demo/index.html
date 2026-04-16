@@ -151,6 +151,11 @@
       return d.innerHTML;
     }
 
+    function humanizeEventType(raw) {
+      if (!raw) return '';
+      return raw.replace('zen:event-type:', '').replace('ticket.', '').replaceAll('_', ' ');
+    }
+
     function activateTicketGradient(t) {
       t.root.classList.add('gradient-border');
       t.root.style.border = 'none';
@@ -303,9 +308,7 @@
       }
 
       if (result.fired) {
-        // Show what event type was sent
-        const shortType = (result.eventType || '').replace('zen:event-type:', '');
-        t.fireLabel.textContent = shortType;
+        t.fireLabel.textContent = humanizeEventType(result.nextEventType);
         // Move gradient to this ticket
         const border = document.getElementById('stream-border');
         if (border.classList.contains('gradient-border')) {
@@ -326,11 +329,15 @@
 
     // ── Init ────────────────────────────────────────────────────────
 
-    // Create ticket rows from known ticket IDs
-    const TICKET_ORDER = ['4800019', '4800027', '4800094', '4800099'];
-    for (const id of TICKET_ORDER) {
-      createTicketRow(id, `Ticket ${id}`);
-    }
+    fetch('/tickets')
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(list => {
+        for (const { ticketId, subject, firstEventType } of list) {
+          const t = createTicketRow(ticketId, subject);
+          t.fireLabel.textContent = humanizeEventType(firstEventType);
+        }
+      })
+      .catch(err => console.error('Failed to load tickets:', err));
 
     connectSSE();
 
