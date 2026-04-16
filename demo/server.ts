@@ -27,6 +27,11 @@ interface FireResult {
   reason?: string;
 }
 
+interface TurnResult {
+  status: "ok" | "timeout" | "error";
+  message?: string;
+}
+
 // ── Config ────────────────────────────────────────────────────────
 
 const client = new Anthropic();
@@ -44,6 +49,9 @@ const ALLOWED_TYPES = new Set([
   "zen:event-type:ticket.agent_assignment_changed",
   "zen:event-type:ticket.status_changed",
 ]);
+
+const TURN_TIMEOUT_MS = 60_000;
+const DRAIN_MS = 5_000;
 
 // ── Data loading ──────────────────────────────────────────────────
 
@@ -81,7 +89,7 @@ await ensureCronTool(client, AGENT_ID);
 // ── Session state ────────────────────────────────────────────────
 
 const sessions = new Map<string, TicketSession>();
-const inFlight = new Set<string>();
+const queue = new Map<string, Promise<void>>();
 
 // ── SSE broadcast ───────────────────────────────────────────────
 
@@ -114,54 +122,137 @@ async function ensurePolicyFile(): Promise<string> {
 
 // ── Per-fire stream ─────────────────────────────────────────────
 
-async function consumeTurn(ticketId: string, stream: AsyncIterable<StreamEvent>): Promise<void> {
+const TIMEOUT = Symbol("timeout");
+
+async function consumeTurn(ticketId: string, stream: AsyncIterable<StreamEvent>): Promise<TurnResult> {
   const ts = sessions.get(ticketId);
   if (!ts) throw new Error(`No session for ticket ${ticketId}`);
 
   const toolNames = new Map<string, string>();
+  const iter = stream[Symbol.asyncIterator]();
+  let pending: Promise<IteratorResult<StreamEvent>> | null = null;
+  let deadline = Date.now() + TURN_TIMEOUT_MS;
+  let interrupted = false;
 
-  for await (const event of stream) {
-    if (event.type === "agent.custom_tool_use") {
-      const e = event as { id: string; name: string; input: Record<string, unknown> };
-      toolNames.set(e.id, e.name);
-      broadcast({ ticketId, type: "tool_use", name: e.name, input: e.input });
-    }
-
-    if (event.type === "agent.tool_use") {
-      const e = event as { name: string; input: Record<string, unknown> };
-      broadcast({ ticketId, type: "tool_use", name: e.name, input: e.input });
-    }
-
-    if (event.type === "agent.message") {
-      broadcast({ ticketId, type: event.type, content: (event as { content: unknown }).content });
-    }
-
-    if (event.type === "session.status_idle") {
-      broadcast({ ticketId, type: "session.status_idle", stopReason: event.stop_reason.type });
-
-      if (event.stop_reason.type === "end_turn") break;
-
-      if (event.stop_reason.type === "requires_action") {
-        const ids = (event.stop_reason as { event_ids?: string[] }).event_ids ?? [];
-        const results: EventParams[] = [];
-        for (const id of ids) {
-          const name = toolNames.get(id);
-          if (name !== "cron") {
-            throw new Error(`Unexpected custom tool "${name ?? "unknown"}" (id ${id}) — only "cron" is handled`);
-          }
-          results.push({
-            type: "user.custom_tool_result",
-            custom_tool_use_id: id,
-            content: [{ type: "text", text: "scheduled" }],
-          });
+  try {
+    while (true) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        if (!interrupted) {
+          interrupted = true;
+          console.log(`Timeout: sending user.interrupt for session ${ts.sessionId}`);
+          client.beta.sessions.events.send(ts.sessionId, {
+            events: [{ type: "user.interrupt" }],
+          }).catch((e: unknown) => console.error(`Failed to send interrupt for ${ts.sessionId}:`, e));
+          deadline = Date.now() + DRAIN_MS;
+          continue;
         }
-        await client.beta.sessions.events.send(ts.sessionId, { events: results });
-        continue;
+        const msg = `Turn timed out after ${TURN_TIMEOUT_MS / 1000}s`;
+        console.log(`${msg} (session ${ts.sessionId})`);
+        broadcast({ ticketId, type: "error", message: msg });
+        return { status: "timeout", message: msg };
       }
 
-      if (event.stop_reason.type === "retries_exhausted") break;
+      if (!pending) pending = iter.next();
+
+      let timerId: ReturnType<typeof setTimeout> | undefined;
+      const timeoutP = new Promise<typeof TIMEOUT>((r) => {
+        timerId = setTimeout(() => r(TIMEOUT), remaining);
+      });
+      const result = await Promise.race([pending, timeoutP]);
+      clearTimeout(timerId);
+
+      if (result === TIMEOUT) continue;
+
+      pending = null;
+
+      if (result.done) {
+        if (interrupted) {
+          const msg = `Turn timed out after ${TURN_TIMEOUT_MS / 1000}s`;
+          console.log(`${msg} — stream closed after interrupt (session ${ts.sessionId})`);
+          return { status: "timeout", message: msg };
+        }
+        const msg = "Stream closed without end_turn";
+        console.error(`${msg} (session ${ts.sessionId})`);
+        return { status: "error", message: msg };
+      }
+
+      const event = result.value;
+
+      if (event.type === "agent.custom_tool_use") {
+        const e = event as { id: string; name: string; input: Record<string, unknown> };
+        toolNames.set(e.id, e.name);
+        broadcast({ ticketId, type: "tool_use", name: e.name, input: e.input });
+      }
+
+      if (event.type === "agent.tool_use") {
+        const e = event as { name: string; input: Record<string, unknown> };
+        broadcast({ ticketId, type: "tool_use", name: e.name, input: e.input });
+      }
+
+      if (event.type === "agent.message") {
+        broadcast({ ticketId, type: event.type, content: (event as { content: unknown }).content });
+      }
+
+      if (event.type === "session.error") {
+        const e = event as { error: { message: string; retry_status?: { type: string } } };
+        const retryType = e.error.retry_status?.type;
+        if (retryType === "exhausted" || retryType === "terminal") {
+          broadcast({ ticketId, type: "error", message: e.error.message });
+          return { status: "error", message: e.error.message };
+        }
+        if (retryType !== "retrying") {
+          console.error(
+            `Unknown session.error retry_status for session ${ts.sessionId}:`,
+            JSON.stringify(e.error),
+          );
+          broadcast({ ticketId, type: "error", message: e.error.message });
+          return { status: "error", message: e.error.message };
+        }
+      }
+
+      if (event.type === "session.status_idle") {
+        broadcast({ ticketId, type: "session.status_idle", stopReason: event.stop_reason.type });
+
+        if (event.stop_reason.type === "end_turn") break;
+
+        if (event.stop_reason.type === "requires_action") {
+          if (interrupted) break;
+
+          const ids = (event.stop_reason as { event_ids?: string[] }).event_ids ?? [];
+          const results: EventParams[] = [];
+          for (const id of ids) {
+            const name = toolNames.get(id);
+            if (name !== "cron") {
+              throw new Error(`Unexpected custom tool "${name ?? "unknown"}" (id ${id}) — only "cron" is handled`);
+            }
+            results.push({
+              type: "user.custom_tool_result",
+              custom_tool_use_id: id,
+              content: [{ type: "text", text: "scheduled" }],
+            });
+          }
+          await client.beta.sessions.events.send(ts.sessionId, { events: results });
+          continue;
+        }
+
+        if (event.stop_reason.type === "retries_exhausted") {
+          const msg = "Retries exhausted";
+          broadcast({ ticketId, type: "error", message: msg });
+          return { status: "error", message: msg };
+        }
+      }
     }
+  } finally {
+    iter.return?.().catch(() => {});
   }
+
+  if (interrupted) {
+    const msg = `Turn timed out after ${TURN_TIMEOUT_MS / 1000}s`;
+    return { status: "timeout", message: msg };
+  }
+
+  return { status: "ok" };
 }
 
 async function fireTicket(ticketId: string): Promise<FireResult> {
@@ -209,7 +300,8 @@ async function fireTicket(ticketId: string): Promise<FireResult> {
     nextEventType: ticketEvents[ts.nextEventIndex]?.type,
   };
 
-  await consumeTurn(ticketId, stream);
+  const turn = await consumeTurn(ticketId, stream);
+  if (turn.status !== "ok") result.reason = turn.message;
   return result;
 }
 
@@ -218,22 +310,27 @@ async function fireTicket(ticketId: string): Promise<FireResult> {
 async function handleFire(ticketId: string): Promise<Response> {
   if (!TICKET_IDS.has(ticketId))
     return Response.json({ error: "Unknown ticket" }, { status: 404 });
-  if (inFlight.has(ticketId))
-    return Response.json({ fired: false, reason: "agent is processing" });
 
-  inFlight.add(ticketId);
-  try {
-    const result = await fireTicket(ticketId);
-    return Response.json(result);
-  } catch (err) {
-    console.error(`Fire error for ${ticketId}:`, err);
-    return Response.json(
-      { fired: false, reason: err instanceof Error ? err.message : String(err) },
-      { status: 500 },
-    );
-  } finally {
-    inFlight.delete(ticketId);
-  }
+  let resolve!: (r: Response) => void;
+  const response = new Promise<Response>((r) => { resolve = r; });
+
+  const prev = queue.get(ticketId) ?? Promise.resolve();
+  const next = prev.then(async () => {
+    try {
+      const result = await fireTicket(ticketId);
+      resolve(Response.json(result));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`Fire error for ${ticketId}:`, err);
+      broadcast({ ticketId, type: "error", message });
+      resolve(Response.json({ fired: false, reason: message }, { status: 500 }));
+    }
+  }).finally(() => {
+    if (queue.get(ticketId) === next) queue.delete(ticketId);
+  });
+  queue.set(ticketId, next);
+
+  return response;
 }
 
 function handleEvents(req: Request): Response {
