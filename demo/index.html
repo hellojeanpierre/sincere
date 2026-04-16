@@ -173,7 +173,7 @@
     // ── Ticket rows ─────────────────────────────────────────────────
     // Each entry caches its DOM handles so event handlers never querySelector.
 
-    const tickets = new Map(); // ticketId → { root, actions, fireLabel, body, timeline, messagePre, pendingClear }
+    const tickets = new Map(); // ticketId → { root, actions, nextEventLabel, body, timeline, messagePre, pendingClear }
 
     function createTicketRow(id, subject) {
       const root = document.createElement('div');
@@ -187,7 +187,7 @@
               <span class="text-sm text-stone-300 truncate">${esc(subject)}</span>
             </div>
             <div class="flex items-center gap-2 ml-3 shrink-0">
-              <span class="fire-label text-[10px] font-mono text-stone-500"></span>
+              <span class="next-event-label text-[10px] font-mono text-stone-500"></span>
               <div class="ticket-actions">${FIRE_BTN_HTML}</div>
             </div>
           </div>
@@ -201,7 +201,7 @@
       const t = {
         root,
         actions: root.querySelector('.ticket-actions'),
-        fireLabel: root.querySelector('.fire-label'),
+        nextEventLabel: root.querySelector('.next-event-label'),
         body: root.querySelector('.ticket-body'),
         timeline: root.querySelector('.ticket-timeline'),
         messagePre: null,
@@ -303,12 +303,12 @@
         result = await res.json();
       } catch (err) {
         t.actions.innerHTML = FIRE_BTN_HTML;
-        t.fireLabel.textContent = 'error';
+        t.nextEventLabel.textContent = 'error';
         return;
       }
 
       if (result.fired) {
-        t.fireLabel.textContent = humanizeEventType(result.nextEventType);
+        t.nextEventLabel.textContent = humanizeEventType(result.nextEventType);
         // Move gradient to this ticket
         const border = document.getElementById('stream-border');
         if (border.classList.contains('gradient-border')) {
@@ -322,7 +322,7 @@
         // Re-enable if not processing (e.g. no more events)
         if (result.reason !== 'agent is processing') {
           t.actions.innerHTML = FIRE_BTN_HTML;
-          t.fireLabel.textContent = result.reason || '';
+          t.nextEventLabel.textContent = result.reason || '';
         }
       }
     }
@@ -334,7 +334,7 @@
       .then(list => {
         for (const { ticketId, subject, firstEventType } of list) {
           const t = createTicketRow(ticketId, subject);
-          t.fireLabel.textContent = humanizeEventType(firstEventType);
+          t.nextEventLabel.textContent = humanizeEventType(firstEventType);
         }
       })
       .catch(err => console.error('Failed to load tickets:', err));
