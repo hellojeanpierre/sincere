@@ -232,7 +232,7 @@
 
     function startMessageBlock(t) {
       const pre = document.createElement('pre');
-      pre.className = 'message-text mt-2';
+      pre.className = 'message-text mt-2 [&_code]:bg-black/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded';
       t.timeline.appendChild(pre);
       t.messagePre = pre;
     }
@@ -251,7 +251,7 @@
       activateTicketGradient(t);
 
       startMessageBlock(t);
-      t.messagePre.textContent = texts.join('\n');
+      t.messagePre.innerHTML = renderInline(texts.join('\n'));
     }
 
     function handleToolUse(ev) {
@@ -288,15 +288,6 @@
           if (i === blocks.length - 1) return;
           el.classList.add('truncated');
         });
-
-        const last = blocks[blocks.length - 1];
-        if (last) {
-          const text = last.querySelector('pre').textContent;
-          const wrap = document.createElement('div');
-          wrap.className = 'mt-3 text-sm leading-relaxed text-stone-300 [&_strong]:text-tool-accent [&_strong]:font-semibold [&_code]:bg-black/30 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono';
-          wrap.innerHTML = renderInline(text);
-          last.replaceWith(wrap);
-        }
 
         deactivateTicketGradient(t);
       }
