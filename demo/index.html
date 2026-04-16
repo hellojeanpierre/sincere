@@ -102,6 +102,16 @@
       border-radius: 0.25rem;
       font-size: 0.75rem;
     }
+    @keyframes dots {
+      0%   { content: ''; }
+      25%  { content: '.'; }
+      50%  { content: '..'; }
+      75%  { content: '...'; }
+    }
+    .agent-awake::after {
+      content: '';
+      animation: dots 1.5s steps(1) infinite;
+    }
   </style>
 </head>
 <body class="bg-surface text-stone-200 min-h-screen antialiased">
@@ -318,6 +328,10 @@
         activateTicketGradient(t);
         t.pendingClear = true;
         t.body.classList.remove('collapsed');
+        const awake = document.createElement('div');
+        awake.className = 'agent-awake text-[11px] font-mono text-accent';
+        awake.textContent = 'agent awake';
+        t.timeline.appendChild(awake);
       } else {
         // Re-enable if not processing (e.g. no more events)
         if (result.reason !== 'agent is processing') {
