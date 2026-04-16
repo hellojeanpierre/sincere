@@ -15,7 +15,6 @@
             accent: '#d4856a',
             'accent-hover': '#c07058',
             'tool-muted': '#78706c',
-            'tool-accent': '#d4856a',
           },
         },
       },
@@ -163,12 +162,6 @@
       return d.innerHTML;
     }
 
-    function renderInline(text) {
-      return esc(text)
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>');
-    }
-
     function humanizeEventType(raw) {
       if (!raw) return '';
       return raw.replace('zen:event-type:', '').replace('ticket.', '').replaceAll('_', ' ');
@@ -303,15 +296,6 @@
           el.classList.remove('streaming');
           el.classList.add('truncated');
         });
-
-        const last = blocks[blocks.length - 1];
-        if (last) {
-          const text = last.querySelector('pre').textContent;
-          const wrap = document.createElement('div');
-          wrap.className = 'mt-3 text-sm leading-relaxed text-stone-300 [&_strong]:text-tool-accent [&_strong]:font-semibold [&_code]:bg-black/30 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono';
-          wrap.innerHTML = renderInline(text);
-          last.replaceWith(wrap);
-        }
 
         deactivateTicketGradient(t);
       }
