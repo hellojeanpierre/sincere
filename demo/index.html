@@ -302,6 +302,12 @@
 
       t.actions.innerHTML = FIRE_BTN_HTML;
 
+      const awake = t.timeline.querySelector('.agent-awake');
+      if (awake) {
+        awake.classList.remove('agent-awake');
+        awake.textContent = 'agent idle';
+      }
+
       if (ev.stopReason === 'end_turn') {
         const blocks = t.timeline.querySelectorAll('pre.message-text');
         blocks.forEach((el, i) => {
