@@ -116,9 +116,9 @@
             <div id="ticket-list" class="space-y-2"></div>
           </div>
         </div>
-        <div id="cron-stack-wrap" class="absolute left-full top-0 ml-4 w-32 hidden">
-          <p class="text-[10px] text-stone-500 mb-1.5 whitespace-nowrap">Scheduled check-ins</p>
-          <div id="cron-stack" class="flex flex-col gap-1.5"></div>
+        <div id="cron-stack-wrap" class="absolute left-full top-3 ml-4 w-48 hidden">
+          <p class="text-xs text-stone-500 mb-2 whitespace-nowrap">Scheduled check-ins</p>
+          <div id="cron-stack" class="flex flex-col justify gap-1.5"></div>
         </div>
       </div>
 
@@ -323,8 +323,8 @@
       pill.className = 'cron-pill finding-card rounded px-2 py-1 bg-black/40 text-stone-300 flex items-center justify-between gap-1.5';
       pill.dataset.cronId = ev.cronId;
       pill.innerHTML = `
-        <div class="flex items-baseline gap-1.5 min-w-0 font-mono">
-          <span class="text-[10px] text-stone-500">${esc(String(ev.ticketId))}</span>
+        <div class="flex items-baseline justify-between gap-1.5 w-full">
+          <span class="text-[10px] text-stone-500">Ticket ${esc(String(ev.ticketId))}</span>
           <span class="text-[10px] text-stone-300">${esc(String(ev.delayMinutes))}m</span>
         </div>
         <button class="btn-cron-fire inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-mono bg-stone-700/40 hover:bg-stone-600/50 text-stone-400 transition-colors">fire</button>`;
