@@ -71,12 +71,11 @@
       animation: slide-in 0.3s ease-out forwards;
     }
     .ticket-body {
-      max-height: 2000px;
       overflow: hidden;
-      transition: max-height 0.4s ease;
+      transition: height 0.4s ease;
     }
     .ticket-body.collapsed {
-      max-height: 0;
+      height: 0;
     }
     pre.message-text {
       margin: 0;
@@ -220,6 +219,34 @@
       t.messagePre = null;
     }
 
+    // `height: auto ↔ 0` cannot be interpolated, so measure and pin an
+    // explicit pixel height for the animation, then clear it so the body
+    // keeps tracking content growth afterwards.
+    function expandBody(body) {
+      const target = body.scrollHeight;
+      body.classList.remove('collapsed');
+      body.style.height = '0px';
+      void body.offsetHeight;
+      body.style.height = target + 'px';
+      body.addEventListener('transitionend', function once(e) {
+        if (e.propertyName !== 'height') return;
+        body.removeEventListener('transitionend', once);
+        body.style.height = '';
+      });
+    }
+
+    function collapseBody(body, onDone) {
+      body.style.height = body.scrollHeight + 'px';
+      void body.offsetHeight;
+      body.classList.add('collapsed');
+      body.style.height = '';
+      body.addEventListener('transitionend', function once(e) {
+        if (e.propertyName !== 'height') return;
+        body.removeEventListener('transitionend', once);
+        onDone?.();
+      });
+    }
+
     function startMessageBlock(t) {
       const pre = document.createElement('pre');
       pre.className = 'message-text [&_code]:bg-black/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded';
@@ -248,7 +275,7 @@
       t.timeline.appendChild(awake);
 
       // Expand after content is staged so the animation reveals it.
-      requestAnimationFrame(() => t.body.classList.remove('collapsed'));
+      expandBody(t.body);
     }
 
     function handleAgentMessage(ev) {
@@ -298,14 +325,9 @@
 
       if (ev.stopReason === 'end_turn') {
         deactivateTicketGradient(t);
-        t.body.classList.add('collapsed');
         // Keep the fire button disabled until the collapse animation finishes,
         // so the next turn starts from a fully collapsed state.
-        t.body.addEventListener('transitionend', function once(e) {
-          if (e.propertyName !== 'max-height') return;
-          t.body.removeEventListener('transitionend', once);
-          t.actions.innerHTML = FIRE_BTN_HTML;
-        });
+        collapseBody(t.body, () => { t.actions.innerHTML = FIRE_BTN_HTML; });
       } else {
         t.actions.innerHTML = FIRE_BTN_HTML;
       }
