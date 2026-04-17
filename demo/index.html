@@ -207,6 +207,7 @@
     // Each entry caches its DOM handles so event handlers never querySelector.
 
     const tickets = new Map(); // ticketId → { root, actions, body, timeline, messagePre }
+    let activeTicketId = null;
 
     function createTicketRow(id, subject) {
       const root = document.createElement('div');
@@ -265,6 +266,12 @@
     function handleTurnStart(ev) {
       const t = tickets.get(ev.ticketId);
       if (!t) return;
+
+      // Collapse the previously active ticket so only one is expanded at a time.
+      if (activeTicketId && activeTicketId !== ev.ticketId) {
+        tickets.get(activeTicketId)?.body.classList.add('collapsed');
+      }
+      activeTicketId = ev.ticketId;
 
       // Migrate the rotating gradient from the stream card onto this ticket row.
       const border = document.getElementById('stream-border');
