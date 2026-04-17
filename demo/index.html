@@ -71,12 +71,15 @@
       animation: slide-in 0.3s ease-out forwards;
     }
     .ticket-body {
-      max-height: 2000px;
-      overflow: hidden;
-      transition: max-height 0.4s ease;
+      display: grid;
+      grid-template-rows: 1fr;
+      transition: grid-template-rows 0.4s ease;
     }
     .ticket-body.collapsed {
-      max-height: 0;
+      grid-template-rows: 0fr;
+    }
+    .ticket-body > div {
+      overflow: hidden;
     }
     pre.message-text {
       margin: 0;
@@ -290,6 +293,8 @@
       const t = tickets.get(ev.ticketId);
       if (!t) return;
 
+      t.actions.innerHTML = FIRE_BTN_HTML;
+
       const awake = t.timeline.querySelector('.agent-awake');
       if (awake) {
         awake.classList.remove('agent-awake');
@@ -299,15 +304,6 @@
       if (ev.stopReason === 'end_turn') {
         deactivateTicketGradient(t);
         t.body.classList.add('collapsed');
-        // Keep the fire button disabled until the collapse animation finishes,
-        // so the next turn starts from a fully collapsed state.
-        t.body.addEventListener('transitionend', function once(e) {
-          if (e.propertyName !== 'max-height') return;
-          t.body.removeEventListener('transitionend', once);
-          t.actions.innerHTML = FIRE_BTN_HTML;
-        });
-      } else {
-        t.actions.innerHTML = FIRE_BTN_HTML;
       }
     }
 
