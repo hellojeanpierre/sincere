@@ -303,7 +303,6 @@
 
       if (ev.stopReason === 'end_turn') {
         deactivateTicketGradient(t);
-        t.body.classList.add('collapsed');
       }
     }
 
@@ -409,6 +408,9 @@
       if (!t) return;
 
       t.actions.innerHTML = FIRE_BTN_DISABLED_HTML;
+      // Collapse the previous turn before processing the next event. turn_start
+      // will re-expand once the new turn begins streaming.
+      t.body.classList.add('collapsed');
 
       let result;
       try {
