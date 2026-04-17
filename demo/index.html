@@ -243,13 +243,15 @@
         Object.assign(border.style, { border: '1px solid #4a3628', borderRadius: '1rem' });
       }
       activateTicketGradient(t);
-      t.body.classList.remove('collapsed');
       clearTimeline(t);
 
       const awake = document.createElement('div');
       awake.className = 'flex items-center gap-1.5 text-xs font-mono';
       awake.innerHTML = `<span class="text-stone-500">Ticket ${esc(humanizeEventType(ev.eventType))}</span><span class="text-stone-600" aria-hidden="true">&rarr;</span><span class="agent-awake text-accent">agent awake</span>`;
       t.timeline.appendChild(awake);
+
+      // Expand after content is staged so the animation reveals it.
+      requestAnimationFrame(() => t.body.classList.remove('collapsed'));
     }
 
     function handleAgentMessage(ev) {
@@ -301,6 +303,7 @@
 
       if (ev.stopReason === 'end_turn') {
         deactivateTicketGradient(t);
+        t.body.classList.add('collapsed');
       }
     }
 
