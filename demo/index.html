@@ -100,6 +100,33 @@
       content: '';
       animation: dots 1.5s steps(1) infinite;
     }
+    .timeline-item {
+      position: relative;
+      padding-left: 20px;
+    }
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: 1px;
+      top: 7px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #1c1917;
+      border: 1px solid #78706c;
+    }
+    .timeline-item.tool-node::before {
+      border-color: #d4856a;
+    }
+    .timeline-item:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: 4px;
+      top: 16px;
+      bottom: -19px;
+      width: 1px;
+      background: #44403c;
+    }
   </style>
 </head>
 <body class="bg-surface text-stone-200 min-h-screen antialiased">
@@ -224,9 +251,12 @@
     }
 
     function startMessageBlock(t) {
+      const wrap = document.createElement('div');
+      wrap.className = 'timeline-item message-node';
       const pre = document.createElement('pre');
       pre.className = 'message-text [&_code]:bg-black/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded';
-      t.timeline.appendChild(pre);
+      wrap.appendChild(pre);
+      t.timeline.appendChild(wrap);
       t.messagePre = pre;
     }
 
@@ -272,7 +302,7 @@
       t.messagePre = null;
 
       const group = document.createElement('div');
-      group.className = 'space-y-1.5';
+      group.className = 'timeline-item tool-node space-y-1.5';
 
       const lbl = document.createElement('div');
       lbl.className = 'text-xs font-mono text-tool-muted';
