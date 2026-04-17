@@ -90,12 +90,6 @@
       color: #a8a29e;
       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
     }
-    pre.message-text.truncated {
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
     @keyframes dots {
       0%   { content: ''; }
       25%  { content: '.'; }
@@ -273,9 +267,6 @@
       const t = tickets.get(ev.ticketId);
       if (!t) return;
 
-      if (t.messagePre) {
-        t.messagePre.classList.add('truncated');
-      }
       t.messagePre = null;
 
       const group = document.createElement('div');
@@ -303,12 +294,6 @@
       t.actions.innerHTML = FIRE_BTN_HTML;
 
       if (ev.stopReason === 'end_turn') {
-        const blocks = t.timeline.querySelectorAll('pre.message-text');
-        blocks.forEach((el, i) => {
-          if (i === blocks.length - 1) return;
-          el.classList.add('truncated');
-        });
-
         deactivateTicketGradient(t);
       }
     }
