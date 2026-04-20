@@ -48,6 +48,7 @@ const ALLOWED_TYPES = new Set([
   "zen:event-type:ticket.group_assignment_changed",
   "zen:event-type:ticket.agent_assignment_changed",
   "zen:event-type:ticket.status_changed",
+  "zen:event-type:ticket.custom_field_changed",
 ]);
 
 const TURN_TIMEOUT_MS = 60_000;
@@ -66,6 +67,9 @@ function isAllowedEvent(e: ZenEvent): boolean {
   if (!ALLOWED_TYPES.has(e.type)) return false;
   if (e.type === "zen:event-type:ticket.next_sla_breach_changed") {
     return (e.event as { current: unknown }).current !== null;
+  }
+  if (e.type === "zen:event-type:ticket.custom_field_changed") {
+    return (e.event as { field_name: string }).field_name === "resolution_action";
   }
   return true;
 }
