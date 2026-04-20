@@ -39,7 +39,7 @@ const client = new Anthropic();
 const AGENT_ID = "agent_011Ca3dfRMVdQFpUVvur2fFD";
 const ENVIRONMENT_ID = "env_01BeAimUGVuvGamH6fgfiUTa";
 
-const TICKET_ORDER = ["4800094", "4800045", "4800062"];
+const TICKET_ORDER = ["4800094", "4800045", "4800289"];
 const TICKET_IDS = new Set(TICKET_ORDER);
 
 const ALLOWED_TYPES = new Set([
