@@ -51,7 +51,7 @@ const ALLOWED_TYPES = new Set([
   "zen:event-type:ticket.custom_field_changed",
 ]);
 
-const TURN_TIMEOUT_MS = 60_000;
+const TURN_TIMEOUT_MS = 120_000;
 const DRAIN_MS = 5_000;
 
 // ── Data loading ──────────────────────────────────────────────────
