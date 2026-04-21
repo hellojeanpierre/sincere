@@ -321,9 +321,11 @@
       const st = ensureState(id);
       const container = document.getElementById('ticket-timeline');
       container.innerHTML = '';
+      container.classList.remove('flex', 'flex-col');
 
       if (st.events.length === 0) {
-        container.innerHTML = '<p class="text-sm text-stone-500 italic">No events yet.</p>';
+        container.classList.add('flex', 'flex-col');
+        container.innerHTML = '<p class="text-sm text-stone-500 flex-1 flex items-center justify-center">Press next to start demo.</p>';
         renderFireButton(id);
         return;
       }
@@ -461,7 +463,7 @@
       container.innerHTML = '';
 
       if (st.currentReasoningNodes.length === 0 && !st.isStreaming) {
-        container.innerHTML = '<p class="text-sm text-stone-500 italic">Reasoning will appear here when events fire.</p>';
+        container.innerHTML = '';
         return;
       }
 
