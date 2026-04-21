@@ -188,10 +188,8 @@
       <!-- Right: Agent reasoning card (always has gradient border) -->
       <div class="w-full md:w-1/2 gradient-border rounded-2xl">
         <div class="bg-card p-5 rounded-2xl min-h-[300px] flex flex-col">
-          <div class="flex items-center justify-between mb-3">
-            <p class="text-sm uppercase tracking-wider text-stone-500">Agent reasoning</p>
-            <div id="agent-status" class="flex items-center gap-1.5 text-xs text-stone-500"></div>
-          </div>
+          <p class="text-sm uppercase tracking-wider text-stone-500 mb-3">Agent reasoning</p>
+          <div id="agent-status" class="text-sm font-mono text-accent mb-4"></div>
           <div id="reasoning-container" class="flex-1 relative"></div>
           <div id="cron-stack-wrap" class="hidden pt-3 mt-3 border-t border-stone-700/50">
             <p class="text-[10px] uppercase tracking-wider text-stone-500 mb-2">Scheduled check-ins</p>
@@ -480,9 +478,11 @@
       const st = ensureState(id);
       const el = document.getElementById('agent-status');
       if (st.isStreaming) {
-        el.innerHTML = `<span class="agent-awake text-accent text-xs">processing</span>`;
+        el.innerHTML = `<span class="agent-awake">agent awake</span>`;
+      } else if (st.events.length > 0) {
+        el.textContent = 'agent idle';
       } else {
-        el.innerHTML = '';
+        el.textContent = '';
       }
     }
 
@@ -570,6 +570,7 @@
         const wrap = document.createElement('div');
         wrap.className = 'space-y-3 crossfade-in';
         wrap.id = 'live-reasoning';
+
         container.appendChild(wrap);
         updateAgentStatus(ev.ticketId);
       }
