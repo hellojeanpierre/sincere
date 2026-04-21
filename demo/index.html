@@ -216,6 +216,12 @@
         .replace(/`([^`]+)`/g, '<code>$1</code>');
     }
 
+    const TICKET_TITLES = {
+      '4800094': 'High-spend advertiser disputes $3,950, T1 missed SLA',
+      '4800045': 'Ads blocked 72h, T1 logged escalation that never happened',
+      '4800289': 'Asked about tracking pixels, T1 fixed wrong problem',
+    };
+
     const EVENT_LABELS = {
       'zen:event-type:ticket.created': 'Ticket created',
       'zen:event-type:ticket.next_sla_breach_changed': 'SLA set',
@@ -323,10 +329,11 @@
       container.innerHTML = '';
       container.classList.remove('flex', 'flex-col');
 
-      if (st.detail?.subject) {
+      const displayTitle = TICKET_TITLES[id] || st.detail?.subject;
+      if (displayTitle) {
         const hdr = document.createElement('div');
         hdr.className = 'mb-3 text-base font-medium text-stone-200';
-        hdr.textContent = st.detail.subject;
+        hdr.textContent = displayTitle;
         container.appendChild(hdr);
       }
 
