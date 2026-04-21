@@ -157,7 +157,7 @@
       position: absolute;
       left: 4px;
       top: 16px;
-      bottom: -4px;
+      bottom: -19px;
       width: 1px;
       background: #44403c;
     }
@@ -188,7 +188,7 @@
       <!-- Right: Agent reasoning card (always has gradient border) -->
       <div class="w-full md:w-1/2 gradient-border rounded-2xl">
         <div class="bg-card p-5 rounded-2xl min-h-[300px] flex flex-col">
-          <p class="text-sm uppercase tracking-wider text-stone-500 mb-3">Agent reasoning</p>
+          <p class="text-sm uppercase tracking-wider text-stone-500 mb-3">AI agent activity</p>
           <div id="agent-status" class="text-sm font-mono text-accent mb-4"></div>
           <div id="reasoning-container" class="flex-1 relative"></div>
           <div id="cron-stack-wrap" class="hidden pt-3 mt-3 border-t border-stone-700/50">
@@ -321,19 +321,23 @@
       const st = ensureState(id);
       const container = document.getElementById('ticket-timeline');
       container.innerHTML = '';
+      container.classList.remove('flex', 'flex-col');
 
-      if (st.events.length === 0) {
-        container.innerHTML = '<p class="text-sm text-stone-500 italic">No events yet.</p>';
-        renderFireButton(id);
-        return;
-      }
-
-      // Ticket subject header
       if (st.detail?.subject) {
         const hdr = document.createElement('div');
         hdr.className = 'mb-3 text-base font-medium text-stone-200';
         hdr.textContent = st.detail.subject;
         container.appendChild(hdr);
+      }
+
+      if (st.events.length === 0) {
+        container.classList.add('flex', 'flex-col');
+        const placeholder = document.createElement('p');
+        placeholder.className = 'text-sm text-stone-500 flex-1 flex items-center justify-center';
+        placeholder.textContent = 'Press next to start demo.';
+        container.appendChild(placeholder);
+        renderFireButton(id);
+        return;
       }
 
       const totalEvents = st.events.length;
@@ -461,7 +465,7 @@
       container.innerHTML = '';
 
       if (st.currentReasoningNodes.length === 0 && !st.isStreaming) {
-        container.innerHTML = '<p class="text-sm text-stone-500 italic">Reasoning will appear here when events fire.</p>';
+        container.innerHTML = '';
         return;
       }
 
