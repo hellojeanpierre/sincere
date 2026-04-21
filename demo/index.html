@@ -192,7 +192,7 @@
           <div id="agent-status" class="text-sm font-mono text-accent mb-4"></div>
           <div id="reasoning-container" class="flex-1 relative"></div>
           <div id="cron-stack-wrap" class="hidden pt-3 mt-3 border-t border-stone-700/50">
-            <p class="text-sm uppercase tracking-wider text-stone-500 mb-3">Wake-ups</p>
+            <p class="text-xs uppercase tracking-wider text-stone-500 mb-2">Wake-ups</p>
             <div id="cron-stack" class="flex flex-col gap-2"></div>
           </div>
         </div>
@@ -651,13 +651,13 @@
       if (stack.querySelector(`.cron-pill[data-cron-id="${ev.cronId}"]`)) return;
 
       const pill = document.createElement('div');
-      pill.className = 'cron-pill slide-in rounded-lg px-4 py-3 flex items-center justify-between gap-3';
+      pill.className = 'cron-pill slide-in rounded-lg px-3 py-2 flex items-center justify-between gap-2';
       pill.style.cssText = 'background:#1c1917; border:1px solid #44403c';
       pill.dataset.cronId = ev.cronId;
       pill.innerHTML = `
-        <span class="text-sm text-stone-300">Remind myself in ${esc(String(ev.delayMinutes))} min</span>
-        <button class="btn-cron-fire inline-flex items-center justify-center w-8 h-8 rounded-md bg-accent/20 hover:bg-accent/30 text-accent transition-colors" title="Fire now" aria-label="Fire now">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <span class="text-xs text-stone-300">Remind myself in ${esc(String(ev.delayMinutes))} min</span>
+        <button class="btn-cron-fire inline-flex items-center justify-center w-6 h-6 rounded bg-accent/20 hover:bg-accent/30 text-accent transition-colors" title="Fire now" aria-label="Fire now">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z"/>
           </svg>
         </button>`;
@@ -676,8 +676,8 @@
 
     async function fireCron(cronId, btn) {
       btn.disabled = true;
-      btn.className = 'btn-cron-fire inline-flex items-center justify-center w-8 h-8 rounded-md bg-stone-800/60 text-stone-500 cursor-not-allowed';
-      btn.innerHTML = `<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+      btn.className = 'btn-cron-fire inline-flex items-center justify-center w-6 h-6 rounded bg-stone-800/60 text-stone-500 cursor-not-allowed';
+      btn.innerHTML = `<svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
       </svg>`;
