@@ -35,6 +35,7 @@
       opacity: 0.14;
     }
     body > * { position: relative; z-index: 1; }
+
     @property --angle {
       syntax: '<angle>';
       initial-value: 0deg;
@@ -60,27 +61,33 @@
       position: relative;
       z-index: 1;
     }
-    .gradient-border.rounded-lg > div { border-radius: calc(0.5rem - 1px); }
+    .gradient-border.rounded-2xl::before { border-radius: 1rem; }
     .gradient-border.rounded-2xl > div { border-radius: calc(1rem - 1px); }
+
     @keyframes slide-in {
       from { opacity: 0; transform: translateX(-12px); }
       to   { opacity: 1; transform: translateX(0); }
     }
-    .finding-card {
+    .slide-in {
       opacity: 0;
       animation: slide-in 0.3s ease-out forwards;
     }
-    .ticket-body {
-      display: grid;
-      grid-template-rows: 1fr;
-      transition: grid-template-rows 0.4s ease;
+
+    @keyframes crossfade-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
     }
-    .ticket-body.collapsed {
-      grid-template-rows: 0fr;
+    .crossfade-in {
+      animation: crossfade-in 0.2s ease-out forwards;
     }
-    .ticket-body > div {
-      overflow: hidden;
+    @keyframes crossfade-out {
+      from { opacity: 1; }
+      to   { opacity: 0; }
     }
+    .crossfade-out {
+      animation: crossfade-out 0.2s ease-out forwards;
+    }
+
     pre.message-text {
       margin: 0;
       white-space: pre-wrap;
@@ -90,6 +97,7 @@
       color: #a8a29e;
       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
     }
+
     @keyframes dots {
       0%   { content: ''; }
       25%  { content: '.'; }
@@ -100,6 +108,7 @@
       content: '';
       animation: dots 1.5s steps(1) infinite;
     }
+
     .timeline-item {
       position: relative;
       padding-left: 20px;
@@ -127,28 +136,67 @@
       width: 1px;
       background: #44403c;
     }
+
+    .event-entry {
+      position: relative;
+      padding-left: 20px;
+    }
+    .event-entry::before {
+      content: '';
+      position: absolute;
+      left: 1px;
+      top: 7px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #1c1917;
+      border: 1px solid #78706c;
+    }
+    .event-entry:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: 4px;
+      top: 16px;
+      bottom: -4px;
+      width: 1px;
+      background: #44403c;
+    }
+    .event-entry.active-event::before {
+      border-color: #d4856a;
+      background: #d4856a;
+    }
   </style>
 </head>
 <body class="bg-surface text-stone-200 min-h-screen antialiased">
-  <div class="max-w-2xl mx-auto px-4 py-12">
+  <div class="max-w-6xl mx-auto px-4 py-10">
 
-    <div class="relative flex flex-col items-center">
-      <div class="absolute top-0 bottom-0 w-px bg-accent/30"></div>
+    <!-- Two-card layout -->
+    <div class="flex flex-col md:flex-row gap-4 items-start relative">
 
-      <!-- Ticket stream card -->
-      <div id="stream-card" class="relative z-10 w-full max-w-xl">
-        <div id="stream-border" class="gradient-border rounded-2xl">
-          <div class="bg-card p-6 space-y-3 rounded-2xl">
-            <div class="flex items-center justify-between">
-              <p class="text-xs uppercase tracking-wider text-stone-500">Zendesk tickets</p>
-              <div id="stream-status" class="flex items-center gap-1.5 text-xs text-stone-500"></div>
-            </div>
-            <div id="ticket-list" class="space-y-2"></div>
+      <!-- Left: Ticket card -->
+      <div class="w-full md:w-1/2 rounded-2xl" style="border: 1px solid #44403c">
+        <div class="bg-card p-5 rounded-2xl min-h-[300px] flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-sm uppercase tracking-wider text-stone-500">Zendesk tickets</p>
           </div>
+          <div id="pill-bar" class="flex items-center gap-1.5 mb-4"></div>
+          <div id="ticket-timeline" class="flex-1 space-y-3 mb-4"></div>
+          <div id="fire-area" class="pt-3 border-t border-stone-700/50"></div>
         </div>
-        <div id="cron-stack-wrap" class="absolute left-full top-3 ml-4 w-48 hidden">
-          <p class="text-xs text-stone-500 mb-2 whitespace-nowrap">Scheduled check-ins</p>
-          <div id="cron-stack" class="flex flex-col justify gap-1.5"></div>
+      </div>
+
+      <!-- Right: Agent reasoning card (always has gradient border) -->
+      <div class="w-full md:w-1/2 gradient-border rounded-2xl">
+        <div class="bg-card p-5 rounded-2xl min-h-[300px] flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-sm uppercase tracking-wider text-stone-500">Agent reasoning</p>
+            <div id="agent-status" class="flex items-center gap-1.5 text-xs text-stone-500"></div>
+          </div>
+          <div id="reasoning-container" class="flex-1 relative"></div>
+          <div id="cron-stack-wrap" class="hidden pt-3 mt-3 border-t border-stone-700/50">
+            <p class="text-[10px] uppercase tracking-wider text-stone-500 mb-2">Scheduled check-ins</p>
+            <div id="cron-stack" class="flex flex-col gap-1.5"></div>
+          </div>
         </div>
       </div>
 
@@ -156,21 +204,7 @@
   </div>
 
   <script>
-    const FIRE_BTN_HTML = `
-      <button class="btn-fire inline-flex items-center justify-center w-7 h-7 rounded bg-accent/20 hover:bg-accent/30 text-accent transition-colors"
-        title="Fire next event" aria-label="Fire next event">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/>
-        </svg>
-      </button>`;
-
-    const FIRE_BTN_DISABLED_HTML = `
-      <button class="btn-fire inline-flex items-center justify-center w-7 h-7 rounded bg-stone-700/40 text-stone-500 cursor-not-allowed" disabled title="Processing" aria-label="Processing">
-        <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-        </svg>
-      </button>`;
+    // ── Helpers ──────────────────────────────────────────────────────
 
     function esc(s) {
       const d = document.createElement('div');
@@ -184,130 +218,290 @@
         .replace(/`([^`]+)`/g, '<code>$1</code>');
     }
 
-    function humanizeEventType(raw) {
-      if (!raw) return '';
-      return raw.replace('zen:event-type:', '').replace('ticket.', '').replaceAll('_', ' ');
+    const EVENT_LABELS = {
+      'zen:event-type:ticket.created': 'Ticket created',
+      'zen:event-type:ticket.next_sla_breach_changed': 'SLA set',
+      'zen:event-type:ticket.group_assignment_changed': 'Group assigned',
+      'zen:event-type:ticket.agent_assignment_changed': 'Agent assigned',
+      'zen:event-type:ticket.status_changed': 'Status changed',
+      'zen:event-type:ticket.custom_field_changed': 'Resolution recorded',
+    };
+
+    function humanLabel(eventType) {
+      if (eventType === 'cron') return 'Scheduled check-in';
+      return EVENT_LABELS[eventType] || eventType.replace('zen:event-type:ticket.', '').replaceAll('_', ' ');
     }
 
-    function activateTicketGradient(t) {
-      t.root.classList.add('gradient-border');
-      t.root.style.border = 'none';
-      t.root.style.padding = '1px';
+    function shortTime(isoStr) {
+      if (!isoStr) return '';
+      try {
+        const d = new Date(isoStr);
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+      } catch { return ''; }
     }
 
-    function deactivateTicketGradient(t) {
-      t.root.classList.remove('gradient-border');
-      t.root.style.border = '1px solid #44403c';
-      t.root.style.padding = '';
+    function formatValue(v) {
+      if (v == null) return null;
+      if (typeof v === 'object') return JSON.stringify(v);
+      return String(v).toUpperCase();
     }
 
-    // ── Row management ──────────────────────────────────────────────
-
-    // ── Ticket rows ─────────────────────────────────────────────────
-    // Each entry caches its DOM handles so event handlers never querySelector.
-
-    const tickets = new Map(); // ticketId → { root, actions, body, timeline, messagePre }
-    let activeTicketId = null;
-
-    function createTicketRow(id, subject) {
-      const root = document.createElement('div');
-      root.className = 'finding-card rounded-lg';
-      root.style.cssText = 'animation-delay:0ms; border: 1px solid #44403c';
-      root.innerHTML = `
-        <div class="rounded-lg overflow-hidden" style="background:#1c1917">
-          <div class="flex items-center justify-between px-4 py-3">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <span class="text-sm font-mono text-stone-500 shrink-0">${esc(id)}</span>
-              <span class="text-sm text-stone-300 truncate">${esc(subject)}</span>
-            </div>
-            <div class="flex items-center gap-2 ml-3 shrink-0">
-              <div class="ticket-actions">${FIRE_BTN_HTML}</div>
-            </div>
-          </div>
-          <div class="ticket-body collapsed">
-            <div>
-              <div class="ticket-timeline px-4 pb-4 space-y-3"></div>
-            </div>
-          </div>
-        </div>`;
-
-      const t = {
-        root,
-        actions: root.querySelector('.ticket-actions'),
-        body: root.querySelector('.ticket-body'),
-        timeline: root.querySelector('.ticket-timeline'),
-        messagePre: null,
-      };
-
-      document.getElementById('ticket-list').appendChild(root);
-      tickets.set(id, t);
-      return t;
+    function formatSla(curr) {
+      if (!curr || typeof curr !== 'object') return null;
+      const hours = curr.hours_until_breach;
+      if (hours == null) return null;
+      return `${hours}h until breach`;
     }
 
-    // ── SSE stream ──────────────────────────────────────────────────
+    // ── Per-ticket state ───────────────────────────────────────────
 
-    function clearTimeline(t) {
-      t.timeline.innerHTML = '';
-      t.messagePre = null;
+    // ticketState[id] = {
+    //   detail: null | { description, status, subject, created_at, agent_id },
+    //   detailFetched: bool,
+    //   events: [{ eventType, eventIndex, createdAt, updatedAt, current, previous, fieldName, agentResponseSummary, requesterId }],
+    //   currentReasoningNodes: [DOM elements for latest turn],
+    //   messagePre: null | <pre>,
+    //   isStreaming: bool,
+    //   exhausted: bool,
+    //   firing: bool,
+    // }
+    const ticketState = {};
+    let selectedTicketId = null;
+    let ticketOrder = [];
+
+    function ensureState(id) {
+      if (!ticketState[id]) {
+        ticketState[id] = {
+          detail: null,
+          detailFetched: false,
+          events: [],
+          currentReasoningNodes: [],
+          messagePre: null,
+          isStreaming: false,
+          exhausted: false,
+          firing: false,
+        };
+      }
+      return ticketState[id];
     }
 
-    function startMessageBlock(t) {
+    // ── Fetch detail ────────────────────────────────────────────────
+
+    async function fetchDetail(id) {
+      const st = ensureState(id);
+      if (st.detailFetched) return st.detail;
+      try {
+        const res = await fetch(`/tickets/${id}/detail`);
+        if (res.ok) st.detail = await res.json();
+      } catch {}
+      st.detailFetched = true;
+      return st.detail;
+    }
+
+    // ── Pill bar ────────────────────────────────────────────────────
+
+    function renderPills() {
+      const bar = document.getElementById('pill-bar');
+      bar.innerHTML = '';
+      for (const id of ticketOrder) {
+        const pill = document.createElement('button');
+        const selected = id === selectedTicketId;
+        pill.className = `px-3 py-1.5 rounded-md text-sm font-mono transition-colors ${
+          selected
+            ? 'bg-accent/20 text-accent'
+            : 'bg-stone-800/60 text-stone-500 hover:bg-stone-700/50 hover:text-stone-400'
+        }`;
+        pill.textContent = id;
+        pill.onclick = () => selectTicket(id);
+        bar.appendChild(pill);
+      }
+    }
+
+    // ── Render ticket timeline (left card) ──────────────────────────
+
+    function renderTimeline(id) {
+      const st = ensureState(id);
+      const container = document.getElementById('ticket-timeline');
+      container.innerHTML = '';
+
+      if (st.events.length === 0) {
+        container.innerHTML = '<p class="text-sm text-stone-500 italic">No events yet.</p>';
+        renderFireButton(id);
+        return;
+      }
+
+      // Ticket subject header
+      if (st.detail?.subject) {
+        const hdr = document.createElement('div');
+        hdr.className = 'mb-3 text-base font-medium text-stone-200';
+        hdr.textContent = st.detail.subject;
+        container.appendChild(hdr);
+      }
+
+      const totalEvents = st.events.length;
+      st.events.forEach((ev, i) => {
+        const entry = document.createElement('div');
+        const isLast = i === totalEvents - 1;
+        entry.className = `event-entry${isLast ? ' slide-in' : ''}${st.isStreaming && isLast ? ' active-event' : ''}`;
+        entry.style.animationDelay = '0ms';
+
+        const ts = ev.updatedAt || ev.createdAt;
+        let html = `<div class="flex items-baseline gap-2">
+          <span class="text-sm font-medium text-stone-300">${esc(humanLabel(ev.eventType))}</span>`;
+        if (ts) {
+          html += `<span class="text-xs text-stone-500">${esc(shortTime(ts))}</span>`;
+        }
+        html += `</div>`;
+
+        // Transition values
+        if (ev.current !== undefined || ev.previous !== undefined) {
+          const isSla = ev.eventType === 'zen:event-type:ticket.next_sla_breach_changed';
+          if (isSla) {
+            const sla = formatSla(ev.current);
+            if (sla) {
+              html += `<div class="mt-1"><code class="px-2 py-0.5 rounded bg-black/30 text-xs font-mono text-stone-400">${esc(sla)}</code></div>`;
+            }
+          } else {
+            const from = formatValue(ev.previous);
+            const to = formatValue(ev.current);
+            if (from || to) {
+              html += `<div class="mt-1 flex items-center gap-1.5 flex-wrap">`;
+              if (from) html += `<span class="text-xs text-stone-500">from</span><code class="px-2 py-0.5 rounded bg-black/30 text-xs font-mono text-stone-400">${esc(from)}</code>`;
+              if (from && to) html += `<span class="text-xs text-stone-500">to</span>`;
+              else if (to) html += `<span class="text-xs text-stone-500">set to</span>`;
+              if (to) html += `<code class="px-2 py-0.5 rounded bg-black/30 text-xs font-mono text-stone-400">${esc(to)}</code>`;
+              html += `</div>`;
+            }
+          }
+        }
+
+        if (ev.eventType === 'zen:event-type:ticket.created' && st.detail?.description) {
+          const customerLabel = ev.requesterId ? `Customer ${esc(String(ev.requesterId))}` : 'Customer';
+          html += `<div class="mt-2 p-2.5 rounded-md bg-black/20">
+            <p class="text-xs tracking-wider text-stone-500 mb-1">${customerLabel}</p>
+            <p class="text-sm text-stone-400 leading-relaxed">${esc(st.detail.description)}</p>
+          </div>`;
+        }
+
+        if (ev.agentResponseSummary) {
+          const agentLabel = st.detail?.agent_id ? `Agent ${esc(String(st.detail.agent_id))}` : 'Agent';
+          html += `<div class="mt-2 p-2.5 rounded-md bg-black/20">
+            <p class="text-xs tracking-wider text-stone-500 mb-1">${agentLabel}</p>
+            <p class="text-sm text-stone-400 leading-relaxed">${esc(ev.agentResponseSummary)}</p>
+          </div>`;
+        }
+
+        entry.innerHTML = html;
+        container.appendChild(entry);
+      });
+
+      renderFireButton(id);
+    }
+
+    // ── Fire button ─────────────────────────────────────────────────
+
+    const SPINNER_SVG = `<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+    </svg>`;
+
+    function renderFireButton(id) {
+      const st = ensureState(id);
+      const area = document.getElementById('fire-area');
+
+      if (st.exhausted) {
+        area.innerHTML = `<p class="text-xs text-stone-500 text-center py-1">No more events</p>`;
+        return;
+      }
+
+      if (st.firing) {
+        area.innerHTML = `<button disabled class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-stone-700/40 text-stone-500 cursor-not-allowed text-sm">
+          ${SPINNER_SVG} Firing…
+        </button>`;
+        return;
+      }
+
+      area.innerHTML = `<button id="btn-fire" class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-accent/20 hover:bg-accent/30 text-accent transition-colors text-sm font-medium">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/>
+        </svg>
+        Next event
+      </button>`;
+
+      document.getElementById('btn-fire').onclick = () => fireTicket(id);
+    }
+
+    async function fireTicket(id) {
+      const st = ensureState(id);
+      if (st.firing || st.exhausted) return;
+      st.firing = true;
+      if (id === selectedTicketId) renderFireButton(id);
+
+      let result;
+      try {
+        const res = await fetch(`/tickets/${id}/fire`, { method: 'POST' });
+        result = await res.json();
+      } catch {
+        st.firing = false;
+        if (id === selectedTicketId) renderFireButton(id);
+        return;
+      }
+
+      if (!result.fired) {
+        st.firing = false;
+        if (result.reason === 'no more events') st.exhausted = true;
+        if (id === selectedTicketId) renderFireButton(id);
+      }
+      // If fired, SSE turn_start will drive the rest
+    }
+
+    // ── Render reasoning (right card) ───────────────────────────────
+
+    function renderReasoning(id) {
+      const st = ensureState(id);
+      const container = document.getElementById('reasoning-container');
+      container.innerHTML = '';
+
+      if (st.currentReasoningNodes.length === 0 && !st.isStreaming) {
+        container.innerHTML = '<p class="text-sm text-stone-500 italic">Reasoning will appear here when events fire.</p>';
+        return;
+      }
+
       const wrap = document.createElement('div');
-      wrap.className = 'timeline-item message-node';
-      const pre = document.createElement('pre');
-      pre.className = 'message-text [&_code]:bg-black/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded';
-      wrap.appendChild(pre);
-      t.timeline.appendChild(wrap);
-      t.messagePre = pre;
-    }
-
-    // ── Handle SSE agent.message events ─────────────────────────────
-
-    function handleTurnStart(ev) {
-      const t = tickets.get(ev.ticketId);
-      if (!t) return;
-
-      // Collapse the previously active ticket so only one is expanded at a time.
-      if (activeTicketId && activeTicketId !== ev.ticketId) {
-        tickets.get(activeTicketId)?.body.classList.add('collapsed');
+      wrap.className = 'space-y-3 crossfade-in';
+      if (st.isStreaming) wrap.id = 'live-reasoning';
+      for (const node of st.currentReasoningNodes) {
+        wrap.appendChild(node.cloneNode(true));
       }
-      activeTicketId = ev.ticketId;
+      container.appendChild(wrap);
+    }
 
-      // Migrate the rotating gradient from the stream card onto this ticket row.
-      const border = document.getElementById('stream-border');
-      if (border.classList.contains('gradient-border')) {
-        border.classList.remove('gradient-border');
-        Object.assign(border.style, { border: '1px solid #4a3628', borderRadius: '1rem' });
+    function updateAgentStatus(id) {
+      const st = ensureState(id);
+      const el = document.getElementById('agent-status');
+      if (st.isStreaming) {
+        el.innerHTML = `<span class="agent-awake text-accent text-xs">processing</span>`;
+      } else {
+        el.innerHTML = '';
       }
-      activateTicketGradient(t);
-      clearTimeline(t);
-
-      const awake = document.createElement('div');
-      awake.className = 'flex items-center gap-1.5 text-xs font-mono';
-      awake.innerHTML = `<span class="text-stone-500">Ticket ${esc(humanizeEventType(ev.eventType))}</span><span class="text-stone-600" aria-hidden="true">&rarr;</span><span class="agent-awake text-accent">agent awake</span>`;
-      t.timeline.appendChild(awake);
-
-      // Expand after content is staged so the animation reveals it.
-      requestAnimationFrame(() => t.body.classList.remove('collapsed'));
     }
 
-    function handleAgentMessage(ev) {
-      const t = tickets.get(ev.ticketId);
-      if (!t) return;
+    // ── Select ticket ───────────────────────────────────────────────
 
-      const texts = (ev.content || []).filter(b => b.type === 'text').map(b => b.text);
-      if (!texts.length) return;
+    async function selectTicket(id) {
+      selectedTicketId = id;
+      renderPills();
 
-      startMessageBlock(t);
-      t.messagePre.innerHTML = renderInline(texts.join('\n'));
+      await fetchDetail(id);
+      if (id !== selectedTicketId) return;
+      renderTimeline(id);
+      renderReasoning(id);
+      updateAgentStatus(id);
     }
 
-    function handleToolUse(ev) {
-      const t = tickets.get(ev.ticketId);
-      if (!t) return;
+    // ── SSE reasoning node builders ─────────────────────────────────
 
-      t.messagePre = null;
-
+    function buildToolNode(ev) {
       const group = document.createElement('div');
       group.className = 'timeline-item tool-node space-y-1.5';
 
@@ -323,23 +517,123 @@
       el.textContent = preview;
       group.appendChild(el);
 
-      t.timeline.appendChild(group);
+      return group;
+    }
+
+    // For streaming, we keep a live <pre> we can append to
+    function getOrCreateLiveMessage(st) {
+      if (st.messagePre) return st.messagePre;
+      const wrap = document.createElement('div');
+      wrap.className = 'timeline-item message-node';
+      const pre = document.createElement('pre');
+      pre.className = 'message-text [&_code]:bg-black/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded';
+      wrap.appendChild(pre);
+      st.currentReasoningNodes.push(wrap);
+      st.messagePre = pre;
+      return pre;
+    }
+
+    // ── SSE handlers ────────────────────────────────────────────────
+
+    function handleTurnStart(ev) {
+      const st = ensureState(ev.ticketId);
+
+      st.events.push({
+        eventType: ev.eventType,
+        eventIndex: ev.eventIndex,
+        createdAt: ev.createdAt,
+        current: ev.current,
+        previous: ev.previous,
+        fieldName: ev.fieldName,
+        updatedAt: ev.updatedAt,
+        agentResponseSummary: ev.agentResponseSummary || null,
+        requesterId: ev.requesterId || null,
+      });
+
+      // Crossfade: clear current reasoning
+      st.currentReasoningNodes = [];
+      st.messagePre = null;
+      st.isStreaming = true;
+      st.firing = false;
+
+      if (ev.ticketId === selectedTicketId) {
+        renderTimeline(ev.ticketId);
+
+        // Crossfade reasoning
+        const container = document.getElementById('reasoning-container');
+        const old = container.firstElementChild;
+        if (old) {
+          old.removeAttribute('id');
+          old.classList.add('crossfade-out');
+          old.addEventListener('animationend', () => old.remove());
+        }
+        const wrap = document.createElement('div');
+        wrap.className = 'space-y-3 crossfade-in';
+        wrap.id = 'live-reasoning';
+        container.appendChild(wrap);
+        updateAgentStatus(ev.ticketId);
+      }
+    }
+
+    function handleAgentMessage(ev) {
+      const st = ensureState(ev.ticketId);
+      const texts = (ev.content || []).filter(b => b.type === 'text').map(b => b.text);
+      if (!texts.length) return;
+
+      const pre = getOrCreateLiveMessage(st);
+      pre.innerHTML = renderInline(texts.join('\n'));
+
+      if (ev.ticketId === selectedTicketId) {
+        const live = document.getElementById('live-reasoning');
+        if (live) {
+          live.innerHTML = '';
+          for (const node of st.currentReasoningNodes) {
+            live.appendChild(node.cloneNode(true));
+          }
+        }
+      }
+    }
+
+    function handleToolUse(ev) {
+      const st = ensureState(ev.ticketId);
+      st.messagePre = null;
+
+      const node = buildToolNode(ev);
+      st.currentReasoningNodes.push(node);
+
+      if (ev.ticketId === selectedTicketId) {
+        const live = document.getElementById('live-reasoning');
+        if (live) live.appendChild(node.cloneNode(true));
+      }
     }
 
     function handleIdle(ev) {
-      const t = tickets.get(ev.ticketId);
-      if (!t) return;
+      const st = ensureState(ev.ticketId);
+      st.isStreaming = false;
+      st.firing = false;
 
-      t.actions.innerHTML = FIRE_BTN_HTML;
-
-      const awake = t.timeline.querySelector('.agent-awake');
-      if (awake) {
-        awake.classList.remove('agent-awake');
-        awake.textContent = 'agent idle';
+      if (ev.ticketId === selectedTicketId) {
+        renderTimeline(ev.ticketId);
+        updateAgentStatus(ev.ticketId);
       }
+    }
 
-      if (ev.stopReason === 'end_turn') {
-        deactivateTicketGradient(t);
+    function handleError(ev) {
+      const st = ensureState(ev.ticketId);
+      st.isStreaming = false;
+      st.firing = false;
+
+      const node = document.createElement('div');
+      node.className = 'text-sm font-mono text-red-400';
+      node.textContent = ev.message || 'Unknown error';
+      st.currentReasoningNodes.push(node);
+
+      if (ev.ticketId === selectedTicketId) {
+        const live = document.getElementById('live-reasoning');
+        if (live) live.appendChild(node.cloneNode(true));
+        renderTimeline(ev.ticketId);
+        renderFireButton(ev.ticketId);
+        updateAgentStatus(ev.ticketId);
       }
     }
 
@@ -352,7 +646,7 @@
       if (stack.querySelector(`.cron-pill[data-cron-id="${ev.cronId}"]`)) return;
 
       const pill = document.createElement('div');
-      pill.className = 'cron-pill finding-card rounded px-2 py-1 bg-black/40 text-stone-300 flex items-center justify-between gap-1.5';
+      pill.className = 'cron-pill slide-in rounded px-2 py-1 bg-black/40 text-stone-300 flex items-center justify-between gap-1.5';
       pill.dataset.cronId = ev.cronId;
       pill.innerHTML = `
         <div class="flex items-baseline justify-between gap-1.5 w-full">
@@ -373,17 +667,13 @@
       }
     }
 
-    const CRON_FIRING_HTML = `
-      <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-      </svg>
-      firing`;
-
     async function fireCron(cronId, btn) {
       btn.disabled = true;
       btn.className = 'btn-cron-fire inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-mono bg-stone-800/60 text-stone-500 cursor-not-allowed';
-      btn.innerHTML = CRON_FIRING_HTML;
+      btn.innerHTML = `<svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg> firing`;
       try {
         await fetch(`/crons/${cronId}/fire`, { method: 'POST' });
       } catch (err) {
@@ -391,18 +681,7 @@
       }
     }
 
-    function handleError(ev) {
-      const t = tickets.get(ev.ticketId);
-      if (!t) return;
-
-      t.actions.innerHTML = FIRE_BTN_HTML;
-      deactivateTicketGradient(t);
-
-      const errEl = document.createElement('div');
-      errEl.className = 'text-sm font-mono text-red-400';
-      errEl.textContent = ev.message || 'Unknown error';
-      t.timeline.appendChild(errEl);
-    }
+    // ── SSE connection ──────────────────────────────────────────────
 
     function connectSSE() {
       fetch('/events').then(res => {
@@ -438,59 +717,26 @@
       }).catch(() => setTimeout(connectSSE, 2000));
     }
 
-    // ── Fire button ─────────────────────────────────────────────────
-
-    async function fireTicket(ticketId) {
-      const t = tickets.get(ticketId);
-      if (!t) return;
-
-      t.actions.innerHTML = FIRE_BTN_DISABLED_HTML;
-      // Collapse the previous turn before processing the next event. turn_start
-      // will re-expand once the new turn begins streaming.
-      t.body.classList.add('collapsed');
-
-      let result;
-      try {
-        const res = await fetch(`/tickets/${ticketId}/fire`, { method: 'POST' });
-        result = await res.json();
-      } catch (err) {
-        t.actions.innerHTML = FIRE_BTN_HTML;
-        return;
-      }
-
-      // If the fire wasn't accepted, re-enable the button. Otherwise SSE drives
-      // all UI state (turn_start clears the timeline, idle re-enables the button).
-      if (!result.fired && result.reason !== 'agent is processing') {
-        t.actions.innerHTML = FIRE_BTN_HTML;
-      }
-    }
-
     // ── Init ────────────────────────────────────────────────────────
 
     fetch('/tickets')
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(list => {
-        for (const { ticketId, subject } of list) {
-          createTicketRow(ticketId, subject);
-        }
+        ticketOrder = list.map(t => t.ticketId);
+        for (const { ticketId } of list) ensureState(ticketId);
+        if (ticketOrder.length > 0) selectTicket(ticketOrder[0]);
       })
       .catch(err => console.error('Failed to load tickets:', err));
 
     connectSSE();
+
+    // ── Delegated click handlers ────────────────────────────────────
 
     document.addEventListener('click', (e) => {
       const cronBtn = e.target.closest('.btn-cron-fire');
       if (cronBtn && !cronBtn.disabled) {
         const pill = cronBtn.closest('.cron-pill');
         if (pill?.dataset.cronId) fireCron(pill.dataset.cronId, cronBtn);
-        return;
-      }
-
-      const btn = e.target.closest('.btn-fire');
-      if (!btn || btn.disabled) return;
-      // Find which ticket this button belongs to
-      for (const [id, t] of tickets) {
-        if (t.root.contains(btn)) { fireTicket(id); break; }
       }
     });
   </script>

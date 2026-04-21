@@ -86,6 +86,12 @@ for (const e of filtered) {
   byTicket.get(id)!.push(e);
 }
 
+const ticketRecords = new Map<string, Record<string, unknown>>();
+for (const line of (await Bun.file(join(DATA_DIR, "smoke_tickets.jsonl")).text()).trim().split("\n")) {
+  const rec = JSON.parse(line) as Record<string, unknown>;
+  ticketRecords.set(String(rec.id), rec);
+}
+
 console.log(`Loaded ${filtered.length} events across ${byTicket.size} tickets`);
 
 await ensureCronTool(client, AGENT_ID);
@@ -320,7 +326,23 @@ async function fireTicket(ticketId: string): Promise<{ result: FireResult; drain
   });
   console.log(`Sent ticket ${ticketId} event ${eventIndex}`);
 
-  broadcast({ ticketId, type: "turn_start", eventType: event.type });
+  const turnData: Record<string, unknown> = {
+    ticketId,
+    type: "turn_start",
+    eventType: event.type,
+    eventIndex,
+    createdAt: event.detail.created_at,
+    updatedAt: (event.detail as Record<string, unknown>).updated_at,
+  };
+  const ev = event.event as Record<string, unknown>;
+  if (ev.current !== undefined) turnData.current = ev.current;
+  if (ev.previous !== undefined) turnData.previous = ev.previous;
+  if (ev.field_name !== undefined) turnData.fieldName = ev.field_name;
+  const detail = event.detail as Record<string, unknown>;
+  const summary = detail._agent_response_summary;
+  if (typeof summary === "string" && summary) turnData.agentResponseSummary = summary;
+  if (detail.requester_id != null) turnData.requesterId = detail.requester_id;
+  broadcast(turnData);
 
   ts.nextEventIndex++;
   const result: FireResult = {
@@ -466,6 +488,20 @@ const server = Bun.serve({
 
     const cronFireMatch = url.pathname.match(/^\/crons\/([^/]+)\/fire$/);
     if (cronFireMatch && req.method === "POST") return handleCronFire(cronFireMatch[1]);
+
+    const detailMatch = url.pathname.match(/^\/tickets\/(\d+)\/detail$/);
+    if (detailMatch && req.method === "GET") {
+      const rec = ticketRecords.get(detailMatch[1]);
+      if (!rec) return Response.json({ error: "Unknown ticket" }, { status: 404 });
+      const agent = rec.agent as Record<string, unknown> | undefined;
+      return Response.json({
+        description: rec.description,
+        status: rec.status,
+        subject: rec.subject,
+        created_at: rec.created_at,
+        agent_id: agent?.agent_id ?? null,
+      });
+    }
 
     if (url.pathname === "/tickets" && req.method === "GET") {
       const list = TICKET_ORDER.map((id) => {
