@@ -570,6 +570,13 @@
         const wrap = document.createElement('div');
         wrap.className = 'space-y-3 crossfade-in';
         wrap.id = 'live-reasoning';
+
+        const awakeNode = document.createElement('div');
+        awakeNode.className = 'flex items-center gap-1.5 text-xs font-mono';
+        awakeNode.innerHTML = `<span class="text-stone-500">${esc(humanLabel(ev.eventType))}</span><span class="text-stone-600" aria-hidden="true">&rarr;</span><span class="agent-awake text-accent">agent awake</span>`;
+        st.currentReasoningNodes.unshift(awakeNode);
+        wrap.appendChild(awakeNode.cloneNode(true));
+
         container.appendChild(wrap);
         updateAgentStatus(ev.ticketId);
       }
@@ -612,7 +619,27 @@
       st.isStreaming = false;
       st.firing = false;
 
+      // Update stored awake node to idle
+      for (const node of st.currentReasoningNodes) {
+        const awake = node.querySelector?.('.agent-awake');
+        if (awake) {
+          awake.classList.remove('agent-awake');
+          awake.className = 'text-stone-500';
+          awake.textContent = 'agent idle';
+        }
+      }
+
       if (ev.ticketId === selectedTicketId) {
+        // Update live DOM
+        const live = document.getElementById('live-reasoning');
+        if (live) {
+          const awake = live.querySelector('.agent-awake');
+          if (awake) {
+            awake.classList.remove('agent-awake');
+            awake.className = 'text-stone-500';
+            awake.textContent = 'agent idle';
+          }
+        }
         renderTimeline(ev.ticketId);
         updateAgentStatus(ev.ticketId);
       }
