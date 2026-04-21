@@ -192,7 +192,7 @@
           <div id="agent-status" class="text-sm font-mono text-accent mb-4"></div>
           <div id="reasoning-container" class="flex-1 relative"></div>
           <div id="cron-stack-wrap" class="hidden pt-3 mt-3 border-t border-stone-700/50">
-            <p class="text-xs uppercase tracking-wider text-stone-500 mb-2">Wake-ups</p>
+            <p class="text-xs tracking-wider text-stone-500 mb-2">Wake-ups</p>
             <div id="cron-stack" class="flex flex-col gap-2"></div>
           </div>
         </div>
@@ -501,6 +501,7 @@
       renderTimeline(id);
       renderReasoning(id);
       updateAgentStatus(id);
+      updateCronVisibility();
     }
 
     // ── SSE reasoning node builders ─────────────────────────────────
@@ -644,6 +645,19 @@
 
     // ── Cron pills ──────────────────────────────────────────────────
 
+    function updateCronVisibility() {
+      const stack = document.getElementById('cron-stack');
+      const wrap = document.getElementById('cron-stack-wrap');
+      if (!stack || !wrap) return;
+      let anyVisible = false;
+      for (const pill of stack.children) {
+        const show = pill.dataset.ticketId === selectedTicketId;
+        pill.style.display = show ? '' : 'none';
+        if (show) anyVisible = true;
+      }
+      wrap.classList.toggle('hidden', !anyVisible);
+    }
+
     function handleCronScheduled(ev) {
       const stack = document.getElementById('cron-stack');
       const wrap = document.getElementById('cron-stack-wrap');
@@ -654,6 +668,7 @@
       pill.className = 'cron-pill slide-in rounded-lg px-3 py-2 flex items-center justify-between gap-2';
       pill.style.cssText = 'background:#1c1917; border:1px solid #44403c';
       pill.dataset.cronId = ev.cronId;
+      pill.dataset.ticketId = ev.ticketId;
       pill.innerHTML = `
         <span class="text-xs text-stone-300">Remind myself in ${esc(String(ev.delayMinutes))} min</span>
         <button class="btn-cron-fire inline-flex items-center justify-center w-6 h-6 rounded bg-accent/20 hover:bg-accent/30 text-accent transition-colors" title="Fire now" aria-label="Fire now">
@@ -662,16 +677,13 @@
           </svg>
         </button>`;
       stack.appendChild(pill);
-      wrap?.classList.remove('hidden');
+      updateCronVisibility();
     }
 
     function handleCronFired(ev) {
       const pill = document.querySelector(`.cron-pill[data-cron-id="${ev.cronId}"]`);
       if (pill) pill.remove();
-      const stack = document.getElementById('cron-stack');
-      if (stack && stack.children.length === 0) {
-        document.getElementById('cron-stack-wrap')?.classList.add('hidden');
-      }
+      updateCronVisibility();
     }
 
     async function fireCron(cronId, btn) {
