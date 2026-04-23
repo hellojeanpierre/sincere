@@ -2,6 +2,7 @@ import { join } from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Beta } from "@anthropic-ai/sdk/resources/beta";
 import type { Event } from "./events";
+import { markProcessed } from "./events";
 
 type StreamEvent = Beta.Sessions.Events.BetaManagedAgentsStreamSessionEvents;
 
@@ -17,6 +18,13 @@ interface InitState {
 
 let state: InitState | null = null;
 const sessionsBySubject = new Map<string, string>();
+const chains = new Map<string, Promise<void>>();
+
+interface ActiveStream {
+  sessionId: string;
+  interrupted: boolean;
+}
+const activeStreams = new Map<string, ActiveStream>();
 
 export async function initSession(): Promise<void> {
   if (state) return;
@@ -59,46 +67,102 @@ export async function createSession(subjectKey: string): Promise<string> {
 export async function runTurn(
   sessionId: string,
   content: Array<{ type: "text"; text: string }>,
-): Promise<string> {
+  subjectKey?: string,
+): Promise<{ text: string; interrupted: boolean }> {
   const { client } = requireState();
-  const stream = await client.beta.sessions.events.stream(sessionId);
+  const stream = (await client.beta.sessions.events.stream(sessionId)) as AsyncIterable<StreamEvent>;
 
-  await client.beta.sessions.events.send(sessionId, {
-    events: [{ type: "user.message", content }],
-  });
+  if (subjectKey) {
+    activeStreams.set(subjectKey, { sessionId, interrupted: false });
+  }
 
-  const texts: string[] = [];
-  for await (const event of stream as AsyncIterable<StreamEvent>) {
-    console.log(`[${sessionId}] event: ${event.type}`);
+  try {
+    await client.beta.sessions.events.send(sessionId, {
+      events: [{ type: "user.message", content }],
+    });
 
-    if (event.type === "agent.message") {
-      for (const block of (event as { content: Array<{ type: string; text?: string }> }).content) {
-        if (block.type === "text" && typeof block.text === "string") texts.push(block.text);
+    const texts: string[] = [];
+    for await (const event of stream) {
+      console.log(`[${sessionId}] event: ${event.type}`);
+
+      if (event.type === "agent.message") {
+        for (const block of (event as { content: Array<{ type: string; text?: string }> }).content) {
+          if (block.type === "text" && typeof block.text === "string") texts.push(block.text);
+        }
+      }
+
+      if (event.type === "session.error") {
+        const e = event as { error: { message: string } };
+        throw new Error(`session.error: ${e.error.message}`);
+      }
+
+      if (event.type === "session.status_idle") {
+        const stopType = event.stop_reason.type;
+        if (stopType === "end_turn") {
+          return { text: texts.join("\n"), interrupted: false };
+        }
+        const wasInterrupted = subjectKey ? activeStreams.get(subjectKey)?.interrupted === true : false;
+        if (wasInterrupted) {
+          console.log(`[${sessionId}] stream interrupted (stop_reason=${stopType}); exiting turn`);
+          return { text: texts.join("\n"), interrupted: true };
+        }
+        throw new Error(`Unexpected stop_reason: ${stopType}`);
       }
     }
 
-    if (event.type === "session.error") {
-      const e = event as { error: { message: string } };
-      throw new Error(`session.error: ${e.error.message}`);
-    }
-
-    if (event.type === "session.status_idle") {
-      const stopType = event.stop_reason.type;
-      if (stopType === "end_turn") break;
-      throw new Error(`Unexpected stop_reason: ${stopType}`);
-    }
+    return { text: texts.join("\n"), interrupted: false };
+  } finally {
+    if (subjectKey) activeStreams.delete(subjectKey);
   }
-
-  return texts.join("\n");
 }
 
-export async function dispatchEvent(event: Event): Promise<string> {
+export function enqueueEvent(event: Event): void {
   if (!event.subjectId) {
-    throw new Error(`cannot dispatch event ${event.sourceEventId}: missing subjectId`);
+    console.error(`[session] cannot enqueue ${event.sourceEventId}: missing subjectId`);
+    // Mark processed so we don't replay this row forever — a missing
+    // subjectId is a permanent payload defect, not a transient failure.
+    markProcessed(event.source, event.sourceEventId);
+    return;
   }
-  const sessionId = getSession(event.subjectId) ?? (await createSession(event.subjectId));
-  return runTurn(sessionId, [{
-    type: "text",
-    text: JSON.stringify(event.payload, null, 2),
-  }]);
+  const key = event.subjectId;
+
+  // Only the currently-active turn gets interrupted. If events B and C are
+  // both queued behind an in-flight turn A, enqueuing C sets
+  // activeStreams[key].interrupted = true (which targets A), but B will
+  // still run to completion on its turn in the chain. At pilot scale this
+  // is acceptable — the Analyst processes B and C sequentially and catches
+  // up on state. A future fix would propagate interrupt intent through the
+  // chain so middle-queued events can coalesce too.
+  const active = activeStreams.get(key);
+  if (active) {
+    active.interrupted = true;
+    const { client } = requireState();
+    client.beta.sessions.events.send(active.sessionId, {
+      events: [{ type: "user.interrupt" }],
+    }).catch((err) => console.error(`[session] interrupt send failed for ${key}:`, err));
+  }
+
+  const prev = chains.get(key) ?? Promise.resolve();
+  const task: Promise<void> = prev.then(async () => {
+    try {
+      const sessionId = getSession(key) ?? (await createSession(key));
+      const result = await runTurn(
+        sessionId,
+        [{ type: "text", text: JSON.stringify(event.payload, null, 2) }],
+        key,
+      );
+      if (result.interrupted) {
+        console.log(`[session] event ${event.sourceEventId} superseded by newer event; marking processed`);
+      }
+      markProcessed(event.source, event.sourceEventId);
+    } catch (err) {
+      console.error(`[session] turn failed for ${event.sourceEventId}:`, err);
+    }
+  });
+
+  const storedTask = task.catch(() => {});
+  chains.set(key, storedTask);
+  storedTask.finally(() => {
+    if (chains.get(key) === storedTask) chains.delete(key);
+  });
 }
