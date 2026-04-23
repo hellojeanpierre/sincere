@@ -1,7 +1,7 @@
 import { join } from "path";
 import type { Event } from "./events";
 import { insertEvent } from "./events";
-import { createSession, enqueueEvent, getSession, runTurn } from "./session";
+import type { SessionManager } from "./session";
 import { parseZendeskEvent } from "./ingest/zendesk";
 
 const TEST_SESSION_KEY = "__test__";
@@ -24,10 +24,10 @@ async function firstEventForTicket(ticketId: string): Promise<Record<string, unk
   throw new Error(`No events for ticket ${ticketId}`);
 }
 
-export async function handleTest(): Promise<Response> {
+export async function handleTest(sessionManager: SessionManager): Promise<Response> {
   try {
-    const sessionId = await createSession(TEST_SESSION_KEY);
-    const { text } = await runTurn(sessionId, [{
+    const sessionId = await sessionManager.createSession(TEST_SESSION_KEY);
+    const { text } = await sessionManager.runTurn(sessionId, [{
       type: "text",
       text: "You are observing a support ticket. Confirm you can access the policy file and are ready to receive events.",
     }]);
@@ -39,14 +39,14 @@ export async function handleTest(): Promise<Response> {
   }
 }
 
-export async function handleTestEvent(): Promise<Response> {
-  const sessionId = getSession(TEST_SESSION_KEY);
+export async function handleTestEvent(sessionManager: SessionManager): Promise<Response> {
+  const sessionId = sessionManager.getSession(TEST_SESSION_KEY);
   if (!sessionId) {
     return Response.json({ error: "No session. POST /test first." }, { status: 400 });
   }
   try {
     const event = await firstEventForTicket(TEST_TICKET_ID);
-    const { text } = await runTurn(sessionId, [{
+    const { text } = await sessionManager.runTurn(sessionId, [{
       type: "text",
       text: JSON.stringify(event, null, 2),
     }]);
@@ -58,7 +58,7 @@ export async function handleTestEvent(): Promise<Response> {
   }
 }
 
-export async function handleTestIngest(req: Request): Promise<Response> {
+export async function handleTestIngest(req: Request, sessionManager: SessionManager): Promise<Response> {
   const rawBody = await req.text();
 
   let event: Event;
@@ -73,7 +73,7 @@ export async function handleTestIngest(req: Request): Promise<Response> {
   const result = insertEvent(event);
   console.log(`[ingest] test id=${event.sourceEventId} subject=${event.subjectId ?? "-"} -> ${result}`);
 
-  if (result === "inserted") enqueueEvent(event);
+  if (result === "inserted") sessionManager.enqueueEvent(event);
   return Response.json({
     result,
     source_event_id: event.sourceEventId,

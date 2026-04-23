@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import type { Event } from "../events";
 import { insertEvent } from "../events";
-import { enqueueEvent } from "../session";
+import type { SessionManager } from "../session";
 
 const SOURCE = "zendesk";
 
@@ -74,6 +74,7 @@ export function parseZendeskEvent(rawBody: string, receivedAt: number): Event {
 export async function handleZendeskIngest(
   req: Request,
   secret: string | undefined,
+  sessionManager: SessionManager,
 ): Promise<Response> {
   if (!secret) {
     console.error("[ingest] /ingest/zendesk called but ZENDESK_WEBHOOK_SECRET is unset");
@@ -106,7 +107,7 @@ export async function handleZendeskIngest(
   const result = insertEvent(event);
   console.log(`[ingest] zendesk id=${event.sourceEventId} subject=${event.subjectId ?? "-"} -> ${result}`);
 
-  if (result === "inserted") enqueueEvent(event);
+  if (result === "inserted") sessionManager.enqueueEvent(event);
   return Response.json({
     result,
     source_event_id: event.sourceEventId,
