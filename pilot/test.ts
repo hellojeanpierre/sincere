@@ -1,6 +1,6 @@
 import { join } from "path";
 import type { Event } from "./events";
-import { insertEvent, markDispatched } from "./events";
+import { insertEvent, markProcessed } from "./events";
 import { createSession, dispatchEvent, getSession, runTurn } from "./session";
 import { parseZendeskEvent } from "./ingest/zendesk";
 
@@ -79,7 +79,7 @@ export async function handleTestIngest(req: Request): Promise<Response> {
 
   try {
     const response = await dispatchEvent(event);
-    markDispatched(event.source, event.sourceEventId);
+    markProcessed(event.source, event.sourceEventId);
     return Response.json({
       result,
       source_event_id: event.sourceEventId,

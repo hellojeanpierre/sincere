@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import type { Event } from "../events";
-import { insertEvent, markDispatched } from "../events";
+import { insertEvent, markProcessed } from "../events";
 import { dispatchEvent } from "../session";
 
 const SOURCE = "zendesk";
@@ -112,7 +112,7 @@ export async function handleZendeskIngest(
 
   try {
     const response = await dispatchEvent(event);
-    markDispatched(event.source, event.sourceEventId);
+    markProcessed(event.source, event.sourceEventId);
     return Response.json({
       result,
       source_event_id: event.sourceEventId,

@@ -17,8 +17,8 @@ export type InsertResult = "inserted" | "duplicate";
 interface DbState {
   db: Database;
   insertStmt: Statement;
-  markDispatchedStmt: Statement;
-  undispatchedStmt: Statement;
+  markProcessedStmt: Statement;
+  unprocessedStmt: Statement;
 }
 
 let state: DbState | null = null;
@@ -36,7 +36,7 @@ export function initEvents(dbPath: string): void {
       source_time      TEXT,
       received_at      INTEGER NOT NULL,
       payload          TEXT    NOT NULL,
-      dispatched_at    INTEGER,
+      processed_at     INTEGER,
       PRIMARY KEY (source, source_event_id)
     );
   `);
@@ -52,14 +52,14 @@ export function initEvents(dbPath: string): void {
         (source, source_event_id, type, subject_id, source_time, received_at, payload)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `),
-    markDispatchedStmt: db.prepare(`
-      UPDATE events SET dispatched_at = ?
+    markProcessedStmt: db.prepare(`
+      UPDATE events SET processed_at = ?
       WHERE source = ? AND source_event_id = ?
     `),
-    undispatchedStmt: db.prepare(`
+    unprocessedStmt: db.prepare(`
       SELECT source, source_event_id, type, subject_id, source_time, received_at, payload
       FROM events
-      WHERE dispatched_at IS NULL
+      WHERE processed_at IS NULL
       ORDER BY received_at
     `),
   };
@@ -84,14 +84,14 @@ export function insertEvent(event: Event): InsertResult {
   return res.changes === 1 ? "inserted" : "duplicate";
 }
 
-export function markDispatched(source: string, sourceEventId: string): void {
-  const { markDispatchedStmt } = requireState();
-  markDispatchedStmt.run(Date.now(), source, sourceEventId);
+export function markProcessed(source: string, sourceEventId: string): void {
+  const { markProcessedStmt } = requireState();
+  markProcessedStmt.run(Date.now(), source, sourceEventId);
 }
 
-export function getUndispatchedEvents(): Event[] {
-  const { undispatchedStmt } = requireState();
-  const rows = undispatchedStmt.all() as Array<{
+export function getUnprocessedEvents(): Event[] {
+  const { unprocessedStmt } = requireState();
+  const rows = unprocessedStmt.all() as Array<{
     source: string;
     source_event_id: string;
     type: string;
