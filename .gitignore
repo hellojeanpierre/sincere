@@ -37,3 +37,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 data/sessions/
 data/tool-results/
 data/test-tool-results/
+
+# pilot SQLite store
+pilot/data/
