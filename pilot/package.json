@@ -1,0 +1,8 @@
+{
+  "name": "sincere-pilot",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.89.0"
+  }
+}
