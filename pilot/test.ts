@@ -1,7 +1,7 @@
 import { join } from "path";
 import type { Event } from "./events";
-import { insertEvent, markProcessed } from "./events";
-import { createSession, dispatchEvent, getSession, runTurn } from "./session";
+import { insertEvent } from "./events";
+import { createSession, enqueueEvent, getSession, runTurn } from "./session";
 import { parseZendeskEvent } from "./ingest/zendesk";
 
 const TEST_SESSION_KEY = "__test__";
@@ -27,11 +27,11 @@ async function firstEventForTicket(ticketId: string): Promise<Record<string, unk
 export async function handleTest(): Promise<Response> {
   try {
     const sessionId = await createSession(TEST_SESSION_KEY);
-    const response = await runTurn(sessionId, [{
+    const { text } = await runTurn(sessionId, [{
       type: "text",
       text: "You are observing a support ticket. Confirm you can access the policy file and are ready to receive events.",
     }]);
-    return Response.json({ session_id: sessionId, response });
+    return Response.json({ session_id: sessionId, response: text });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("POST /test error:", err);
@@ -46,11 +46,11 @@ export async function handleTestEvent(): Promise<Response> {
   }
   try {
     const event = await firstEventForTicket(TEST_TICKET_ID);
-    const response = await runTurn(sessionId, [{
+    const { text } = await runTurn(sessionId, [{
       type: "text",
       text: JSON.stringify(event, null, 2),
     }]);
-    return Response.json({ session_id: sessionId, response });
+    return Response.json({ session_id: sessionId, response: text });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("POST /test/event error:", err);
@@ -73,27 +73,10 @@ export async function handleTestIngest(req: Request): Promise<Response> {
   const result = insertEvent(event);
   console.log(`[ingest] test id=${event.sourceEventId} subject=${event.subjectId ?? "-"} -> ${result}`);
 
-  if (result === "duplicate") {
-    return Response.json({ result, source_event_id: event.sourceEventId, dispatched: false });
-  }
-
-  try {
-    const response = await dispatchEvent(event);
-    markProcessed(event.source, event.sourceEventId);
-    return Response.json({
-      result,
-      source_event_id: event.sourceEventId,
-      dispatched: true,
-      agent_response: response,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[ingest] dispatch error for ${event.sourceEventId}:`, message);
-    return Response.json({
-      result,
-      source_event_id: event.sourceEventId,
-      dispatched: false,
-      dispatch_error: message,
-    }, { status: 500 });
-  }
+  if (result === "inserted") enqueueEvent(event);
+  return Response.json({
+    result,
+    source_event_id: event.sourceEventId,
+    queued: result === "inserted",
+  });
 }

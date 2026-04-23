@@ -1,6 +1,6 @@
 import { join } from "path";
-import { initEvents } from "./events";
-import { initSession } from "./session";
+import { getUnprocessedEvents, initEvents } from "./events";
+import { enqueueEvent, initSession } from "./session";
 import { handleZendeskIngest } from "./ingest/zendesk";
 import { handleTest, handleTestEvent, handleTestIngest } from "./test";
 
@@ -9,6 +9,12 @@ initEvents(DB_PATH);
 console.log(`Opened event store: ${DB_PATH}`);
 
 await initSession();
+
+const stranded = getUnprocessedEvents();
+if (stranded.length > 0) {
+  console.log(`Replaying ${stranded.length} unprocessed events`);
+  for (const event of stranded) enqueueEvent(event);
+}
 
 const allowTestRoutes = process.env.PILOT_ALLOW_TEST_INGEST === "1";
 const zendeskSecret = process.env.ZENDESK_WEBHOOK_SECRET;

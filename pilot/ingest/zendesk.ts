@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import type { Event } from "../events";
-import { insertEvent, markProcessed } from "../events";
-import { dispatchEvent } from "../session";
+import { insertEvent } from "../events";
+import { enqueueEvent } from "../session";
 
 const SOURCE = "zendesk";
 
@@ -106,27 +106,10 @@ export async function handleZendeskIngest(
   const result = insertEvent(event);
   console.log(`[ingest] zendesk id=${event.sourceEventId} subject=${event.subjectId ?? "-"} -> ${result}`);
 
-  if (result === "duplicate") {
-    return Response.json({ result, source_event_id: event.sourceEventId, dispatched: false });
-  }
-
-  try {
-    const response = await dispatchEvent(event);
-    markProcessed(event.source, event.sourceEventId);
-    return Response.json({
-      result,
-      source_event_id: event.sourceEventId,
-      dispatched: true,
-      agent_response: response,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[ingest] dispatch error for ${event.sourceEventId}:`, message);
-    return Response.json({
-      result,
-      source_event_id: event.sourceEventId,
-      dispatched: false,
-      dispatch_error: message,
-    }, { status: 500 });
-  }
+  if (result === "inserted") enqueueEvent(event);
+  return Response.json({
+    result,
+    source_event_id: event.sourceEventId,
+    queued: result === "inserted",
+  });
 }
