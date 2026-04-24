@@ -87,48 +87,40 @@ export function createSessionManager(config: SessionManagerConfig): SessionManag
   ): Promise<{ text: string; interrupted: boolean }> {
     const stream = (await client.beta.sessions.events.stream(sessionId)) as AsyncIterable<StreamEvent>;
 
-    if (subjectKey) {
-      activeStreams.set(subjectKey, { sessionId, interrupted: false });
-    }
+    await client.beta.sessions.events.send(sessionId, {
+      events: [{ type: "user.message", content }],
+    });
 
-    try {
-      await client.beta.sessions.events.send(sessionId, {
-        events: [{ type: "user.message", content }],
-      });
+    const texts: string[] = [];
+    for await (const event of stream) {
+      console.log(`[${sessionId}] event: ${event.type}`);
 
-      const texts: string[] = [];
-      for await (const event of stream) {
-        console.log(`[${sessionId}] event: ${event.type}`);
-
-        if (event.type === "agent.message") {
-          for (const block of (event as { content: Array<{ type: string; text?: string }> }).content) {
-            if (block.type === "text" && typeof block.text === "string") texts.push(block.text);
-          }
-        }
-
-        if (event.type === "session.error") {
-          const e = event as { error: { message: string } };
-          throw new Error(`session.error: ${e.error.message}`);
-        }
-
-        if (event.type === "session.status_idle") {
-          const stopType = event.stop_reason.type;
-          if (stopType === "end_turn") {
-            return { text: texts.join("\n"), interrupted: false };
-          }
-          const wasInterrupted = subjectKey ? activeStreams.get(subjectKey)?.interrupted === true : false;
-          if (wasInterrupted) {
-            console.log(`[${sessionId}] stream interrupted (stop_reason=${stopType}); exiting turn`);
-            return { text: texts.join("\n"), interrupted: true };
-          }
-          throw new Error(`Unexpected stop_reason: ${stopType}`);
+      if (event.type === "agent.message") {
+        for (const block of (event as { content: Array<{ type: string; text?: string }> }).content) {
+          if (block.type === "text" && typeof block.text === "string") texts.push(block.text);
         }
       }
 
-      return { text: texts.join("\n"), interrupted: false };
-    } finally {
-      if (subjectKey) activeStreams.delete(subjectKey);
+      if (event.type === "session.error") {
+        const e = event as { error: { message: string } };
+        throw new Error(`session.error: ${e.error.message}`);
+      }
+
+      if (event.type === "session.status_idle") {
+        const stopType = event.stop_reason.type;
+        if (stopType === "end_turn") {
+          return { text: texts.join("\n"), interrupted: false };
+        }
+        const wasInterrupted = subjectKey ? activeStreams.get(subjectKey)?.interrupted === true : false;
+        if (wasInterrupted) {
+          console.log(`[${sessionId}] stream interrupted (stop_reason=${stopType}); exiting turn`);
+          return { text: texts.join("\n"), interrupted: true };
+        }
+        throw new Error(`Unexpected stop_reason: ${stopType}`);
+      }
     }
+
+    return { text: texts.join("\n"), interrupted: false };
   }
 
   function enqueueEvent(event: Event): void {
@@ -161,15 +153,21 @@ export function createSessionManager(config: SessionManagerConfig): SessionManag
     const task: Promise<void> = prev.then(async () => {
       try {
         const sessionId = getSession(key) ?? (await createSession(key));
-        const result = await turn(
-          sessionId,
-          [{ type: "text", text: JSON.stringify(event.payload, null, 2) }],
-          key,
-        );
-        if (result.interrupted) {
-          console.log(`[session] event ${event.sourceEventId} superseded by newer event; marking processed`);
+        // Deliberately early: a newer event may interrupt before this turn sends user.message.
+        activeStreams.set(key, { sessionId, interrupted: false });
+        try {
+          const result = await turn(
+            sessionId,
+            [{ type: "text", text: JSON.stringify(event.payload, null, 2) }],
+            key,
+          );
+          if (result.interrupted) {
+            console.log(`[session] event ${event.sourceEventId} superseded by newer event; marking processed`);
+          }
+          markProcessed(event.source, event.sourceEventId);
+        } finally {
+          activeStreams.delete(key);
         }
-        markProcessed(event.source, event.sourceEventId);
       } catch (err) {
         // An unprocessable event is a permanent defect — mark it processed so
         // we don't replay it forever on restart. Retrying won't fix a session
