@@ -19,9 +19,9 @@ export function verifySignature(
   signature: string,
   secret: string,
 ): boolean {
-  const tsNum = Number(timestamp);
-  if (!Number.isFinite(tsNum)) return false;
-  if (Math.abs(Date.now() - tsNum * 1000) > FRESHNESS_WINDOW_MS) return false;
+  const tsMs = Date.parse(timestamp);
+  if (!Number.isFinite(tsMs)) return false;
+  if (Math.abs(Date.now() - tsMs) > FRESHNESS_WINDOW_MS) return false;
 
   const expected = createHmac("sha256", secret)
     .update(timestamp + rawBody)
