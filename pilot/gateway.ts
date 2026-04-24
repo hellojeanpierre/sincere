@@ -1,4 +1,5 @@
-import { join } from "path";
+import { mkdirSync } from "fs";
+import { dirname, join } from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import { getUnprocessedEvents, initEvents } from "./events";
 import { createSessionManager } from "./session";
@@ -6,6 +7,7 @@ import { handleZendeskIngest } from "./ingest/zendesk";
 import { handleTest, handleTestEvent, handleTestIngest } from "./test";
 
 const DB_PATH = join(import.meta.dir, "data", "events.db");
+mkdirSync(dirname(DB_PATH), { recursive: true });
 initEvents(DB_PATH);
 console.log(`Opened event store: ${DB_PATH}`);
 
